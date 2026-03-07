@@ -1,0 +1,38 @@
+{
+    "name": "@netipar/chunky-core",
+    "version": "0.2.0",
+    "description": "Framework-agnostic chunk upload engine for Laravel Chunky",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "types/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./types/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "files": [
+        "dist",
+        "types",
+        "src"
+    ],
+    "scripts": {
+        "build": "node build.js && tsc --emitDeclarationOnly"
+    },
+    "keywords": ["chunky", "upload", "chunk", "file-upload", "laravel"],
+    "license": "MIT",
+    "homepage": "https://github.com/NETipar/laravel-chunky",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/NETipar/laravel-chunky.git",
+        "directory": "packages/core"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "devDependencies": {
+        "typescript": "^5.4",
+        "esbuild": "^0.21"
+    }
+}

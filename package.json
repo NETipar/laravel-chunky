@@ -1,0 +1,15 @@
+{
+    "private": true,
+    "scripts": {
+        "build": "pnpm -r run build",
+        "build:core": "pnpm --filter @netipar/chunky-core run build",
+        "build:vue3": "pnpm --filter @netipar/chunky-vue3 run build",
+        "build:react": "pnpm --filter @netipar/chunky-react run build",
+        "build:alpine": "pnpm --filter @netipar/chunky-alpine run build",
+        "publish:all": "pnpm run build && pnpm -r publish --no-git-checks"
+    },
+    "devDependencies": {
+        "esbuild": "^0.21",
+        "typescript": "^5.4"
+    }
+}

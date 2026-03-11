@@ -2,6 +2,11 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.2.1 - 2026-03-11
+
+### Fixed
+- Migration fails when `chunked_uploads` table already exists (added `Schema::hasTable` check)
+
 ## v0.2.0 - 2026-03-08
 
 ### Added

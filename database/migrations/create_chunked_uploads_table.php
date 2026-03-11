@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('chunked_uploads')) {
+            return;
+        }
+
         Schema::create('chunked_uploads', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->string('upload_id')->unique()->index();

@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-react",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "React hook for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",
@@ -32,7 +32,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@netipar/chunky-core": "workspace:*"
+        "@netipar/chunky-core": "^0.3.0"
     },
     "peerDependencies": {
         "react": "^18.0 || ^19.0"

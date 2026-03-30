@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-vue3",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Vue 3 composable and components for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",
@@ -32,7 +32,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@netipar/chunky-core": "workspace:*"
+        "@netipar/chunky-core": "^0.3.0"
     },
     "peerDependencies": {
         "vue": "^3.4"

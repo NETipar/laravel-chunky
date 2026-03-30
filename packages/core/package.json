@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-core",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Framework-agnostic chunk upload engine for Laravel Chunky",
     "type": "module",
     "main": "dist/index.js",

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('mime_type')->nullable();
             $table->unsignedInteger('chunk_size');
             $table->unsignedInteger('total_chunks');
-            $table->json('uploaded_chunks')->default('[]');
+            $table->json('uploaded_chunks');
             $table->string('disk');
             $table->string('context')->nullable()->index();
             $table->string('final_path')->nullable();

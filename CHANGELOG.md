@@ -2,6 +2,11 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.3.1 - 2026-03-30
+
+### Fixed
+- Removed `->default('[]')` from `uploaded_chunks` JSON column in migration (MariaDB/MySQL does not allow default values on JSON columns)
+
 ## v0.3.0 - 2026-03-30
 
 ### Added

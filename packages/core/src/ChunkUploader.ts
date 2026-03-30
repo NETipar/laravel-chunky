@@ -1,3 +1,4 @@
+import { getDefaults } from './config';
 import type {
     ChunkInfo,
     ChunkUploadOptions,
@@ -58,14 +59,17 @@ export class ChunkUploader {
     private listeners = new Map<string, Set<Function>>();
 
     constructor(options: ChunkUploadOptions = {}) {
-        this.maxConcurrent = options.maxConcurrent ?? 3;
-        this.autoRetry = options.autoRetry ?? true;
-        this.maxRetries = options.maxRetries ?? 3;
-        this.headers = options.headers ?? {};
-        this.withCredentials = options.withCredentials ?? true;
-        this.context = options.context;
-        this.chunkSizeOverride = options.chunkSize;
-        this.endpoints = { ...DEFAULT_ENDPOINTS, ...options.endpoints };
+        const defaults = getDefaults();
+        const merged = { ...defaults, ...options };
+
+        this.maxConcurrent = merged.maxConcurrent ?? 3;
+        this.autoRetry = merged.autoRetry ?? true;
+        this.maxRetries = merged.maxRetries ?? 3;
+        this.headers = { ...defaults.headers, ...options.headers };
+        this.withCredentials = merged.withCredentials ?? true;
+        this.context = merged.context;
+        this.chunkSizeOverride = merged.chunkSize;
+        this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
     }
 
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe {

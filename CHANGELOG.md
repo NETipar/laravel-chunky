@@ -2,6 +2,14 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.4.0 - 2026-03-30
+
+### Added
+- Global defaults via `setDefaults()` / `getDefaults()` in `@netipar/chunky-core`
+- `ChunkUploader` constructor merges global defaults with per-instance options (headers are deep-merged)
+- `setDefaults` and `getDefaults` re-exported from `@netipar/chunky-vue3`, `@netipar/chunky-react`, and `@netipar/chunky-alpine`
+- Enables one-time CSRF token setup: `setDefaults({ headers: { 'X-CSRF-TOKEN': token } })`
+
 ## v0.3.1 - 2026-03-30
 
 ### Fixed

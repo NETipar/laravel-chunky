@@ -1,4 +1,5 @@
 export { ChunkUploader } from './ChunkUploader';
+export { setDefaults, getDefaults } from './config';
 export type {
     ChunkUploadOptions,
     ChunkUploaderState,

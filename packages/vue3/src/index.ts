@@ -1,4 +1,5 @@
 export { useChunkUpload } from './useChunkUpload';
+export { setDefaults, getDefaults } from '@netipar/chunky-core';
 export type { ChunkUploadReturn } from './useChunkUpload';
 export type {
     ChunkUploadOptions,

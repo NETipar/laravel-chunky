@@ -20,9 +20,20 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  ChunkUploader: () => ChunkUploader
+  ChunkUploader: () => ChunkUploader,
+  getDefaults: () => getDefaults,
+  setDefaults: () => setDefaults
 });
 module.exports = __toCommonJS(src_exports);
+
+// src/config.ts
+var globalDefaults = {};
+function setDefaults(options) {
+  globalDefaults = { ...options };
+}
+function getDefaults() {
+  return globalDefaults;
+}
 
 // src/ChunkUploader.ts
 var DEFAULT_ENDPOINTS = {
@@ -55,14 +66,16 @@ var ChunkUploader = class {
     this.serverChunkSize = null;
     this.lastFile = null;
     this.listeners = /* @__PURE__ */ new Map();
-    this.maxConcurrent = options.maxConcurrent ?? 3;
-    this.autoRetry = options.autoRetry ?? true;
-    this.maxRetries = options.maxRetries ?? 3;
-    this.headers = options.headers ?? {};
-    this.withCredentials = options.withCredentials ?? true;
-    this.context = options.context;
-    this.chunkSizeOverride = options.chunkSize;
-    this.endpoints = { ...DEFAULT_ENDPOINTS, ...options.endpoints };
+    const defaults = getDefaults();
+    const merged = { ...defaults, ...options };
+    this.maxConcurrent = merged.maxConcurrent ?? 3;
+    this.autoRetry = merged.autoRetry ?? true;
+    this.maxRetries = merged.maxRetries ?? 3;
+    this.headers = { ...defaults.headers, ...options.headers };
+    this.withCredentials = merged.withCredentials ?? true;
+    this.context = merged.context;
+    this.chunkSizeOverride = merged.chunkSize;
+    this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
   }
   on(event, callback) {
     if (!this.listeners.has(event)) {

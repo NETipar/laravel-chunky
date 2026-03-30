@@ -2,6 +2,13 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.3.0 - 2026-03-30
+
+### Added
+- Laravel 13 support (`illuminate/*` `^13.0`)
+- Orchestra Testbench `^11.0` support
+- Pest `^4.0` support
+
 ## v0.2.1 - 2026-03-11
 
 ### Fixed

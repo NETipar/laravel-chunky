@@ -46,7 +46,7 @@ function onFileChange(event) {
 ## Requirements
 
 - PHP 8.2+
-- Laravel 11 or 12
+- Laravel 11, 12 or 13
 
 ## Installation
 
@@ -286,6 +286,19 @@ uploader.retry();
 // Cleanup when done
 uploader.destroy();
 ```
+
+## Authentication
+
+By default, upload endpoints use only the `api` middleware. To protect them with authentication, update `routes.middleware` in `config/chunky.php`:
+
+```php
+'routes' => [
+    'prefix' => 'api/chunky',
+    'middleware' => ['api', 'auth:sanctum'],
+],
+```
+
+This applies to all three endpoints (initiate, upload chunk, status). No custom request or controller override is needed.
 
 ## Context-based Validation & Save Callbacks
 

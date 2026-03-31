@@ -26,6 +26,8 @@ return [
     'allowed_mimes' => [],
 
     // Route config
+    // Add 'auth:sanctum' or your auth middleware to protect upload endpoints:
+    // 'middleware' => ['api', 'auth:sanctum'],
     'routes' => [
         'prefix' => 'api/chunky',
         'middleware' => ['api'],

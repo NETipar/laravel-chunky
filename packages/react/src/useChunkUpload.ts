@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ChunkUploader } from '@netipar/chunky-core';
 import type {
     ChunkInfo,
@@ -33,11 +33,8 @@ export interface ChunkUploadReturn {
 }
 
 export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadReturn {
+    const optionsKey = useMemo(() => JSON.stringify(options), [options]);
     const uploaderRef = useRef<ChunkUploader | null>(null);
-
-    if (!uploaderRef.current) {
-        uploaderRef.current = new ChunkUploader(options);
-    }
 
     const [progress, setProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
@@ -50,7 +47,8 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
     const [currentFile, setCurrentFile] = useState<File | null>(null);
 
     useEffect(() => {
-        const uploader = uploaderRef.current!;
+        const uploader = new ChunkUploader(options);
+        uploaderRef.current = uploader;
 
         const unsub = uploader.on('stateChange', (state) => {
             setProgress(state.progress);
@@ -68,7 +66,7 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
             unsub();
             uploader.destroy();
         };
-    }, []);
+    }, [optionsKey]);
 
     const upload = useCallback(
         (file: File, metadata?: Record<string, unknown>) => uploaderRef.current!.upload(file, metadata),

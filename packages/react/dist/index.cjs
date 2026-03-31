@@ -28,10 +28,8 @@ module.exports = __toCommonJS(src_exports);
 var import_react = require("react");
 var import_chunky_core = require("@netipar/chunky-core");
 function useChunkUpload(options = {}) {
+  const optionsKey = (0, import_react.useMemo)(() => JSON.stringify(options), [options]);
   const uploaderRef = (0, import_react.useRef)(null);
-  if (!uploaderRef.current) {
-    uploaderRef.current = new import_chunky_core.ChunkUploader(options);
-  }
   const [progress, setProgress] = (0, import_react.useState)(0);
   const [isUploading, setIsUploading] = (0, import_react.useState)(false);
   const [isPaused, setIsPaused] = (0, import_react.useState)(false);
@@ -42,7 +40,8 @@ function useChunkUpload(options = {}) {
   const [totalChunks, setTotalChunks] = (0, import_react.useState)(0);
   const [currentFile, setCurrentFile] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
-    const uploader = uploaderRef.current;
+    const uploader = new import_chunky_core.ChunkUploader(options);
+    uploaderRef.current = uploader;
     const unsub = uploader.on("stateChange", (state) => {
       setProgress(state.progress);
       setIsUploading(state.isUploading);
@@ -58,7 +57,7 @@ function useChunkUpload(options = {}) {
       unsub();
       uploader.destroy();
     };
-  }, []);
+  }, [optionsKey]);
   const upload = (0, import_react.useCallback)(
     (file, metadata) => uploaderRef.current.upload(file, metadata),
     []

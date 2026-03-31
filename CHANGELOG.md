@@ -2,6 +2,39 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.5.0 - 2026-03-31
+
+### Added — Backend
+- `ChunkyContext` abstract class for class-based upload context registration
+- `Chunky::register()` method for class-based contexts
+- `Chunky::simple()` one-line context registration with validate-and-move
+- `UploadMetadata::withStatus()` immutable method for status transitions
+- `updateStatus()` added to `UploadTracker` contract (both drivers implement it)
+- `UploadCompleted` event now carries full `UploadMetadata` DTO via `$event->upload` (backward-compatible shorthand properties preserved)
+- Config `contexts` array for auto-registering class-based contexts on boot
+- Validation error for unregistered upload contexts (was silently ignored)
+- Auth middleware documentation in config and README
+
+### Added — Frontend
+- Auto-detect `XSRF-TOKEN` cookie for zero-config CSRF in Laravel apps
+- `createDefaults()` factory for isolated config scopes (no global state pollution)
+- `checksum` option to disable per-chunk SHA-256 computation (`{ checksum: false }`)
+- Concurrent upload guard — `upload()` throws if already in progress
+- `resume()` and `retry()` return `boolean` indicating success
+- AbortController cleanup on new upload (prevents leaked requests)
+- Endpoint URL validation at construction time (`{uploadId}` placeholder required)
+- `chunky:progress` and `chunky:chunk-uploaded` DOM events in Alpine component
+- Linked source maps for all frontend package builds
+- Consistent type exports and `setDefaults`/`getDefaults`/`createDefaults` re-exports across all wrapper packages
+
+### Fixed
+- React hook now recreates uploader when options change (was ignoring updates)
+- `instanceof DatabaseTracker` coupling removed from `AssembleFileJob`
+- `FilesystemTracker` now supports `updateStatus()` with `completed_at` timestamp
+
+### npm packages
+- All packages bumped to v0.5.0 (core, vue3, react, alpine synchronized)
+
 ## v0.4.0 - 2026-03-30
 
 ### Added

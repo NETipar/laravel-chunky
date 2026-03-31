@@ -128,6 +128,17 @@ import { setDefaults } from '@netipar/chunky-core';
 setDefaults({ headers: { 'X-CSRF-TOKEN': 'your-token' } });
 ```
 
+### Config Isolation
+
+For multiple upload scopes on the same page:
+
+```typescript
+import { ChunkUploader, createDefaults } from '@netipar/chunky-core';
+
+const scope = createDefaults({ headers: { 'X-Custom': 'value' } });
+const uploader = new ChunkUploader({ context: 'docs' }, scope);
+```
+
 ### API Endpoints
 
 The package registers three routes (configurable prefix/middleware):

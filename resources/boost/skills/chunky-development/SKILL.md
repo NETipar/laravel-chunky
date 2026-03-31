@@ -269,7 +269,7 @@ Validated fields:
 - `metadata`: nullable, array
 - `context`: nullable, string, max:100
 
-Context-specific rules are merged automatically from `Chunky::context()`.
+Context-specific rules are merged automatically from `Chunky::context()`. Unregistered contexts return a 422 validation error.
 
 ### Upload chunk request
 
@@ -412,7 +412,7 @@ Alpine.start();
 </div>
 ```
 
-Alpine dispatches `chunky:complete` and `chunky:error` DOM events.
+Alpine dispatches `chunky:progress`, `chunky:chunk-uploaded`, `chunky:complete`, and `chunky:error` DOM events.
 
 ## Frontend: Livewire
 
@@ -457,6 +457,31 @@ import { setDefaults } from '@netipar/chunky-core';
 
 setDefaults({ headers: { 'X-CSRF-TOKEN': 'your-token' } });
 ```
+
+## Config isolation
+
+For multiple upload scopes on the same page, use `createDefaults()`:
+
+```typescript
+import { ChunkUploader, createDefaults } from '@netipar/chunky-core';
+
+const adminScope = createDefaults({ headers: { 'X-Admin': 'true' } });
+const uploader = new ChunkUploader({ context: 'admin' }, adminScope);
+```
+
+## Frontend options reference
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `chunkSize` | `number` | server-defined | Override chunk size in bytes |
+| `maxConcurrent` | `number` | `3` | Parallel chunk uploads |
+| `autoRetry` | `boolean` | `true` | Retry failed chunks |
+| `maxRetries` | `number` | `3` | Max retry attempts per chunk |
+| `headers` | `Record<string, string>` | `{}` | Custom request headers |
+| `withCredentials` | `boolean` | `true` | Send cookies with requests |
+| `context` | `string` | - | Server-side validation context |
+| `checksum` | `boolean` | `true` | SHA-256 per-chunk integrity check |
+| `endpoints` | `object` | auto | Custom API endpoints |
 
 ## Frontend: Core (framework-agnostic)
 

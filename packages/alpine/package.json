@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-alpine",
-    "version": "0.3.1",
+    "version": "0.5.0",
     "description": "Alpine.js data component for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",
@@ -32,7 +32,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@netipar/chunky-core": "^0.3.0"
+        "@netipar/chunky-core": "^0.5.0"
     },
     "devDependencies": {
         "typescript": "^5.4",

@@ -20,7 +20,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  registerChunkUpload: () => registerChunkUpload
+  getDefaults: () => import_chunky_core2.getDefaults,
+  registerChunkUpload: () => registerChunkUpload,
+  setDefaults: () => import_chunky_core2.setDefaults
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -85,3 +87,6 @@ function registerChunkUpload(Alpine) {
     }
   }));
 }
+
+// src/index.ts
+var import_chunky_core2 = require("@netipar/chunky-core");

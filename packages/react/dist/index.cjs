@@ -20,6 +20,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
+  getDefaults: () => import_chunky_core2.getDefaults,
+  setDefaults: () => import_chunky_core2.setDefaults,
   useChunkUpload: () => useChunkUpload
 });
 module.exports = __toCommonJS(src_exports);
@@ -103,3 +105,6 @@ function useChunkUpload(options = {}) {
     onError
   };
 }
+
+// src/index.ts
+var import_chunky_core2 = require("@netipar/chunky-core");

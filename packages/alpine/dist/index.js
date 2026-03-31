@@ -59,6 +59,11 @@ function registerChunkUpload(Alpine) {
     }
   }));
 }
+
+// src/index.ts
+import { setDefaults, getDefaults } from "@netipar/chunky-core";
 export {
-  registerChunkUpload
+  getDefaults,
+  registerChunkUpload,
+  setDefaults
 };

@@ -1,4 +1,5 @@
 import { getDefaults } from './config';
+import type { DefaultsScope } from './config';
 import type {
     ChunkInfo,
     ChunkUploadOptions,
@@ -58,8 +59,8 @@ export class ChunkUploader {
     private lastMetadata?: Record<string, unknown>;
     private listeners = new Map<string, Set<Function>>();
 
-    constructor(options: ChunkUploadOptions = {}) {
-        const defaults = getDefaults();
+    constructor(options: ChunkUploadOptions = {}, scope?: DefaultsScope) {
+        const defaults = scope ? scope.getDefaults() : getDefaults();
         const merged = { ...defaults, ...options };
 
         this.maxConcurrent = merged.maxConcurrent ?? 3;

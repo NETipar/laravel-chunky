@@ -1,5 +1,6 @@
 export { registerChunkUpload } from './chunk-upload';
-export { setDefaults, getDefaults } from '@netipar/chunky-core';
+export { setDefaults, getDefaults, createDefaults } from '@netipar/chunky-core';
+export type { DefaultsScope } from '@netipar/chunky-core';
 export type { AlpineChunkUploadData } from './chunk-upload';
 export type {
     ChunkUploadOptions,

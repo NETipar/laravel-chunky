@@ -61,8 +61,9 @@ function registerChunkUpload(Alpine) {
 }
 
 // src/index.ts
-import { setDefaults, getDefaults } from "@netipar/chunky-core";
+import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
+  createDefaults,
   getDefaults,
   registerChunkUpload,
   setDefaults

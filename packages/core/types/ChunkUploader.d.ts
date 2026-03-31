@@ -1,3 +1,4 @@
+import type { DefaultsScope } from './config';
 import type { ChunkUploadOptions, ChunkUploaderEventMap, ChunkUploaderState, Unsubscribe, UploadResult } from './types';
 export declare class ChunkUploader {
     progress: number;
@@ -23,7 +24,7 @@ export declare class ChunkUploader {
     private lastFile;
     private lastMetadata?;
     private listeners;
-    constructor(options?: ChunkUploadOptions);
+    constructor(options?: ChunkUploadOptions, scope?: DefaultsScope);
     private validateEndpoints;
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe;
     private emit;

@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   ChunkUploader: () => ChunkUploader,
+  createDefaults: () => createDefaults,
   getDefaults: () => getDefaults,
   setDefaults: () => setDefaults
 });
@@ -33,6 +34,17 @@ function setDefaults(options) {
 }
 function getDefaults() {
   return globalDefaults;
+}
+function createDefaults(initial = {}) {
+  let defaults = { ...initial };
+  return {
+    setDefaults(options) {
+      defaults = { ...options };
+    },
+    getDefaults() {
+      return defaults;
+    }
+  };
 }
 
 // src/ChunkUploader.ts
@@ -51,7 +63,7 @@ async function computeChecksum(data) {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 var ChunkUploader = class {
-  constructor(options = {}) {
+  constructor(options = {}, scope) {
     this.progress = 0;
     this.isUploading = false;
     this.isPaused = false;
@@ -66,7 +78,7 @@ var ChunkUploader = class {
     this.serverChunkSize = null;
     this.lastFile = null;
     this.listeners = /* @__PURE__ */ new Map();
-    const defaults = getDefaults();
+    const defaults = scope ? scope.getDefaults() : getDefaults();
     const merged = { ...defaults, ...options };
     this.maxConcurrent = merged.maxConcurrent ?? 3;
     this.autoRetry = merged.autoRetry ?? true;

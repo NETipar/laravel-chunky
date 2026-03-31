@@ -49,8 +49,9 @@ function useChunkUpload(options = {}) {
 }
 
 // src/index.ts
-import { setDefaults, getDefaults } from "@netipar/chunky-core";
+import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
+  createDefaults,
   getDefaults,
   setDefaults,
   useChunkUpload

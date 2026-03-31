@@ -1,5 +1,6 @@
 export { ChunkUploader } from './ChunkUploader';
-export { setDefaults, getDefaults } from './config';
+export { setDefaults, getDefaults, createDefaults } from './config';
+export type { DefaultsScope } from './config';
 export type {
     ChunkUploadOptions,
     ChunkUploaderState,

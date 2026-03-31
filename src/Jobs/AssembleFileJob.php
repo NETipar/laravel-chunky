@@ -56,11 +56,6 @@ class AssembleFileJob implements ShouldQueue
             $saveCallback?->__invoke($completedMetadata);
         }
 
-        UploadCompleted::dispatch(
-            $this->uploadId,
-            $finalPath,
-            $metadata->disk,
-            $metadata->metadata,
-        );
+        UploadCompleted::dispatch($completedMetadata);
     }
 }

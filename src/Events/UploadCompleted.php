@@ -4,18 +4,27 @@ namespace NETipar\Chunky\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use NETipar\Chunky\Data\UploadMetadata;
 
 class UploadCompleted
 {
     use Dispatchable, SerializesModels;
 
-    /**
-     * @param  array<string, mixed>|null  $metadata
-     */
+    public readonly string $uploadId;
+
+    public readonly string $finalPath;
+
+    public readonly string $disk;
+
+    /** @var array<string, mixed>|null */
+    public readonly ?array $metadata;
+
     public function __construct(
-        public readonly string $uploadId,
-        public readonly string $finalPath,
-        public readonly string $disk,
-        public readonly ?array $metadata = null,
-    ) {}
+        public readonly UploadMetadata $upload,
+    ) {
+        $this->uploadId = $upload->uploadId;
+        $this->finalPath = $upload->finalPath ?? '';
+        $this->disk = $upload->disk;
+        $this->metadata = $upload->metadata ?: null;
+    }
 }

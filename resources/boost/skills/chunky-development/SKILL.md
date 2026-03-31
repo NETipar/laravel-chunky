@@ -201,7 +201,7 @@ protected $listen = [
 | `ChunkUploaded` | `uploadId`, `chunkIndex`, `totalChunks`, `progress` | After each successful chunk |
 | `ChunkUploadFailed` | `uploadId`, `chunkIndex`, `exception` | On chunk error |
 | `FileAssembled` | `uploadId`, `finalPath`, `disk`, `fileName`, `fileSize` | After file assembly |
-| `UploadCompleted` | `uploadId`, `finalPath`, `disk`, `metadata` | Full upload complete |
+| `UploadCompleted` | `upload` (UploadMetadata), `uploadId`, `finalPath`, `disk`, `metadata` | Full upload complete |
 
 ### Event listener example
 
@@ -215,11 +215,16 @@ class ProcessUploadedFile
 {
     public function handle(UploadCompleted $event): void
     {
-        $path = $event->finalPath;
-        $disk = $event->disk;
-        $meta = $event->metadata;
+        // Full UploadMetadata DTO available via $event->upload
+        $upload = $event->upload;
 
-        Storage::disk($disk)->move($path, "documents/{$event->uploadId}.pdf");
+        Storage::disk($upload->disk)->move(
+            $upload->finalPath,
+            "documents/{$upload->uploadId}.pdf",
+        );
+
+        // Shorthand properties also available:
+        // $event->uploadId, $event->finalPath, $event->disk, $event->metadata
     }
 }
 ```

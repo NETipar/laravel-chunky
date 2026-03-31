@@ -434,10 +434,16 @@ class ProcessUploadedFile
 {
     public function handle(UploadCompleted $event): void
     {
-        $path = $event->finalPath;
-        $disk = $event->disk;
+        // Full UploadMetadata DTO available via $event->upload
+        $upload = $event->upload;
 
-        Storage::disk($disk)->move($path, "documents/{$event->uploadId}.zip");
+        Storage::disk($upload->disk)->move(
+            $upload->finalPath,
+            "documents/{$upload->uploadId}.zip",
+        );
+
+        // Shorthand properties also available for convenience:
+        // $event->uploadId, $event->finalPath, $event->disk, $event->metadata
     }
 }
 ```
@@ -450,7 +456,7 @@ class ProcessUploadedFile
 | `ChunkUploaded` | uploadId, chunkIndex, totalChunks, progress% | After each successful chunk |
 | `ChunkUploadFailed` | uploadId, chunkIndex, exception | On chunk error |
 | `FileAssembled` | uploadId, finalPath, disk, fileName, fileSize | After file assembly |
-| `UploadCompleted` | uploadId, finalPath, disk, metadata | Full upload complete |
+| `UploadCompleted` | upload (UploadMetadata), uploadId, finalPath, disk, metadata | Full upload complete |
 
 ## Using the Facade
 

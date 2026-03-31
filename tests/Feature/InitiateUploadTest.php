@@ -79,6 +79,9 @@ it('accepts metadata', function () {
 it('accepts context parameter', function () {
     Event::fake([UploadInitiated::class]);
 
+    $manager = app(\NETipar\Chunky\ChunkyManager::class);
+    $manager->context('profile_avatar');
+
     $response = $this->postJson('/api/chunky/upload', [
         'file_name' => 'avatar.jpg',
         'file_size' => 50000,
@@ -87,6 +90,17 @@ it('accepts context parameter', function () {
     ]);
 
     $response->assertStatus(201);
+});
+
+it('rejects unregistered context', function () {
+    $response = $this->postJson('/api/chunky/upload', [
+        'file_name' => 'test.txt',
+        'file_size' => 1000,
+        'context' => 'nonexistent_context',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['context']);
 });
 
 it('merges context validation rules', function () {

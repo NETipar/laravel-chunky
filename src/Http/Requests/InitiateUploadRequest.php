@@ -3,6 +3,7 @@
 namespace NETipar\Chunky\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\ValidationException;
 use NETipar\Chunky\ChunkyManager;
 
 class InitiateUploadRequest extends FormRequest
@@ -55,7 +56,9 @@ class InitiateUploadRequest extends FormRequest
         $manager = app(ChunkyManager::class);
 
         if (! $manager->hasContext($context)) {
-            return $rules;
+            throw ValidationException::withMessages([
+                'context' => ["The context '{$context}' is not registered."],
+            ]);
         }
 
         $contextRules = $manager->getContextRules($context);

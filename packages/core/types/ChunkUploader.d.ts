@@ -37,8 +37,8 @@ export declare class ChunkUploader {
     private fetchStatus;
     upload(file: File, metadata?: Record<string, unknown>): Promise<UploadResult>;
     pause(): void;
-    resume(): void;
+    resume(): boolean;
     cancel(): void;
-    retry(): void;
+    retry(): boolean;
     destroy(): void;
 }

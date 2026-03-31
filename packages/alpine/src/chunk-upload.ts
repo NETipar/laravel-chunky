@@ -19,9 +19,9 @@ export interface AlpineChunkUploadData {
     upload(file: File, metadata?: Record<string, unknown>): Promise<UploadResult>;
     handleFileInput(event: Event): void;
     pause(): void;
-    resume(): void;
+    resume(): boolean;
     cancel(): void;
-    retry(): void;
+    retry(): boolean;
 }
 
 export function registerChunkUpload(Alpine: any): void {
@@ -84,7 +84,7 @@ export function registerChunkUpload(Alpine: any): void {
         },
 
         resume() {
-            this._uploader!.resume();
+            return this._uploader!.resume();
         },
 
         cancel() {
@@ -92,7 +92,7 @@ export function registerChunkUpload(Alpine: any): void {
         },
 
         retry() {
-            this._uploader!.retry();
+            return this._uploader!.retry();
         },
     }));
 }

@@ -22,9 +22,9 @@ export interface ChunkUploadReturn {
 
     upload: (file: File, metadata?: Record<string, unknown>) => Promise<UploadResult>;
     pause: () => void;
-    resume: () => void;
+    resume: () => boolean;
     cancel: () => void;
-    retry: () => void;
+    retry: () => boolean;
 
     onProgress: (callback: (event: ProgressEvent) => void) => Unsubscribe;
     onChunkUploaded: (callback: (chunk: ChunkInfo) => void) => Unsubscribe;

@@ -16,8 +16,8 @@ export interface AlpineChunkUploadData {
     upload(file: File, metadata?: Record<string, unknown>): Promise<UploadResult>;
     handleFileInput(event: Event): void;
     pause(): void;
-    resume(): void;
+    resume(): boolean;
     cancel(): void;
-    retry(): void;
+    retry(): boolean;
 }
 export declare function registerChunkUpload(Alpine: any): void;

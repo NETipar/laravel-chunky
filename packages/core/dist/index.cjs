@@ -227,6 +227,10 @@ var ChunkUploader = class {
     });
   }
   async upload(file, metadata) {
+    if (this.isUploading && !this.isPaused) {
+      throw new Error("Upload already in progress. Cancel or wait for completion before starting a new upload.");
+    }
+    this.abortController?.abort();
     this.lastFile = file;
     this.lastMetadata = metadata;
     this.currentFile = file;
@@ -299,11 +303,12 @@ var ChunkUploader = class {
   }
   resume() {
     if (!this.isPaused || !this.lastFile || !this.uploadId) {
-      return;
+      return false;
     }
     this.isPaused = false;
     this.emitStateChange();
     this.upload(this.lastFile, this.lastMetadata);
+    return true;
   }
   cancel() {
     this.abortController?.abort();
@@ -319,12 +324,13 @@ var ChunkUploader = class {
     this.emitStateChange();
   }
   retry() {
-    if (!this.lastFile) {
-      return;
+    if (!this.lastFile || this.isUploading && !this.isPaused) {
+      return false;
     }
     this.error = null;
     this.emitStateChange();
     this.upload(this.lastFile, this.lastMetadata);
+    return true;
   }
   destroy() {
     this.abortController?.abort();

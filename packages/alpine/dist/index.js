@@ -49,13 +49,13 @@ function registerChunkUpload(Alpine) {
       this._uploader.pause();
     },
     resume() {
-      this._uploader.resume();
+      return this._uploader.resume();
     },
     cancel() {
       this._uploader.cancel();
     },
     retry() {
-      this._uploader.retry();
+      return this._uploader.retry();
     }
   }));
 }

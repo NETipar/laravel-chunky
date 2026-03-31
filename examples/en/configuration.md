@@ -41,6 +41,9 @@ return [
     // Allowed MIME types (empty array = all types allowed)
     'allowed_mimes' => [],
 
+    // Class-based upload contexts (auto-registered on boot)
+    'contexts' => [],
+
     // Route configuration
     'routes' => [
         'prefix' => 'api/chunky',
@@ -118,20 +121,57 @@ No migration needed. Upload state is stored as JSON files alongside the chunks.
 
 ## Context-based Validation
 
-Register per-context validation rules in your `AppServiceProvider`:
+### Class-based Contexts (Recommended)
+
+Create a context class for each upload type:
+
+```php
+namespace App\Chunky;
+
+use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class ProfileAvatarContext extends ChunkyContext
+{
+    public function name(): string
+    {
+        return 'profile_avatar';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'file_size' => ['max:5242880'],
+            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
+        ];
+    }
+
+    public function save(UploadMetadata $metadata): void
+    {
+        auth()->user()
+            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
+            ->toMediaCollection('avatar');
+    }
+}
+```
+
+Register in `config/chunky.php`:
+
+```php
+'contexts' => [
+    App\Chunky\ProfileAvatarContext::class,
+],
+```
+
+### Inline Closures
+
+For simple cases:
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
 public function boot(): void
 {
-    // Profile avatar: images only, max 5MB
-    Chunky::context('profile_avatar', rules: fn () => [
-        'file_size' => ['max:5242880'],
-        'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-    ]);
-
-    // Documents: PDFs and ZIPs, max 100MB
     Chunky::context('documents', rules: fn () => [
         'file_size' => ['max:104857600'],
         'mime_type' => ['in:application/pdf,application/zip'],

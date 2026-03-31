@@ -25,6 +25,13 @@ return [
     // Allowed MIME types - empty = all
     'allowed_mimes' => [],
 
+    // Class-based upload contexts (auto-registered on boot)
+    // 'contexts' => [
+    //     App\Chunky\ProfileAvatarContext::class,
+    //     App\Chunky\DocumentContext::class,
+    // ],
+    'contexts' => [],
+
     // Route config
     // Add 'auth:sanctum' or your auth middleware to protect upload endpoints:
     // 'middleware' => ['api', 'auth:sanctum'],

@@ -302,26 +302,71 @@ This applies to all three endpoints (initiate, upload chunk, status). No custom 
 
 ## Context-based Validation & Save Callbacks
 
-Register per-context validation rules and save handlers in your `AppServiceProvider`:
+Contexts define per-upload validation rules and save handlers. You can use class-based contexts (recommended) or inline closures.
+
+### Class-based Contexts (Recommended)
+
+Create a context class:
+
+```php
+namespace App\Chunky;
+
+use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class ProfileAvatarContext extends ChunkyContext
+{
+    public function name(): string
+    {
+        return 'profile_avatar';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'file_size' => ['max:5242880'], // 5MB
+            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
+        ];
+    }
+
+    public function save(UploadMetadata $metadata): void
+    {
+        auth()->user()
+            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
+            ->toMediaCollection('avatar');
+    }
+}
+```
+
+Register via config (`config/chunky.php`):
+
+```php
+'contexts' => [
+    App\Chunky\ProfileAvatarContext::class,
+    App\Chunky\DocumentContext::class,
+],
+```
+
+Or register manually in your `AppServiceProvider`:
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
 public function boot(): void
 {
-    Chunky::context(
-        'profile_avatar',
-        rules: fn () => [
-            'file_size' => ['max:5242880'], // 5MB
-            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-        ],
-        save: function ($metadata) {
-            $user = auth()->user();
-            $user->addMediaFromDisk($metadata->finalPath, $metadata->disk)
-                ->toMediaCollection('avatar');
-        },
-    );
+    Chunky::register(ProfileAvatarContext::class);
+}
+```
 
+### Inline Closures
+
+For simple cases, you can register contexts inline:
+
+```php
+use NETipar\Chunky\Facades\Chunky;
+
+public function boot(): void
+{
     Chunky::context(
         'documents',
         rules: fn () => [
@@ -332,7 +377,7 @@ public function boot(): void
 }
 ```
 
-Then pass the context from the frontend:
+### Using Contexts from Frontend
 
 ```typescript
 // Vue 3
@@ -400,7 +445,10 @@ class ProcessUploadedFile
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
-// Register a context
+// Register a class-based context
+Chunky::register(ProfileAvatarContext::class);
+
+// Or register an inline context
 Chunky::context('documents', rules: fn () => [...], save: fn ($metadata) => ...);
 
 // Programmatic initiation
@@ -434,6 +482,7 @@ Full `config/chunky.php`:
 | `expiration` | `1440` | Upload expiration in minutes (24h) |
 | `max_file_size` | `0` | Max file size in bytes (0 = unlimited) |
 | `allowed_mimes` | `[]` | Allowed MIME types (empty = all) |
+| `contexts` | `[]` | Class-based context classes (auto-registered) |
 | `routes.prefix` | `api/chunky` | Route prefix |
 | `routes.middleware` | `['api']` | Route middleware |
 | `verify_integrity` | `true` | SHA-256 checksum verification |

@@ -23,6 +23,22 @@ class ChunkyManager
     ) {}
 
     /**
+     * Register a class-based upload context.
+     *
+     * @param  class-string<ChunkyContext>  $contextClass
+     */
+    public function register(string $contextClass): void
+    {
+        $instance = app($contextClass);
+
+        $this->context(
+            name: $instance->name(),
+            rules: fn () => $instance->rules(),
+            save: fn (UploadMetadata $metadata) => $instance->save($metadata),
+        );
+    }
+
+    /**
      * Register validation rules and/or save handler for an upload context.
      *
      * @param  ?\Closure(): array<string, array<int, mixed>>  $rules

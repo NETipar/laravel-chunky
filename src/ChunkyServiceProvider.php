@@ -53,7 +53,23 @@ class ChunkyServiceProvider extends ServiceProvider
         ], 'chunky-views');
 
         $this->registerRoutes();
+        $this->registerContexts();
         $this->registerLivewireComponents();
+    }
+
+    private function registerContexts(): void
+    {
+        $contexts = config('chunky.contexts', []);
+
+        if (empty($contexts)) {
+            return;
+        }
+
+        $manager = $this->app->make(ChunkyManager::class);
+
+        foreach ($contexts as $contextClass) {
+            $manager->register($contextClass);
+        }
     }
 
     private function registerRoutes(): void

@@ -39,6 +39,9 @@ return [
     // Engedélyezett MIME típusok (üres = minden engedélyezett)
     'allowed_mimes' => [],
 
+    // Osztály-alapú feltöltési kontextusok (boot-kor automatikusan regisztrálva)
+    'contexts' => [],
+
     // Route beállítások
     'routes' => [
         'prefix' => 'api/chunky',
@@ -102,20 +105,57 @@ return [
 
 ## Kontextus alapú validáció
 
-Kontextus-specifikus validációs szabályok regisztrálása az `AppServiceProvider`-ben:
+### Osztály-alapú kontextusok (ajánlott)
+
+Hozz létre egy kontextus osztályt minden feltöltési típushoz:
+
+```php
+namespace App\Chunky;
+
+use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class ProfileAvatarContext extends ChunkyContext
+{
+    public function name(): string
+    {
+        return 'profile_avatar';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'file_size' => ['max:5242880'],
+            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
+        ];
+    }
+
+    public function save(UploadMetadata $metadata): void
+    {
+        auth()->user()
+            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
+            ->toMediaCollection('avatar');
+    }
+}
+```
+
+Regisztráld a `config/chunky.php`-ban:
+
+```php
+'contexts' => [
+    App\Chunky\ProfileAvatarContext::class,
+],
+```
+
+### Inline closure-ök
+
+Egyszerűbb esetekre:
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
 public function boot(): void
 {
-    // Profil avatar: csak képek, max 5MB
-    Chunky::context('profile_avatar', rules: fn () => [
-        'file_size' => ['max:5242880'],
-        'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-    ]);
-
-    // Dokumentumok: PDF és ZIP, max 100MB
     Chunky::context('documents', rules: fn () => [
         'file_size' => ['max:104857600'],
         'mime_type' => ['in:application/pdf,application/zip'],

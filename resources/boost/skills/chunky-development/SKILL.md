@@ -58,7 +58,8 @@ Livewire needs no npm package -- the component is included in the Composer packa
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
-Chunky::context(...)       // Register context with rules/save
+Chunky::register(...)      // Register a class-based context
+Chunky::context(...)       // Register inline context with rules/save closures
 Chunky::initiate(...)      // Programmatic upload start
 Chunky::uploadChunk(...)   // Programmatic chunk upload
 Chunky::status(...)        // Query upload status (returns UploadMetadata)
@@ -67,33 +68,71 @@ Chunky::hasContext(...)    // Check if context exists
 
 ## Register upload contexts
 
-Register per-context validation rules and save callbacks in `AppServiceProvider`:
+### Class-based contexts (recommended)
+
+Create a context class extending `NETipar\Chunky\ChunkyContext`:
+
+```php
+namespace App\Chunky;
+
+use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class ProfileAvatarContext extends ChunkyContext
+{
+    public function name(): string
+    {
+        return 'profile_avatar';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'file_size' => ['max:5242880'], // 5MB
+            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
+        ];
+    }
+
+    public function save(UploadMetadata $metadata): void
+    {
+        auth()->user()
+            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
+            ->toMediaCollection('avatar');
+    }
+}
+```
+
+Register via config (auto-registered on boot):
+
+```php
+// config/chunky.php
+'contexts' => [
+    App\Chunky\ProfileAvatarContext::class,
+    App\Chunky\DocumentContext::class,
+],
+```
+
+Or register manually:
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
-use NETipar\Chunky\Data\UploadMetadata;
+
+Chunky::register(ProfileAvatarContext::class);
+```
+
+### Inline closures
+
+For simple cases, register contexts with closures in `AppServiceProvider`:
+
+```php
+use NETipar\Chunky\Facades\Chunky;
 
 public function boot(): void
 {
-    // Context with validation only
     Chunky::context('documents', rules: fn () => [
         'file_size' => ['max:104857600'], // 100MB
         'mime_type' => ['in:application/pdf,application/zip'],
     ]);
-
-    // Context with validation + save callback
-    Chunky::context(
-        'profile_avatar',
-        rules: fn () => [
-            'file_size' => ['max:5242880'], // 5MB
-            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-        ],
-        save: function (UploadMetadata $metadata) {
-            $user = auth()->user();
-            $user->addMediaFromDisk($metadata->finalPath, $metadata->disk)
-                ->toMediaCollection('avatar');
-        },
-    );
 }
 ```
 
@@ -468,6 +507,7 @@ Full `config/chunky.php`:
 | `expiration` | `1440` | Upload expiration in minutes (24h) |
 | `max_file_size` | `0` | Max file size in bytes (0 = unlimited) |
 | `allowed_mimes` | `[]` | Allowed MIME types (empty = all) |
+| `contexts` | `[]` | Class-based context classes (auto-registered) |
 | `routes.prefix` | `api/chunky` | Route prefix |
 | `routes.middleware` | `['api']` | Route middleware |
 | `verify_integrity` | `true` | SHA-256 checksum verification |
@@ -549,6 +589,7 @@ public function getUploadedChunks(string $uploadId): array;
 public function isComplete(string $uploadId): bool;
 public function getMetadata(string $uploadId): ?UploadMetadata;
 public function expire(string $uploadId): void;
+public function updateStatus(string $uploadId, UploadStatus $status, ?string $finalPath = null): void;
 ```
 
 ## Vendor publish tags

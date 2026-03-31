@@ -5,6 +5,7 @@ use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\UploadMetadata;
+use NETipar\Chunky\ChunkyContext;
 use NETipar\Chunky\Events\UploadInitiated;
 
 it('registers and retrieves contexts', function () {
@@ -60,6 +61,32 @@ it('returns null save callback for context without save', function () {
     $manager->context('rules-only', rules: fn () => ['file_size' => ['max:1000']]);
 
     expect($manager->getContextSaveCallback('rules-only'))->toBeNull();
+});
+
+it('registers a class-based context', function () {
+    $contextClass = new class extends ChunkyContext
+    {
+        public function name(): string
+        {
+            return 'class_based';
+        }
+
+        public function rules(): array
+        {
+            return ['file_size' => ['max:2048']];
+        }
+
+        public function save(UploadMetadata $metadata): void {}
+    };
+
+    app()->instance($contextClass::class, $contextClass);
+
+    $manager = app(ChunkyManager::class);
+    $manager->register($contextClass::class);
+
+    expect($manager->hasContext('class_based'))->toBeTrue();
+    expect($manager->getContextRules('class_based'))->toBe(['file_size' => ['max:2048']]);
+    expect($manager->getContextSaveCallback('class_based'))->toBeInstanceOf(Closure::class);
 });
 
 it('initiates an upload and dispatches event', function () {

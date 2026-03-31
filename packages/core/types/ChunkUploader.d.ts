@@ -28,6 +28,7 @@ export declare class ChunkUploader {
     private emit;
     private emitStateChange;
     getState(): ChunkUploaderState;
+    private getCsrfFromCookie;
     private getHeaders;
     private fetchJson;
     private initiateUpload;

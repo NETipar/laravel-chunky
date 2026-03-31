@@ -427,6 +427,18 @@ public function handleUpload(array $data): void
 }
 ```
 
+## CSRF protection
+
+The frontend client automatically reads the `XSRF-TOKEN` cookie (set by Laravel) and sends it as the `X-XSRF-TOKEN` header. No manual CSRF setup is needed in most Laravel applications.
+
+For custom token headers, use `setDefaults()`:
+
+```typescript
+import { setDefaults } from '@netipar/chunky-core';
+
+setDefaults({ headers: { 'X-CSRF-TOKEN': 'your-token' } });
+```
+
 ## Frontend: Core (framework-agnostic)
 
 ```typescript

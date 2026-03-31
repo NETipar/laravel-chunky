@@ -106,12 +106,38 @@ export class ChunkUploader {
         };
     }
 
+    private getCsrfFromCookie(): string | null {
+        if (typeof document === 'undefined') {
+            return null;
+        }
+
+        const match = document.cookie
+            .split('; ')
+            .find((row) => row.startsWith('XSRF-TOKEN='));
+
+        if (!match) {
+            return null;
+        }
+
+        return decodeURIComponent(match.split('=')[1]);
+    }
+
     private getHeaders(): Record<string, string> {
-        return {
+        const headers: Record<string, string> = {
             Accept: 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
             ...this.headers,
         };
+
+        if (!headers['X-XSRF-TOKEN']) {
+            const token = this.getCsrfFromCookie();
+
+            if (token) {
+                headers['X-XSRF-TOKEN'] = token;
+            }
+        }
+
+        return headers;
     }
 
     private async fetchJson<T>(url: string, init: RequestInit): Promise<T> {

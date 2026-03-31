@@ -105,12 +105,29 @@ var ChunkUploader = class {
       currentFile: this.currentFile
     };
   }
+  getCsrfFromCookie() {
+    if (typeof document === "undefined") {
+      return null;
+    }
+    const match = document.cookie.split("; ").find((row) => row.startsWith("XSRF-TOKEN="));
+    if (!match) {
+      return null;
+    }
+    return decodeURIComponent(match.split("=")[1]);
+  }
   getHeaders() {
-    return {
+    const headers = {
       Accept: "application/json",
       "X-Requested-With": "XMLHttpRequest",
       ...this.headers
     };
+    if (!headers["X-XSRF-TOKEN"]) {
+      const token = this.getCsrfFromCookie();
+      if (token) {
+        headers["X-XSRF-TOKEN"] = token;
+      }
+    }
+    return headers;
   }
   async fetchJson(url, init) {
     const response = await fetch(url, {

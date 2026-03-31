@@ -116,6 +116,18 @@ No npm package needed. The Livewire component uses Alpine.js under the hood and 
 5. When all chunks arrive, an `AssembleFileJob` merges them on the queue
 6. **Events** fire at each step -- hook in your own listeners
 
+### CSRF Protection
+
+The frontend client automatically reads the `XSRF-TOKEN` cookie (set by Laravel) and sends it as the `X-XSRF-TOKEN` header. No manual CSRF setup is needed in most Laravel applications.
+
+If you need a custom token header, use `setDefaults()`:
+
+```typescript
+import { setDefaults } from '@netipar/chunky-core';
+
+setDefaults({ headers: { 'X-CSRF-TOKEN': 'your-token' } });
+```
+
 ### API Endpoints
 
 The package registers three routes (configurable prefix/middleware):

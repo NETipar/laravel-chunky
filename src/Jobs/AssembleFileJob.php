@@ -10,7 +10,6 @@ use Illuminate\Queue\SerializesModels;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
-use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
@@ -50,20 +49,7 @@ class AssembleFileJob implements ShouldQueue
 
         $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
 
-        $completedMetadata = new UploadMetadata(
-            uploadId: $metadata->uploadId,
-            fileName: $metadata->fileName,
-            fileSize: $metadata->fileSize,
-            mimeType: $metadata->mimeType,
-            chunkSize: $metadata->chunkSize,
-            totalChunks: $metadata->totalChunks,
-            disk: $metadata->disk,
-            context: $metadata->context,
-            metadata: $metadata->metadata,
-            uploadedChunks: $metadata->uploadedChunks,
-            status: UploadStatus::Completed,
-            finalPath: $finalPath,
-        );
+        $completedMetadata = $metadata->withStatus(UploadStatus::Completed, $finalPath);
 
         if ($metadata->context) {
             $saveCallback = $manager->getContextSaveCallback($metadata->context);

@@ -55,6 +55,35 @@ it('converts to array and back', function () {
     expect($restored->status)->toBe(UploadStatus::Pending);
 });
 
+it('creates a new instance with updated status via withStatus', function () {
+    $metadata = new UploadMetadata(
+        uploadId: 'test-id',
+        fileName: 'file.pdf',
+        fileSize: 5242880,
+        mimeType: 'application/pdf',
+        chunkSize: 1048576,
+        totalChunks: 5,
+        disk: 'local',
+        context: 'documents',
+        metadata: ['key' => 'value'],
+        uploadedChunks: [0, 1, 2, 3, 4],
+    );
+
+    $completed = $metadata->withStatus(UploadStatus::Completed, 'uploads/file.pdf');
+
+    expect($completed->status)->toBe(UploadStatus::Completed);
+    expect($completed->finalPath)->toBe('uploads/file.pdf');
+    expect($completed->uploadId)->toBe('test-id');
+    expect($completed->fileName)->toBe('file.pdf');
+    expect($completed->context)->toBe('documents');
+    expect($completed->metadata)->toBe(['key' => 'value']);
+    expect($completed->uploadedChunks)->toBe([0, 1, 2, 3, 4]);
+
+    // Original unchanged
+    expect($metadata->status)->toBe(UploadStatus::Pending);
+    expect($metadata->finalPath)->toBeNull();
+});
+
 it('defaults to pending status when constructing from array', function () {
     $metadata = UploadMetadata::fromArray([
         'upload_id' => 'test',

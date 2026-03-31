@@ -31,6 +31,24 @@ class UploadMetadata
         return ChunkCalculator::progress(count($this->uploadedChunks), $this->totalChunks);
     }
 
+    public function withStatus(UploadStatus $status, ?string $finalPath = null): self
+    {
+        return new self(
+            uploadId: $this->uploadId,
+            fileName: $this->fileName,
+            fileSize: $this->fileSize,
+            mimeType: $this->mimeType,
+            chunkSize: $this->chunkSize,
+            totalChunks: $this->totalChunks,
+            disk: $this->disk,
+            context: $this->context,
+            metadata: $this->metadata,
+            uploadedChunks: $this->uploadedChunks,
+            status: $status,
+            finalPath: $finalPath ?? $this->finalPath,
+        );
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */

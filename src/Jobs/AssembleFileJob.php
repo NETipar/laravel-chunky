@@ -14,8 +14,6 @@ use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
-use NETipar\Chunky\Trackers\DatabaseTracker;
-
 class AssembleFileJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -32,9 +30,7 @@ class AssembleFileJob implements ShouldQueue
             return;
         }
 
-        if ($tracker instanceof DatabaseTracker) {
-            $tracker->updateStatus($this->uploadId, UploadStatus::Assembling);
-        }
+        $tracker->updateStatus($this->uploadId, UploadStatus::Assembling);
 
         $finalPath = $handler->assemble(
             $this->uploadId,
@@ -52,9 +48,7 @@ class AssembleFileJob implements ShouldQueue
 
         $handler->cleanup($this->uploadId);
 
-        if ($tracker instanceof DatabaseTracker) {
-            $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
-        }
+        $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
 
         $completedMetadata = new UploadMetadata(
             uploadId: $metadata->uploadId,

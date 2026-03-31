@@ -3,6 +3,7 @@
 namespace NETipar\Chunky\Contracts;
 
 use NETipar\Chunky\Data\UploadMetadata;
+use NETipar\Chunky\Enums\UploadStatus;
 
 interface UploadTracker
 {
@@ -20,4 +21,6 @@ interface UploadTracker
     public function getMetadata(string $uploadId): ?UploadMetadata;
 
     public function expire(string $uploadId): void;
+
+    public function updateStatus(string $uploadId, UploadStatus $status, ?string $finalPath = null): void;
 }

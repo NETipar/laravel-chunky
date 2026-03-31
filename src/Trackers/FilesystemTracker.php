@@ -71,8 +71,22 @@ class FilesystemTracker implements UploadTracker
 
     public function expire(string $uploadId): void
     {
+        $this->updateStatus($uploadId, UploadStatus::Expired);
+    }
+
+    public function updateStatus(string $uploadId, UploadStatus $status, ?string $finalPath = null): void
+    {
         $data = $this->readRawMetadata($uploadId);
-        $data['status'] = UploadStatus::Expired->value;
+        $data['status'] = $status->value;
+
+        if ($finalPath) {
+            $data['final_path'] = $finalPath;
+        }
+
+        if ($status === UploadStatus::Completed) {
+            $data['completed_at'] = now()->toIso8601String();
+        }
+
         $this->writeRawMetadata($uploadId, $data);
     }
 

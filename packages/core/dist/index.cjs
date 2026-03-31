@@ -76,6 +76,15 @@ var ChunkUploader = class {
     this.context = merged.context;
     this.chunkSizeOverride = merged.chunkSize;
     this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
+    this.validateEndpoints();
+  }
+  validateEndpoints() {
+    if (!this.endpoints.upload.includes("{uploadId}")) {
+      throw new Error('Upload endpoint must contain "{uploadId}" placeholder.');
+    }
+    if (!this.endpoints.status.includes("{uploadId}")) {
+      throw new Error('Status endpoint must contain "{uploadId}" placeholder.');
+    }
   }
   on(event, callback) {
     if (!this.listeners.has(event)) {

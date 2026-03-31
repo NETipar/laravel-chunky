@@ -24,6 +24,7 @@ export declare class ChunkUploader {
     private lastMetadata?;
     private listeners;
     constructor(options?: ChunkUploadOptions);
+    private validateEndpoints;
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe;
     private emit;
     private emitStateChange;

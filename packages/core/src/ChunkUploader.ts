@@ -70,6 +70,18 @@ export class ChunkUploader {
         this.context = merged.context;
         this.chunkSizeOverride = merged.chunkSize;
         this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
+
+        this.validateEndpoints();
+    }
+
+    private validateEndpoints(): void {
+        if (!this.endpoints.upload.includes('{uploadId}')) {
+            throw new Error('Upload endpoint must contain "{uploadId}" placeholder.');
+        }
+
+        if (!this.endpoints.status.includes('{uploadId}')) {
+            throw new Error('Status endpoint must contain "{uploadId}" placeholder.');
+        }
     }
 
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe {

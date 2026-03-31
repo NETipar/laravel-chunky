@@ -8,6 +8,7 @@ use NETipar\Chunky\Data\UploadMetadata;
 
 /**
  * @method static void register(string $contextClass)
+ * @method static void simple(string $name, string $directory, array $options = [])
  * @method static void context(string $name, ?\Closure $rules = null, ?\Closure $save = null)
  * @method static array getContextRules(string $name)
  * @method static \Closure|null getContextSaveCallback(string $name)

@@ -3,6 +3,7 @@
 namespace NETipar\Chunky;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
@@ -35,6 +36,43 @@ class ChunkyManager
             name: $instance->name(),
             rules: fn () => $instance->rules(),
             save: fn (UploadMetadata $metadata) => $instance->save($metadata),
+        );
+    }
+
+    /**
+     * Quick context registration: validates and moves the file to the given directory.
+     *
+     * @param  array{max_size?: int, mimes?: array<int, string>}  $options
+     */
+    public function simple(string $name, string $directory, array $options = []): void
+    {
+        $rules = null;
+
+        if (! empty($options['max_size']) || ! empty($options['mimes'])) {
+            $rules = function () use ($options) {
+                $r = [];
+
+                if (! empty($options['max_size'])) {
+                    $r['file_size'] = ["max:{$options['max_size']}"];
+                }
+
+                if (! empty($options['mimes'])) {
+                    $r['mime_type'] = ['in:'.implode(',', $options['mimes'])];
+                }
+
+                return $r;
+            };
+        }
+
+        $this->context(
+            name: $name,
+            rules: $rules,
+            save: function (UploadMetadata $metadata) use ($directory) {
+                $disk = Storage::disk($metadata->disk);
+                $destination = rtrim($directory, '/')."/{$metadata->fileName}";
+
+                $disk->move($metadata->finalPath, $destination);
+            },
         );
     }
 

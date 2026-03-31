@@ -312,6 +312,21 @@ By default, upload endpoints use only the `api` middleware. To protect them with
 
 This applies to all three endpoints (initiate, upload chunk, status). No custom request or controller override is needed.
 
+## Quick Context Setup
+
+For the most common case -- validate and move the file to a directory:
+
+```php
+use NETipar\Chunky\Facades\Chunky;
+
+Chunky::simple('documents', 'uploads/documents', [
+    'max_size' => 50 * 1024 * 1024, // 50MB
+    'mimes' => ['application/pdf', 'image/jpeg', 'image/png'],
+]);
+```
+
+This registers a context that validates the file and moves it from the temp directory to `uploads/documents/{fileName}` after assembly. No event listener needed.
+
 ## Context-based Validation & Save Callbacks
 
 Contexts define per-upload validation rules and save handlers. You can use class-based contexts (recommended) or inline closures.

@@ -89,6 +89,32 @@ it('registers a class-based context', function () {
     expect($manager->getContextSaveCallback('class_based'))->toBeInstanceOf(Closure::class);
 });
 
+it('registers a simple context with validation and save callback', function () {
+    $manager = app(ChunkyManager::class);
+
+    $manager->simple('photos', 'uploads/photos', [
+        'max_size' => 10485760,
+        'mimes' => ['image/jpeg', 'image/png'],
+    ]);
+
+    expect($manager->hasContext('photos'))->toBeTrue();
+    expect($manager->getContextRules('photos'))->toBe([
+        'file_size' => ['max:10485760'],
+        'mime_type' => ['in:image/jpeg,image/png'],
+    ]);
+    expect($manager->getContextSaveCallback('photos'))->toBeInstanceOf(Closure::class);
+});
+
+it('registers a simple context without options', function () {
+    $manager = app(ChunkyManager::class);
+
+    $manager->simple('misc', 'uploads/misc');
+
+    expect($manager->hasContext('misc'))->toBeTrue();
+    expect($manager->getContextRules('misc'))->toBe([]);
+    expect($manager->getContextSaveCallback('misc'))->toBeInstanceOf(Closure::class);
+});
+
 it('initiates an upload and dispatches event', function () {
     Event::fake([UploadInitiated::class]);
 

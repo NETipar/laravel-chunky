@@ -58,6 +58,7 @@ Livewire needs no npm package -- the component is included in the Composer packa
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
+Chunky::simple(...)        // Quick context: validate + move file to directory
 Chunky::register(...)      // Register a class-based context
 Chunky::context(...)       // Register inline context with rules/save closures
 Chunky::initiate(...)      // Programmatic upload start
@@ -67,6 +68,19 @@ Chunky::hasContext(...)    // Check if context exists
 ```
 
 ## Register upload contexts
+
+### Quick setup with `simple()`
+
+For the most common case -- validate and move the file to a directory:
+
+```php
+Chunky::simple('documents', 'uploads/documents', [
+    'max_size' => 50 * 1024 * 1024, // 50MB
+    'mimes' => ['application/pdf', 'image/jpeg', 'image/png'],
+]);
+```
+
+Moves the assembled file to `uploads/documents/{fileName}` automatically. No event listener needed.
 
 ### Class-based contexts (recommended)
 

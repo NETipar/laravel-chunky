@@ -6,6 +6,7 @@ export interface ChunkUploadOptions {
     headers?: Record<string, string>;
     withCredentials?: boolean;
     context?: string;
+    checksum?: boolean;
     endpoints?: {
         initiate?: string;
         upload?: string;

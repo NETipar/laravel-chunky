@@ -49,6 +49,7 @@ export class ChunkUploader {
     private readonly headers: Record<string, string>;
     private readonly withCredentials: boolean;
     private readonly context?: string;
+    private readonly checksumEnabled: boolean;
     private readonly chunkSizeOverride?: number;
     private readonly endpoints: typeof DEFAULT_ENDPOINTS;
 
@@ -69,6 +70,7 @@ export class ChunkUploader {
         this.headers = { ...defaults.headers, ...options.headers };
         this.withCredentials = merged.withCredentials ?? true;
         this.context = merged.context;
+        this.checksumEnabled = merged.checksum ?? true;
         this.chunkSizeOverride = merged.chunkSize;
         this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
 
@@ -191,7 +193,7 @@ export class ChunkUploader {
         total: number,
         retriesLeft: number,
     ): Promise<ChunkUploadResponse> {
-        const checksum = await computeChecksum(chunkBlob);
+        const checksum = this.checksumEnabled ? await computeChecksum(chunkBlob) : null;
 
         const formData = new FormData();
         formData.append('chunk', chunkBlob, `chunk_${chunkIndex}`);

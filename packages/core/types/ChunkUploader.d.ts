@@ -16,6 +16,7 @@ export declare class ChunkUploader {
     private readonly headers;
     private readonly withCredentials;
     private readonly context?;
+    private readonly checksumEnabled;
     private readonly chunkSizeOverride?;
     private readonly endpoints;
     private abortController;

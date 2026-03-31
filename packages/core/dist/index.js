@@ -57,6 +57,7 @@ var ChunkUploader = class {
     this.headers = { ...defaults.headers, ...options.headers };
     this.withCredentials = merged.withCredentials ?? true;
     this.context = merged.context;
+    this.checksumEnabled = merged.checksum ?? true;
     this.chunkSizeOverride = merged.chunkSize;
     this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
     this.validateEndpoints();
@@ -148,7 +149,7 @@ var ChunkUploader = class {
     });
   }
   async uploadSingleChunk(id, chunkIndex, chunkBlob, total, retriesLeft) {
-    const checksum = await computeChecksum(chunkBlob);
+    const checksum = this.checksumEnabled ? await computeChecksum(chunkBlob) : null;
     const formData = new FormData();
     formData.append("chunk", chunkBlob, `chunk_${chunkIndex}`);
     formData.append("chunk_index", String(chunkIndex));

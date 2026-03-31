@@ -90,3 +90,4 @@ function registerChunkUpload(Alpine) {
 
 // src/index.ts
 var import_chunky_core2 = require("@netipar/chunky-core");
+//# sourceMappingURL=index.cjs.map

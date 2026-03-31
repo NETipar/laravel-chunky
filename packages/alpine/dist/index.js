@@ -67,3 +67,4 @@ export {
   registerChunkUpload,
   setDefaults
 };
+//# sourceMappingURL=index.js.map

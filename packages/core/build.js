@@ -4,6 +4,7 @@ const shared = {
     entryPoints: ['src/index.ts'],
     bundle: true,
     platform: 'browser',
+    sourcemap: 'linked',
 };
 
 await build({

@@ -346,3 +346,4 @@ var ChunkUploader = class {
     this.listeners.clear();
   }
 };
+//# sourceMappingURL=index.cjs.map

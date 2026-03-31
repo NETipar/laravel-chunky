@@ -53,6 +53,14 @@ export function registerChunkUpload(Alpine: any): void {
                 this.currentFile = state.currentFile;
             });
 
+            this._uploader.on('progress', (event) => {
+                (this as any).$dispatch('chunky:progress', event);
+            });
+
+            this._uploader.on('chunkUploaded', (chunk) => {
+                (this as any).$dispatch('chunky:chunk-uploaded', chunk);
+            });
+
             this._uploader.on('complete', (result) => {
                 (this as any).$dispatch('chunky:complete', result);
             });

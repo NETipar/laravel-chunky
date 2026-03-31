@@ -25,6 +25,12 @@ function registerChunkUpload(Alpine) {
         this.totalChunks = state.totalChunks;
         this.currentFile = state.currentFile;
       });
+      this._uploader.on("progress", (event) => {
+        this.$dispatch("chunky:progress", event);
+      });
+      this._uploader.on("chunkUploaded", (chunk) => {
+        this.$dispatch("chunky:chunk-uploaded", chunk);
+      });
       this._uploader.on("complete", (result) => {
         this.$dispatch("chunky:complete", result);
       });

@@ -26,26 +26,8 @@ jobs:
       - name: Build packages
         run: pnpm -r run build
 
-      - name: Publish @netipar/chunky-core
-        working-directory: packages/core
-        run: pnpm publish --access public --no-git-checks
+      - name: Publish all packages
+        run: pnpm -r publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @netipar/chunky-vue3
-        working-directory: packages/vue3
-        run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @netipar/chunky-react
-        working-directory: packages/react
-        run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @netipar/chunky-alpine
-        working-directory: packages/alpine
-        run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false

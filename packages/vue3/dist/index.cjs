@@ -26,7 +26,8 @@ __export(src_exports, {
   useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload,
-  useUploadEcho: () => useUploadEcho
+  useUploadEcho: () => useUploadEcho,
+  useUserEcho: () => useUserEcho
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -133,6 +134,19 @@ function useBatchUpload(options = {}) {
 // src/useChunkyEcho.ts
 var import_vue3 = require("vue");
 var import_chunky_core3 = require("@netipar/chunky-core");
+function useUserEcho(echo, userId, callbacks, channelPrefix) {
+  let cleanup = null;
+  (0, import_vue3.watch)(userId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = (0, import_chunky_core3.listenForUser)(echo, id, callbacks, channelPrefix);
+    }
+  }, { immediate: true });
+  if ((0, import_vue3.getCurrentInstance)()) {
+    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  }
+}
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   let cleanup = null;
   (0, import_vue3.watch)(uploadId, (id) => {

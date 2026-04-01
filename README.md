@@ -676,6 +676,44 @@ const unsubscribe = listenForUploadComplete(echo, uploadId, (data) => {
 unsubscribe();
 ```
 
+### User Channel
+
+Instead of subscribing per-upload or per-batch, listen on the **user channel** to receive all upload events — even after page reload:
+
+```php
+// routes/channels.php
+Broadcast::channel('chunky.user.{userId}', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});
+```
+
+```vue
+<!-- Vue 3 -->
+<script setup>
+import { useUserEcho } from '@netipar/chunky-vue3';
+
+const echo = inject('echo');
+const userId = ref(auth.user.id);
+
+useUserEcho(echo, userId, {
+    onUploadComplete: (data) => console.log('File ready:', data.fileName),
+    onBatchComplete: (data) => console.log(`All ${data.totalFiles} files done`),
+    onBatchPartiallyCompleted: (data) => console.log(`${data.failedFiles} failed`),
+});
+</script>
+```
+
+```tsx
+// React
+import { useUserEcho } from '@netipar/chunky-react';
+
+useUserEcho(echo, auth.user.id, {
+    onUploadComplete: (data) => console.log('File ready:', data.fileName),
+});
+```
+
+The user channel requires authenticated routes (`auth:sanctum` middleware) and `user_id` is automatically captured from `auth()->id()` during upload initiation.
+
 ## Using the Facade
 
 ```php
@@ -736,6 +774,7 @@ Full `config/chunky.php`:
 | `broadcasting.enabled` | `false` | Enable WebSocket broadcasting |
 | `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
 | `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
+| `broadcasting.user_channel` | `true` | Broadcast on user channel too |
 
 ## Tracking Drivers
 

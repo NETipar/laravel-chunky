@@ -179,6 +179,7 @@ $metadata->status;         // UploadStatus enum
 $metadata->finalPath;      // ?string
 
 $metadata->batchId;        // ?string (UUID, null if not in batch)
+$metadata->userId;         // ?int (auto-captured from auth()->id())
 
 $metadata->progress();     // float (0-100)
 $metadata->toArray();      // array
@@ -218,6 +219,7 @@ $batch->completedFiles; // int
 $batch->failedFiles;    // int
 $batch->status;         // BatchStatus enum
 $batch->context;        // ?string
+$batch->userId;         // ?int (auto-captured from auth()->id())
 
 $batch->pendingFiles(); // int
 $batch->isFinished();   // bool (completedFiles + failedFiles >= totalFiles)
@@ -689,6 +691,7 @@ batch.destroy();
 |--------|------|-------------|
 | `id` | ULID | Primary key |
 | `batch_id` | string | Unique batch identifier (UUID) |
+| `user_id` | bigint | Authenticated user ID (nullable, indexed) |
 | `total_files` | int | Expected file count |
 | `completed_files` | int | Successfully assembled files |
 | `failed_files` | int | Failed assembly files |
@@ -782,6 +785,46 @@ const unsub2 = listenForBatchComplete(echo, batchId, {
 });
 ```
 
+### User channel
+
+Instead of per-upload/batch channels, listen on the user channel to receive ALL upload events — works even after page reload:
+
+```php
+// routes/channels.php
+Broadcast::channel('chunky.user.{userId}', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});
+```
+
+`user_id` is auto-captured from `auth()->id()` during initiation. Stored on both `chunked_uploads` and `chunky_batches` tables.
+
+Config: `broadcasting.user_channel` (default: `true`) — events broadcast on both the specific channel AND the user channel.
+
+```vue
+<!-- Vue 3 -->
+<script setup>
+import { useUserEcho } from '@netipar/chunky-vue3';
+
+useUserEcho(echo, userId, {
+    onUploadComplete: (data) => console.log('File ready:', data.fileName),
+    onBatchComplete: (data) => console.log('Batch done'),
+    onBatchPartiallyCompleted: (data) => console.log('Batch partial'),
+});
+</script>
+```
+
+```tsx
+// React
+import { useUserEcho } from '@netipar/chunky-react';
+useUserEcho(echo, userId, { onUploadComplete: (data) => { ... } });
+```
+
+```typescript
+// Core
+import { listenForUser } from '@netipar/chunky-core';
+const unsub = listenForUser(echo, userId, { onUploadComplete: (data) => { ... } });
+```
+
 ### Echo type interfaces
 
 ```typescript
@@ -852,6 +895,7 @@ Full `config/chunky.php`:
 | `broadcasting.enabled` | `false` | Enable WebSocket broadcasting |
 | `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
 | `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
+| `broadcasting.user_channel` | `true` | Broadcast on user channel too |
 
 ### Common configurations
 
@@ -885,6 +929,7 @@ return [
 | `id` | ULID | Primary key |
 | `upload_id` | string | Unique upload identifier (UUID) |
 | `batch_id` | string | Batch identifier (nullable, indexed) |
+| `user_id` | bigint | Authenticated user ID (nullable, indexed) |
 | `file_name` | string | Original file name |
 | `file_size` | bigint | Total file size in bytes |
 | `mime_type` | string | MIME type (nullable) |

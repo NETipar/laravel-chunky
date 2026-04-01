@@ -1,6 +1,6 @@
 export { ChunkUploader } from './ChunkUploader';
 export { BatchUploader } from './BatchUploader';
-export { listenForUploadComplete, listenForBatchComplete } from './echo';
+export { listenForUser, listenForUploadComplete, listenForBatchComplete } from './echo';
 export { setDefaults, getDefaults, createDefaults } from './config';
 export type { DefaultsScope } from './config';
 export type {

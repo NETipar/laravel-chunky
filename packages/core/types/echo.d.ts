@@ -24,6 +24,11 @@ export interface BatchPartiallyCompletedData {
     failedFiles: number;
     totalFiles: number;
 }
+export declare function listenForUser(echo: EchoInstance, userId: string | number, callbacks: {
+    onUploadComplete?: (data: UploadCompletedData) => void;
+    onBatchComplete?: (data: BatchCompletedData) => void;
+    onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+}, channelPrefix?: string): () => void;
 export declare function listenForUploadComplete(echo: EchoInstance, uploadId: string, callback: (data: UploadCompletedData) => void, channelPrefix?: string): () => void;
 export declare function listenForBatchComplete(echo: EchoInstance, batchId: string, callbacks: {
     onComplete?: (data: BatchCompletedData) => void;

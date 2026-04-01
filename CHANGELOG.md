@@ -2,6 +2,27 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.8.0 - 2026-04-01
+
+### Added — Backend
+- `user_id` nullable indexed column on `chunked_uploads` and `chunky_batches` tables
+- `ChunkyManager` auto-captures `auth()->id()` on upload and batch initiation
+- `UploadMetadata` and `BatchMetadata` DTOs now include `?int $userId` property
+- User-scoped broadcast channel: `{prefix}.user.{userId}` — all upload/batch events for the authenticated user on a single channel (no need to know uploadId/batchId)
+- `broadcasting.user_channel` config option (default: `true`) to enable user channel broadcasting
+
+### Added — Frontend
+- `listenForUser()` core helper — subscribe to all chunky events for a user on one channel
+- `useUserEcho()` Vue 3 composable with reactive userId watch and auto-cleanup
+- `useUserEcho()` React hook with useEffect cleanup
+
+### Changed
+- `BatchCompleted` and `BatchPartiallyCompleted` events now carry `?int $userId`
+- `DatabaseTracker` persists `user_id` from `UploadMetadata`
+
+### npm packages
+- All packages bumped to v0.8.0 (core, vue3, react, alpine synchronized)
+
 ## v0.7.0 - 2026-04-01
 
 ### Added — Broadcasting

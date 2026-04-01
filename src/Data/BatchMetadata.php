@@ -13,6 +13,7 @@ class BatchMetadata
         public readonly int $failedFiles,
         public readonly BatchStatus $status,
         public readonly ?string $context = null,
+        public readonly ?int $userId = null,
     ) {}
 
     public function pendingFiles(): int
@@ -65,6 +66,7 @@ class BatchMetadata
                 ? $data['status']
                 : BatchStatus::tryFrom($data['status'] ?? 'pending') ?? BatchStatus::Pending,
             context: $data['context'] ?? null,
+            userId: isset($data['user_id']) ? (int) $data['user_id'] : null,
         );
     }
 }

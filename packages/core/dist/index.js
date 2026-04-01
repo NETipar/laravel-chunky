@@ -632,6 +632,23 @@ var BatchUploader = class {
 };
 
 // src/echo.ts
+function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.user.${userId}`);
+  if (callbacks.onUploadComplete) {
+    channel.listen(".UploadCompleted", callbacks.onUploadComplete);
+  }
+  if (callbacks.onBatchComplete) {
+    channel.listen(".BatchCompleted", callbacks.onBatchComplete);
+  }
+  if (callbacks.onBatchPartiallyCompleted) {
+    channel.listen(".BatchPartiallyCompleted", callbacks.onBatchPartiallyCompleted);
+  }
+  return () => {
+    channel.stopListening(".UploadCompleted");
+    channel.stopListening(".BatchCompleted");
+    channel.stopListening(".BatchPartiallyCompleted");
+  };
+}
 function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chunky") {
   const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
   channel.listen(".UploadCompleted", callback);
@@ -659,6 +676,7 @@ export {
   getDefaults,
   listenForBatchComplete,
   listenForUploadComplete,
+  listenForUser,
   setDefaults
 };
 //# sourceMappingURL=index.js.map

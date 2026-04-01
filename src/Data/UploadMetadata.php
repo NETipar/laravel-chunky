@@ -25,6 +25,7 @@ class UploadMetadata
         public readonly UploadStatus $status = UploadStatus::Pending,
         public readonly ?string $finalPath = null,
         public readonly ?string $batchId = null,
+        public readonly ?int $userId = null,
     ) {}
 
     public function progress(): float
@@ -48,6 +49,7 @@ class UploadMetadata
             status: $status,
             finalPath: $finalPath ?? $this->finalPath,
             batchId: $this->batchId,
+            userId: $this->userId,
         );
     }
 
@@ -72,6 +74,7 @@ class UploadMetadata
                 : UploadStatus::tryFrom($data['status'] ?? 'pending') ?? UploadStatus::Pending,
             finalPath: $data['final_path'] ?? null,
             batchId: $data['batch_id'] ?? null,
+            userId: isset($data['user_id']) ? (int) $data['user_id'] : null,
         );
     }
 
@@ -94,6 +97,7 @@ class UploadMetadata
             'status' => $this->status->value,
             'final_path' => $this->finalPath,
             'batch_id' => $this->batchId,
+            'user_id' => $this->userId,
         ];
     }
 }

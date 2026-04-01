@@ -26,7 +26,8 @@ __export(src_exports, {
   useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload,
-  useUploadEcho: () => useUploadEcho
+  useUploadEcho: () => useUploadEcho,
+  useUserEcho: () => useUserEcho
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -196,6 +197,14 @@ function useBatchUpload(options = {}) {
 // src/useChunkyEcho.ts
 var import_react3 = require("react");
 var import_chunky_core3 = require("@netipar/chunky-core");
+function useUserEcho(echo, userId, callbacks, channelPrefix) {
+  (0, import_react3.useEffect)(() => {
+    if (!userId) {
+      return;
+    }
+    return (0, import_chunky_core3.listenForUser)(echo, userId, callbacks, channelPrefix);
+  }, [userId]);
+}
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   (0, import_react3.useEffect)(() => {
     if (!uploadId) {

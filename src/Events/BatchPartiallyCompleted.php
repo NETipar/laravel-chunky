@@ -16,6 +16,7 @@ class BatchPartiallyCompleted implements ShouldBroadcast
         public readonly int $completedFiles,
         public readonly int $failedFiles,
         public readonly int $totalFiles,
+        public readonly ?int $userId = null,
     ) {}
 
     /**
@@ -25,7 +26,13 @@ class BatchPartiallyCompleted implements ShouldBroadcast
     {
         $prefix = config('chunky.broadcasting.channel_prefix', 'chunky');
 
-        return [new PrivateChannel("{$prefix}.batches.{$this->batchId}")];
+        $channels = [new PrivateChannel("{$prefix}.batches.{$this->batchId}")];
+
+        if (config('chunky.broadcasting.user_channel') && $this->userId) {
+            $channels[] = new PrivateChannel("{$prefix}.user.{$this->userId}");
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

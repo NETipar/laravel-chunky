@@ -16,6 +16,7 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('upload_id')->unique()->index();
             $table->string('batch_id')->nullable()->index();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->string('file_name');
             $table->unsignedBigInteger('file_size');
             $table->string('mime_type')->nullable();

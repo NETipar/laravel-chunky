@@ -15,6 +15,7 @@ return new class extends Migration
         Schema::create('chunky_batches', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->string('batch_id')->unique()->index();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->unsignedInteger('total_files');
             $table->unsignedInteger('completed_files')->default(0);
             $table->unsignedInteger('failed_files')->default(0);

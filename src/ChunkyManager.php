@@ -145,6 +145,7 @@ class ChunkyManager
             disk: config('chunky.disk'),
             context: $context,
             metadata: $metadata,
+            userId: $this->resolveUserId(),
         );
 
         $this->tracker->initiate($uploadId, $uploadMetadata);
@@ -190,10 +191,12 @@ class ChunkyManager
     public function initiateBatch(int $totalFiles, ?string $context = null, array $metadata = []): BatchMetadata
     {
         $batchId = (string) Str::uuid();
+        $userId = $this->resolveUserId();
 
         if (config('chunky.tracker') === 'database') {
             ChunkyBatch::create([
                 'batch_id' => $batchId,
+                'user_id' => $userId,
                 'total_files' => $totalFiles,
                 'context' => $context,
                 'metadata' => $metadata ?: null,
@@ -203,6 +206,7 @@ class ChunkyManager
         } else {
             $this->writeBatchJson($batchId, [
                 'batch_id' => $batchId,
+                'user_id' => $userId,
                 'total_files' => $totalFiles,
                 'completed_files' => 0,
                 'failed_files' => 0,
@@ -223,6 +227,7 @@ class ChunkyManager
             failedFiles: 0,
             status: BatchStatus::Pending,
             context: $context,
+            userId: $userId,
         );
     }
 
@@ -254,6 +259,7 @@ class ChunkyManager
             context: $context,
             metadata: $metadata,
             batchId: $batchId,
+            userId: $this->resolveUserId(),
         );
 
         $this->tracker->initiate($uploadId, $uploadMetadata);
@@ -297,6 +303,7 @@ class ChunkyManager
                 failedFiles: $batch->failed_files,
                 status: $batch->status,
                 context: $batch->context,
+                userId: $batch->user_id,
             );
         }
 
@@ -366,9 +373,11 @@ class ChunkyManager
             $data['completed_at'] = now()->toIso8601String();
             $this->writeBatchJson($batchId, $data);
 
+            $userId = isset($data['user_id']) ? (int) $data['user_id'] : null;
+
             match ($status) {
-                BatchStatus::Completed => BatchCompleted::dispatch($batchId, $total),
-                BatchStatus::PartiallyCompleted => BatchPartiallyCompleted::dispatch($batchId, $completed, $failed, $total),
+                BatchStatus::Completed => BatchCompleted::dispatch($batchId, $total, $userId),
+                BatchStatus::PartiallyCompleted => BatchPartiallyCompleted::dispatch($batchId, $completed, $failed, $total, $userId),
                 default => null,
             };
 
@@ -376,6 +385,17 @@ class ChunkyManager
         }
 
         $this->writeBatchJson($batchId, $data);
+    }
+
+    private function resolveUserId(): ?int
+    {
+        if (! function_exists('auth')) {
+            return null;
+        }
+
+        $id = auth()->id();
+
+        return $id !== null ? (int) $id : null;
     }
 
     private function validateBatchExists(string $batchId): void

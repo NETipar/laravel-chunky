@@ -53,5 +53,6 @@ return [
         'enabled' => env('CHUNKY_BROADCASTING', false),
         'channel_prefix' => 'chunky',
         'queue' => null,
+        'user_channel' => true,
     ],
 ];

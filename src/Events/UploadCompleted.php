@@ -36,8 +36,13 @@ class UploadCompleted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $prefix = config('chunky.broadcasting.channel_prefix', 'chunky');
+        $channels = [new PrivateChannel("{$prefix}.uploads.{$this->uploadId}")];
 
-        return [new PrivateChannel("{$prefix}.uploads.{$this->uploadId}")];
+        if (config('chunky.broadcasting.user_channel') && $this->upload->userId) {
+            $channels[] = new PrivateChannel("{$prefix}.user.{$this->upload->userId}");
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

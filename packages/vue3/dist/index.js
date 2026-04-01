@@ -100,7 +100,20 @@ function useBatchUpload(options = {}) {
 
 // src/useChunkyEcho.ts
 import { watch, onBeforeUnmount as onBeforeUnmount3, getCurrentInstance as getCurrentInstance3 } from "vue";
-import { listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+import { listenForUser, listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+function useUserEcho(echo, userId, callbacks, channelPrefix) {
+  let cleanup = null;
+  watch(userId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = listenForUser(echo, id, callbacks, channelPrefix);
+    }
+  }, { immediate: true });
+  if (getCurrentInstance3()) {
+    onBeforeUnmount3(() => cleanup?.());
+  }
+}
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   let cleanup = null;
   watch(uploadId, (id) => {
@@ -137,6 +150,7 @@ export {
   useBatchEcho,
   useBatchUpload,
   useChunkUpload,
-  useUploadEcho
+  useUploadEcho,
+  useUserEcho
 };
 //# sourceMappingURL=index.js.map

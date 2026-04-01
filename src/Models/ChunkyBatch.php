@@ -79,9 +79,9 @@ class ChunkyBatch extends Model
         $this->update(['status' => $status, 'completed_at' => now()]);
 
         match ($status) {
-            BatchStatus::Completed => BatchCompleted::dispatch($this->batch_id, $this->total_files),
+            BatchStatus::Completed => BatchCompleted::dispatch($this->batch_id, $this->total_files, $this->user_id),
             BatchStatus::PartiallyCompleted => BatchPartiallyCompleted::dispatch(
-                $this->batch_id, $this->completed_files, $this->failed_files, $this->total_files
+                $this->batch_id, $this->completed_files, $this->failed_files, $this->total_files, $this->user_id
             ),
             default => null,
         };

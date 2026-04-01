@@ -163,7 +163,15 @@ function useBatchUpload(options = {}) {
 
 // src/useChunkyEcho.ts
 import { useEffect as useEffect3 } from "react";
-import { listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+import { listenForUser, listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+function useUserEcho(echo, userId, callbacks, channelPrefix) {
+  useEffect3(() => {
+    if (!userId) {
+      return;
+    }
+    return listenForUser(echo, userId, callbacks, channelPrefix);
+  }, [userId]);
+}
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   useEffect3(() => {
     if (!uploadId) {
@@ -190,6 +198,7 @@ export {
   useBatchEcho,
   useBatchUpload,
   useChunkUpload,
-  useUploadEcho
+  useUploadEcho,
+  useUserEcho
 };
 //# sourceMappingURL=index.js.map

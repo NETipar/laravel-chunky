@@ -1,11 +1,37 @@
 import { watch, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue';
-import { listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
+import { listenForUser, listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
 import type {
     EchoInstance,
     UploadCompletedData,
     BatchCompletedData,
     BatchPartiallyCompletedData,
 } from '@netipar/chunky-core';
+
+export function useUserEcho(
+    echo: EchoInstance,
+    userId: Ref<string | number | null>,
+    callbacks: {
+        onUploadComplete?: (data: UploadCompletedData) => void;
+        onBatchComplete?: (data: BatchCompletedData) => void;
+        onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+    },
+    channelPrefix?: string,
+): void {
+    let cleanup: (() => void) | null = null;
+
+    watch(userId, (id) => {
+        cleanup?.();
+        cleanup = null;
+
+        if (id) {
+            cleanup = listenForUser(echo, id, callbacks, channelPrefix);
+        }
+    }, { immediate: true });
+
+    if (getCurrentInstance()) {
+        onBeforeUnmount(() => cleanup?.());
+    }
+}
 
 export function useUploadEcho(
     echo: EchoInstance,

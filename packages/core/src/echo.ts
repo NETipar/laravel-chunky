@@ -29,6 +29,37 @@ export interface BatchPartiallyCompletedData {
     totalFiles: number;
 }
 
+export function listenForUser(
+    echo: EchoInstance,
+    userId: string | number,
+    callbacks: {
+        onUploadComplete?: (data: UploadCompletedData) => void;
+        onBatchComplete?: (data: BatchCompletedData) => void;
+        onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+    },
+    channelPrefix = 'chunky',
+): () => void {
+    const channel = echo.private(`${channelPrefix}.user.${userId}`);
+
+    if (callbacks.onUploadComplete) {
+        channel.listen('.UploadCompleted', callbacks.onUploadComplete);
+    }
+
+    if (callbacks.onBatchComplete) {
+        channel.listen('.BatchCompleted', callbacks.onBatchComplete);
+    }
+
+    if (callbacks.onBatchPartiallyCompleted) {
+        channel.listen('.BatchPartiallyCompleted', callbacks.onBatchPartiallyCompleted);
+    }
+
+    return () => {
+        channel.stopListening('.UploadCompleted');
+        channel.stopListening('.BatchCompleted');
+        channel.stopListening('.BatchPartiallyCompleted');
+    };
+}
+
 export function listenForUploadComplete(
     echo: EchoInstance,
     uploadId: string,

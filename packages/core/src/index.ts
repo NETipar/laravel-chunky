@@ -1,4 +1,5 @@
 export { ChunkUploader } from './ChunkUploader';
+export { BatchUploader } from './BatchUploader';
 export { setDefaults, getDefaults, createDefaults } from './config';
 export type { DefaultsScope } from './config';
 export type {
@@ -13,4 +14,10 @@ export type {
     ChunkUploadResponse,
     StatusResponse,
     Unsubscribe,
+    BatchUploadOptions,
+    BatchInitiateResponse,
+    BatchProgressEvent,
+    BatchResult,
+    BatchUploaderState,
+    BatchUploaderEventMap,
 } from './types';

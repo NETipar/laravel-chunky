@@ -19,6 +19,6 @@ class InitiateUploadController extends Controller
             context: $request->validated('context'),
         );
 
-        return response()->json($result, 201);
+        return response()->json($result->toArray(), 201);
     }
 }

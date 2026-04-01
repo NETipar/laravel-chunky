@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Event;
+use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Events\UploadInitiated;
 
 it('initiates an upload via the API', function () {
@@ -79,7 +80,7 @@ it('accepts metadata', function () {
 it('accepts context parameter', function () {
     Event::fake([UploadInitiated::class]);
 
-    $manager = app(\NETipar\Chunky\ChunkyManager::class);
+    $manager = app(ChunkyManager::class);
     $manager->context('profile_avatar');
 
     $response = $this->postJson('/api/chunky/upload', [
@@ -104,7 +105,7 @@ it('rejects unregistered context', function () {
 });
 
 it('merges context validation rules', function () {
-    $manager = app(\NETipar\Chunky\ChunkyManager::class);
+    $manager = app(ChunkyManager::class);
     $manager->context('strict', rules: fn () => [
         'file_size' => ['max:1000'],
     ]);

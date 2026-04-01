@@ -141,13 +141,16 @@ const uploader = new ChunkUploader({ context: 'docs' }, scope);
 
 ### API Endpoints
 
-The package registers three routes (configurable prefix/middleware):
+The package registers six routes (configurable prefix/middleware):
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | `POST` | `/api/chunky/upload` | Initiate upload |
 | `POST` | `/api/chunky/upload/{uploadId}/chunks` | Upload a chunk |
 | `GET` | `/api/chunky/upload/{uploadId}` | Get upload status |
+| `POST` | `/api/chunky/batch` | Initiate batch |
+| `POST` | `/api/chunky/batch/{batchId}/upload` | Add file to batch |
+| `GET` | `/api/chunky/batch/{batchId}` | Get batch status |
 
 ### Vue 3
 
@@ -309,6 +312,111 @@ uploader.retry();
 // Cleanup when done
 uploader.destroy();
 ```
+
+## Batch Upload (Multiple Files)
+
+Upload multiple files as a batch and get a single event when all files are done.
+
+### Vue 3
+
+```vue
+<script setup lang="ts">
+import { useBatchUpload } from '@netipar/chunky-vue3';
+
+const {
+    progress, isUploading, isComplete, completedFiles, totalFiles,
+    failedFiles, currentFileName, error,
+    upload, cancel, pause, resume,
+    onFileComplete, onComplete, onFileError,
+} = useBatchUpload({ maxConcurrentFiles: 2, context: 'documents' });
+
+function onFilesChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files?.length) {
+        upload(Array.from(input.files));
+    }
+}
+</script>
+
+<template>
+    <input type="file" multiple @change="onFilesChange" :disabled="isUploading" />
+    <div v-if="isUploading">
+        <progress :value="progress" max="100" />
+        <span>{{ completedFiles }}/{{ totalFiles }} files</span>
+        <span v-if="currentFileName">Uploading: {{ currentFileName }}</span>
+    </div>
+    <p v-if="isComplete">All files uploaded!</p>
+</template>
+```
+
+### React
+
+```tsx
+import { useBatchUpload } from '@netipar/chunky-react';
+
+function MultiFileUpload() {
+    const {
+        progress, isUploading, isComplete, completedFiles, totalFiles,
+        upload, cancel,
+    } = useBatchUpload({ maxConcurrentFiles: 2 });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (files?.length) upload(Array.from(files));
+    };
+
+    return (
+        <div>
+            <input type="file" multiple onChange={handleChange} disabled={isUploading} />
+            {isUploading && <progress value={progress} max={100} />}
+            {isUploading && <span>{completedFiles}/{totalFiles} files</span>}
+            {isComplete && <p>All files uploaded!</p>}
+        </div>
+    );
+}
+```
+
+### Alpine.js
+
+```html
+<div x-data="batchUpload({ maxConcurrentFiles: 2 })">
+    <input type="file" multiple x-on:change="handleFileInput($event)" :disabled="isUploading" />
+
+    <template x-if="isUploading">
+        <div>
+            <progress :value="progress" max="100"></progress>
+            <span x-text="completedFiles + '/' + totalFiles + ' files'"></span>
+        </div>
+    </template>
+</div>
+```
+
+### Core (Framework-agnostic)
+
+```typescript
+import { BatchUploader } from '@netipar/chunky-core';
+
+const batch = new BatchUploader({ maxConcurrentFiles: 2, context: 'documents' });
+
+batch.on('fileComplete', (result) => console.log('File done:', result.fileName));
+batch.on('complete', (result) => console.log(`Batch done: ${result.completedFiles}/${result.totalFiles}`));
+
+await batch.upload(files);
+batch.destroy();
+```
+
+### How Batch Works
+
+1. Frontend calls `POST /api/chunky/batch` with `total_files` count
+2. Backend creates a batch record and returns `batch_id`
+3. For each file, frontend calls `POST /api/chunky/batch/{batchId}/upload` to initiate
+4. Chunks are uploaded normally via `POST /api/chunky/upload/{uploadId}/chunks`
+5. When each file's assembly completes, the batch counter increments atomically
+6. When all files are done, `BatchCompleted` (or `BatchPartiallyCompleted`) event fires
+
+Single file passed to `BatchUploader` skips batch creation and uses regular `ChunkUploader` directly.
+
+**Failure policy**: Lenient -- if a file fails, other files continue. The batch ends with `PartiallyCompleted` status.
 
 ## Authentication
 
@@ -483,25 +591,38 @@ class ProcessUploadedFile
 | `ChunkUploadFailed` | uploadId, chunkIndex, exception | On chunk error |
 | `FileAssembled` | uploadId, finalPath, disk, fileName, fileSize | After file assembly |
 | `UploadCompleted` | upload (UploadMetadata), uploadId, finalPath, disk, metadata | Full upload complete |
+| `BatchInitiated` | batchId, totalFiles | Batch created |
+| `BatchCompleted` | batchId, totalFiles | All batch files completed |
+| `BatchPartiallyCompleted` | batchId, completedFiles, failedFiles, totalFiles | Batch done with failures |
 
 ## Using the Facade
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
-// Register a class-based context
+// Register contexts
 Chunky::register(ProfileAvatarContext::class);
-
-// Or register an inline context
 Chunky::context('documents', rules: fn () => [...], save: fn ($metadata) => ...);
 
-// Programmatic initiation
+// Programmatic initiation (returns InitiateResult DTO)
 $result = Chunky::initiate('large-file.zip', 524288000, 'application/zip');
-// Returns: ['upload_id' => '...', 'chunk_size' => 1048576, 'total_chunks' => 500]
+// $result->uploadId, $result->chunkSize, $result->totalChunks
 
 // Query upload status (returns UploadMetadata DTO)
 $status = Chunky::status($uploadId);
 // $status->progress(), $status->fileName, $status->status, etc.
+
+// Batch upload (returns BatchMetadata DTO)
+$batch = Chunky::initiateBatch(totalFiles: 5, context: 'documents');
+// $batch->batchId, $batch->totalFiles, $batch->status
+
+// Add file to batch (returns InitiateResult DTO with batchId)
+$file = Chunky::initiateInBatch($batch->batchId, 'photo.jpg', 5242880);
+// $file->uploadId, $file->batchId
+
+// Query batch status (returns BatchMetadata DTO)
+$batch = Chunky::getBatchStatus($batchId);
+// $batch->completedFiles, $batch->failedFiles, $batch->isFinished()
 ```
 
 ## Configuration

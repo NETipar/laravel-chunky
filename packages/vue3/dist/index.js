@@ -48,12 +48,63 @@ function useChunkUpload(options = {}) {
   };
 }
 
+// src/useBatchUpload.ts
+import { ref as ref2, onBeforeUnmount as onBeforeUnmount2, getCurrentInstance as getCurrentInstance2 } from "vue";
+import { BatchUploader } from "@netipar/chunky-core";
+function useBatchUpload(options = {}) {
+  const uploader = new BatchUploader(options);
+  const batchId = ref2(null);
+  const totalFiles = ref2(0);
+  const completedFiles = ref2(0);
+  const failedFiles = ref2(0);
+  const progress = ref2(0);
+  const isUploading = ref2(false);
+  const isComplete = ref2(false);
+  const error = ref2(null);
+  const currentFileName = ref2(null);
+  uploader.on("stateChange", (state) => {
+    batchId.value = state.batchId;
+    totalFiles.value = state.totalFiles;
+    completedFiles.value = state.completedFiles;
+    failedFiles.value = state.failedFiles;
+    progress.value = state.progress;
+    isUploading.value = state.isUploading;
+    isComplete.value = state.isComplete;
+    error.value = state.error;
+    currentFileName.value = state.currentFileName;
+  });
+  if (getCurrentInstance2()) {
+    onBeforeUnmount2(() => uploader.destroy());
+  }
+  return {
+    batchId,
+    totalFiles,
+    completedFiles,
+    failedFiles,
+    progress,
+    isUploading,
+    isComplete,
+    error,
+    currentFileName,
+    upload: (files, metadata) => uploader.upload(files, metadata),
+    cancel: () => uploader.cancel(),
+    pause: () => uploader.pause(),
+    resume: () => uploader.resume(),
+    onProgress: (cb) => uploader.on("progress", cb),
+    onFileComplete: (cb) => uploader.on("fileComplete", cb),
+    onFileError: (cb) => uploader.on("fileError", cb),
+    onComplete: (cb) => uploader.on("complete", cb),
+    onError: (cb) => uploader.on("error", cb)
+  };
+}
+
 // src/index.ts
 import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
   setDefaults,
+  useBatchUpload,
   useChunkUpload
 };
 //# sourceMappingURL=index.js.map

@@ -13,6 +13,7 @@ use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
+
 class AssembleFileJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -57,5 +58,22 @@ class AssembleFileJob implements ShouldQueue
         }
 
         UploadCompleted::dispatch($completedMetadata);
+
+        if ($completedMetadata->batchId) {
+            $manager->markBatchUploadCompleted($completedMetadata->batchId);
+        }
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $tracker = app(UploadTracker::class);
+        $metadata = $tracker->getMetadata($this->uploadId);
+
+        $tracker->updateStatus($this->uploadId, UploadStatus::Failed);
+
+        if ($metadata?->batchId) {
+            $manager = app(ChunkyManager::class);
+            $manager->markBatchUploadFailed($metadata->batchId);
+        }
     }
 }

@@ -3,6 +3,7 @@
 namespace NETipar\Chunky;
 
 use Illuminate\Support\ServiceProvider;
+use Livewire\Component;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Handlers\DefaultChunkHandler;
@@ -38,11 +39,11 @@ class ChunkyServiceProvider extends ServiceProvider
             __DIR__.'/../config/chunky.php' => config_path('chunky.php'),
         ], 'chunky-config');
 
-        if (config('chunky.tracker') === 'database') {
-            $this->publishesMigrations([
-                __DIR__.'/../database/migrations' => database_path('migrations'),
-            ], 'chunky-migrations');
+        $this->publishesMigrations([
+            __DIR__.'/../database/migrations' => database_path('migrations'),
+        ], 'chunky-migrations');
 
+        if (config('chunky.tracker') === 'database') {
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
@@ -84,7 +85,7 @@ class ChunkyServiceProvider extends ServiceProvider
 
     private function registerLivewireComponents(): void
     {
-        if (! class_exists(\Livewire\Component::class)) {
+        if (! class_exists(Component::class)) {
             return;
         }
 

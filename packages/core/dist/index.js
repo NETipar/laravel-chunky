@@ -330,7 +330,308 @@ var ChunkUploader = class {
     this.listeners.clear();
   }
 };
+
+// src/BatchUploader.ts
+var DEFAULT_BATCH_ENDPOINTS = {
+  batchInitiate: "/api/chunky/batch",
+  batchUpload: "/api/chunky/batch/{batchId}/upload",
+  batchStatus: "/api/chunky/batch/{batchId}"
+};
+var BatchUploader = class {
+  constructor(options = {}, scope) {
+    this.batchId = null;
+    this.totalFiles = 0;
+    this.completedFiles = 0;
+    this.failedFiles = 0;
+    this.progress = 0;
+    this.isUploading = false;
+    this.isComplete = false;
+    this.error = null;
+    this.currentFileName = null;
+    this.uploaders = [];
+    this.results = [];
+    this.abortController = null;
+    this.listeners = /* @__PURE__ */ new Map();
+    this.options = options;
+    this.scope = scope;
+    this.maxConcurrentFiles = options.maxConcurrentFiles ?? 2;
+    this.batchEndpoints = {
+      ...DEFAULT_BATCH_ENDPOINTS,
+      ...options.endpoints
+    };
+  }
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, /* @__PURE__ */ new Set());
+    }
+    this.listeners.get(event).add(callback);
+    return () => {
+      this.listeners.get(event)?.delete(callback);
+    };
+  }
+  emit(event, data) {
+    this.listeners.get(event)?.forEach((cb) => cb(data));
+  }
+  emitStateChange() {
+    this.emit("stateChange", this.getState());
+  }
+  getState() {
+    return {
+      batchId: this.batchId,
+      totalFiles: this.totalFiles,
+      completedFiles: this.completedFiles,
+      failedFiles: this.failedFiles,
+      progress: this.progress,
+      isUploading: this.isUploading,
+      isComplete: this.isComplete,
+      error: this.error,
+      currentFileName: this.currentFileName
+    };
+  }
+  getCsrfFromCookie() {
+    if (typeof document === "undefined") {
+      return null;
+    }
+    const match = document.cookie.split("; ").find((row) => row.startsWith("XSRF-TOKEN="));
+    if (!match) {
+      return null;
+    }
+    return decodeURIComponent(match.split("=")[1]);
+  }
+  getHeaders() {
+    const headers = {
+      Accept: "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      ...this.options.headers ?? {}
+    };
+    if (!headers["X-XSRF-TOKEN"]) {
+      const token = this.getCsrfFromCookie();
+      if (token) {
+        headers["X-XSRF-TOKEN"] = token;
+      }
+    }
+    return headers;
+  }
+  async fetchJson(url, init) {
+    const response = await fetch(url, {
+      ...init,
+      credentials: this.options.withCredentials !== false ? "include" : "same-origin",
+      signal: this.abortController?.signal
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`HTTP ${response.status}: ${body}`);
+    }
+    return response.json();
+  }
+  async upload(files, metadata) {
+    if (this.isUploading) {
+      throw new Error("Batch upload already in progress.");
+    }
+    if (files.length === 1) {
+      return this.uploadSingle(files[0], metadata);
+    }
+    this.abortController = new AbortController();
+    this.totalFiles = files.length;
+    this.completedFiles = 0;
+    this.failedFiles = 0;
+    this.progress = 0;
+    this.isUploading = true;
+    this.isComplete = false;
+    this.error = null;
+    this.results = [];
+    this.uploaders = [];
+    this.emitStateChange();
+    try {
+      const batchResponse = await this.fetchJson(
+        this.batchEndpoints.batchInitiate,
+        {
+          method: "POST",
+          headers: { ...this.getHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            total_files: files.length,
+            context: this.options.context ?? null,
+            metadata: metadata ?? null
+          })
+        }
+      );
+      this.batchId = batchResponse.batch_id;
+      this.emitStateChange();
+      const fileQueue = [...files];
+      let fileIndex = 0;
+      const next = async () => {
+        while (fileIndex < fileQueue.length) {
+          if (this.abortController?.signal.aborted) {
+            return;
+          }
+          const currentIndex = fileIndex++;
+          const file = fileQueue[currentIndex];
+          this.currentFileName = file.name;
+          this.emitStateChange();
+          try {
+            const result2 = await this.uploadFileInBatch(file, metadata);
+            this.results.push(result2);
+            this.completedFiles++;
+            this.emit("fileComplete", result2);
+          } catch (err) {
+            this.failedFiles++;
+            const uploadError = {
+              uploadId: null,
+              message: err instanceof Error ? err.message : "File upload failed",
+              cause: err
+            };
+            this.emit("fileError", uploadError);
+          }
+          this.progress = (this.completedFiles + this.failedFiles) / this.totalFiles * 100;
+          this.emitStateChange();
+          this.emitProgress();
+        }
+      };
+      const workers = Array.from(
+        { length: Math.min(this.maxConcurrentFiles, files.length) },
+        () => next()
+      );
+      await Promise.all(workers);
+      this.isComplete = true;
+      this.currentFileName = null;
+      this.progress = 100;
+      this.emitStateChange();
+      const result = {
+        batchId: this.batchId,
+        totalFiles: this.totalFiles,
+        completedFiles: this.completedFiles,
+        failedFiles: this.failedFiles,
+        files: this.results
+      };
+      this.emit("complete", result);
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Batch upload failed";
+      this.error = message;
+      this.emitStateChange();
+      const uploadError = {
+        uploadId: null,
+        message,
+        cause: err
+      };
+      this.emit("error", uploadError);
+      throw err;
+    } finally {
+      this.isUploading = false;
+      this.emitStateChange();
+    }
+  }
+  async uploadSingle(file, metadata) {
+    this.totalFiles = 1;
+    this.completedFiles = 0;
+    this.failedFiles = 0;
+    this.progress = 0;
+    this.isUploading = true;
+    this.isComplete = false;
+    this.error = null;
+    this.currentFileName = file.name;
+    this.results = [];
+    this.emitStateChange();
+    const uploader = new ChunkUploader(this.options, this.scope);
+    this.uploaders = [uploader];
+    uploader.on("progress", (event) => {
+      this.progress = event.percentage;
+      this.emitStateChange();
+      this.emitProgress();
+    });
+    try {
+      const result = await uploader.upload(file, metadata);
+      this.completedFiles = 1;
+      this.isComplete = true;
+      this.progress = 100;
+      this.currentFileName = null;
+      this.results = [result];
+      this.emitStateChange();
+      this.emit("fileComplete", result);
+      const batchResult = {
+        batchId: result.uploadId,
+        totalFiles: 1,
+        completedFiles: 1,
+        failedFiles: 0,
+        files: [result]
+      };
+      this.emit("complete", batchResult);
+      return batchResult;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      this.error = message;
+      this.failedFiles = 1;
+      this.emitStateChange();
+      const uploadError = {
+        uploadId: null,
+        message,
+        cause: err
+      };
+      this.emit("error", uploadError);
+      throw err;
+    } finally {
+      this.isUploading = false;
+      this.emitStateChange();
+    }
+  }
+  async uploadFileInBatch(file, metadata) {
+    const batchUploadEndpoint = this.batchEndpoints.batchUpload.replace("{batchId}", this.batchId);
+    const uploader = new ChunkUploader(
+      {
+        ...this.options,
+        endpoints: {
+          ...this.options.endpoints,
+          initiate: batchUploadEndpoint
+        }
+      },
+      this.scope
+    );
+    this.uploaders.push(uploader);
+    uploader.on("progress", () => {
+      this.emitProgress();
+    });
+    return uploader.upload(file, metadata);
+  }
+  emitProgress() {
+    this.emit("progress", {
+      batchId: this.batchId ?? "",
+      completedFiles: this.completedFiles,
+      totalFiles: this.totalFiles,
+      failedFiles: this.failedFiles,
+      percentage: this.progress,
+      currentFile: this.currentFileName ? { name: this.currentFileName, progress: this.progress } : null
+    });
+  }
+  cancel() {
+    this.abortController?.abort();
+    for (const uploader of this.uploaders) {
+      uploader.cancel();
+    }
+    this.isUploading = false;
+    this.currentFileName = null;
+    this.emitStateChange();
+  }
+  pause() {
+    for (const uploader of this.uploaders) {
+      uploader.pause();
+    }
+  }
+  resume() {
+    for (const uploader of this.uploaders) {
+      uploader.resume();
+    }
+  }
+  destroy() {
+    this.cancel();
+    this.listeners.clear();
+    for (const uploader of this.uploaders) {
+      uploader.destroy();
+    }
+    this.uploaders = [];
+  }
+};
 export {
+  BatchUploader,
   ChunkUploader,
   createDefaults,
   getDefaults,

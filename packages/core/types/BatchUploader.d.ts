@@ -1,0 +1,37 @@
+import type { DefaultsScope } from './config';
+import type { BatchResult, BatchUploadOptions, BatchUploaderEventMap, BatchUploaderState, Unsubscribe } from './types';
+export declare class BatchUploader {
+    batchId: string | null;
+    totalFiles: number;
+    completedFiles: number;
+    failedFiles: number;
+    progress: number;
+    isUploading: boolean;
+    isComplete: boolean;
+    error: string | null;
+    currentFileName: string | null;
+    private readonly maxConcurrentFiles;
+    private readonly options;
+    private readonly batchEndpoints;
+    private readonly scope?;
+    private uploaders;
+    private results;
+    private abortController;
+    private listeners;
+    constructor(options?: BatchUploadOptions, scope?: DefaultsScope);
+    on<K extends keyof BatchUploaderEventMap>(event: K, callback: (data: BatchUploaderEventMap[K]) => void): Unsubscribe;
+    private emit;
+    private emitStateChange;
+    getState(): BatchUploaderState;
+    private getCsrfFromCookie;
+    private getHeaders;
+    private fetchJson;
+    upload(files: File[], metadata?: Record<string, unknown>): Promise<BatchResult>;
+    private uploadSingle;
+    private uploadFileInBatch;
+    private emitProgress;
+    cancel(): void;
+    pause(): void;
+    resume(): void;
+    destroy(): void;
+}

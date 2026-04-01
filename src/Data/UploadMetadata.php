@@ -24,6 +24,7 @@ class UploadMetadata
         public readonly array $uploadedChunks = [],
         public readonly UploadStatus $status = UploadStatus::Pending,
         public readonly ?string $finalPath = null,
+        public readonly ?string $batchId = null,
     ) {}
 
     public function progress(): float
@@ -46,6 +47,7 @@ class UploadMetadata
             uploadedChunks: $this->uploadedChunks,
             status: $status,
             finalPath: $finalPath ?? $this->finalPath,
+            batchId: $this->batchId,
         );
     }
 
@@ -69,6 +71,7 @@ class UploadMetadata
                 ? $data['status']
                 : UploadStatus::tryFrom($data['status'] ?? 'pending') ?? UploadStatus::Pending,
             finalPath: $data['final_path'] ?? null,
+            batchId: $data['batch_id'] ?? null,
         );
     }
 
@@ -90,6 +93,7 @@ class UploadMetadata
             'uploaded_chunks' => $this->uploadedChunks,
             'status' => $this->status->value,
             'final_path' => $this->finalPath,
+            'batch_id' => $this->batchId,
         ];
     }
 }

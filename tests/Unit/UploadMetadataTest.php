@@ -41,6 +41,7 @@ it('converts to array and back', function () {
         'upload_id', 'file_name', 'file_size', 'mime_type',
         'chunk_size', 'total_chunks', 'disk', 'context',
         'metadata', 'uploaded_chunks', 'status', 'final_path',
+        'batch_id',
     ]);
     expect($array['upload_id'])->toBe('test-id');
     expect($array['status'])->toBe('pending');

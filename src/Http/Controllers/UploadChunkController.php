@@ -18,18 +18,16 @@ class UploadChunkController extends Controller
             chunk: $request->file('chunk'),
         );
 
-        if ($result['is_complete']) {
+        if ($result->isComplete) {
             AssembleFileJob::dispatch($uploadId);
         }
 
-        $metadata = $result['metadata'];
-
         return response()->json([
             'chunk_index' => (int) $request->validated('chunk_index'),
-            'is_complete' => $result['is_complete'],
-            'uploaded_count' => count($metadata->uploadedChunks),
-            'total_chunks' => $metadata->totalChunks,
-            'progress' => $metadata->progress(),
+            'is_complete' => $result->isComplete,
+            'uploaded_count' => count($result->metadata->uploadedChunks),
+            'total_chunks' => $result->metadata->totalChunks,
+            'progress' => $result->metadata->progress(),
         ]);
     }
 }

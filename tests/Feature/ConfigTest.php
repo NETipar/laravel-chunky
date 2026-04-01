@@ -1,5 +1,10 @@
 <?php
 
+use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Contracts\UploadTracker;
+use NETipar\Chunky\Trackers\DatabaseTracker;
+use NETipar\Chunky\Trackers\FilesystemTracker;
+
 it('loads the default configuration', function () {
     expect(config('chunky.tracker'))->toBe('database');
     expect(config('chunky.disk'))->toBe('local');
@@ -14,24 +19,24 @@ it('loads the default configuration', function () {
 });
 
 it('registers the chunky manager singleton', function () {
-    $manager = app(\NETipar\Chunky\ChunkyManager::class);
+    $manager = app(ChunkyManager::class);
 
-    expect($manager)->toBeInstanceOf(\NETipar\Chunky\ChunkyManager::class);
-    expect(app(\NETipar\Chunky\ChunkyManager::class))->toBe($manager);
+    expect($manager)->toBeInstanceOf(ChunkyManager::class);
+    expect(app(ChunkyManager::class))->toBe($manager);
 });
 
 it('binds the correct tracker based on config', function () {
     config(['chunky.tracker' => 'database']);
-    $this->app->forgetInstance(\NETipar\Chunky\Contracts\UploadTracker::class);
-    app()->singleton(\NETipar\Chunky\Contracts\UploadTracker::class, function () {
+    $this->app->forgetInstance(UploadTracker::class);
+    app()->singleton(UploadTracker::class, function () {
         return match (config('chunky.tracker')) {
-            'filesystem' => new \NETipar\Chunky\Trackers\FilesystemTracker,
-            default => new \NETipar\Chunky\Trackers\DatabaseTracker,
+            'filesystem' => new FilesystemTracker,
+            default => new DatabaseTracker,
         };
     });
 
-    expect(app(\NETipar\Chunky\Contracts\UploadTracker::class))
-        ->toBeInstanceOf(\NETipar\Chunky\Trackers\DatabaseTracker::class);
+    expect(app(UploadTracker::class))
+        ->toBeInstanceOf(DatabaseTracker::class);
 });
 
 it('registers routes with configured prefix', function () {
@@ -39,5 +44,5 @@ it('registers routes with configured prefix', function () {
 
     $chunkyRoutes = $routes->filter(fn ($route) => str_contains($route->uri(), 'api/chunky'));
 
-    expect($chunkyRoutes)->toHaveCount(3);
+    expect($chunkyRoutes)->toHaveCount(6);
 });

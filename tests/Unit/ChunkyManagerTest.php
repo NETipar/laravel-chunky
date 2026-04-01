@@ -1,11 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Event;
+use NETipar\Chunky\ChunkyContext;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
+use NETipar\Chunky\Data\InitiateResult;
 use NETipar\Chunky\Data\UploadMetadata;
-use NETipar\Chunky\ChunkyContext;
 use NETipar\Chunky\Events\UploadInitiated;
 
 it('registers and retrieves contexts', function () {
@@ -128,10 +129,10 @@ it('initiates an upload and dispatches event', function () {
         context: null,
     );
 
-    expect($result)->toHaveKeys(['upload_id', 'chunk_size', 'total_chunks']);
-    expect($result['upload_id'])->toBeString();
-    expect($result['chunk_size'])->toBe(1024 * 1024);
-    expect($result['total_chunks'])->toBe(5);
+    expect($result)->toBeInstanceOf(InitiateResult::class);
+    expect($result->uploadId)->toBeString();
+    expect($result->chunkSize)->toBe(1024 * 1024);
+    expect($result->totalChunks)->toBe(5);
 
     Event::assertDispatched(UploadInitiated::class, function ($event) {
         return $event->fileName === 'test-file.pdf'

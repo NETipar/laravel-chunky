@@ -2,6 +2,50 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.6.0 - 2026-04-01
+
+### Added — Backend
+- **Batch upload support**: group multiple file uploads into a single batch with atomic completion tracking
+- `ChunkyBatch` Eloquent model with `chunky_batches` migration (auto-loaded for database tracker)
+- `BatchStatus` enum: `Pending`, `Processing`, `Completed`, `PartiallyCompleted`, `Expired`
+- `UploadStatus::Failed` case for handling assembly job failures
+- `ChunkyManager::initiateBatch()` to create a batch and return `BatchMetadata` DTO
+- `ChunkyManager::initiateInBatch()` to add file uploads to an existing batch
+- `ChunkyManager::getBatchStatus()` returns typed `BatchMetadata` DTO
+- `ChunkyManager::markBatchUploadCompleted()` / `markBatchUploadFailed()` with atomic counters
+- `AssembleFileJob::failed()` method — marks upload as `Failed` and updates batch counters on assembly error
+- Batch completion fires `BatchCompleted` or `BatchPartiallyCompleted` event (lenient failure policy)
+- `BatchInitiated` event dispatched on batch creation
+- Three new API routes: `POST /batch`, `POST /batch/{batchId}/upload`, `GET /batch/{batchId}`
+- Filesystem tracker: batch metadata stored as `chunky/temp/batches/{batchId}/batch.json`
+
+### Added — Frontend
+- `BatchUploader` class in `@netipar/chunky-core` for multi-file batch uploads
+- `maxConcurrentFiles` option (default: 2) for parallel file uploads within a batch
+- Single-file optimization: `BatchUploader` skips batch creation for 1 file
+- `useBatchUpload()` composable for Vue 3 with reactive batch state
+- `useBatchUpload()` hook for React with full state management
+- `registerBatchUpload()` Alpine.js data component with DOM events (`chunky:batch-progress`, `chunky:batch-complete`, etc.)
+- Batch event types: `BatchProgressEvent`, `BatchResult`, `BatchUploaderState`, `BatchUploaderEventMap`
+
+### Changed
+- `ChunkyManager::initiate()` now returns `InitiateResult` DTO (was array)
+- `ChunkyManager::uploadChunk()` now returns `ChunkUploadResult` DTO (was array)
+- `ChunkyManager::initiateBatch()` returns `BatchMetadata` DTO
+- `ChunkyManager::initiateInBatch()` returns `InitiateResult` DTO (with `batchId`)
+- `ChunkyManager::getBatchStatus()` returns `?BatchMetadata` DTO
+- `UploadMetadata` DTO now includes `?string $batchId` property
+- `chunked_uploads` migration adds `batch_id` nullable indexed column
+- Migrations are always publishable (previously only when `tracker === 'database'`)
+
+### New DTOs (`NETipar\Chunky\Data\`)
+- `InitiateResult` — `uploadId`, `chunkSize`, `totalChunks`, `?batchId`
+- `ChunkUploadResult` — `isComplete`, `metadata` (UploadMetadata)
+- `BatchMetadata` — `batchId`, `totalFiles`, `completedFiles`, `failedFiles`, `status`, `?context`
+
+### npm packages
+- All packages bumped to v0.6.0 (core, vue3, react, alpine synchronized)
+
 ## v0.5.0 - 2026-03-31
 
 ### Added — Backend

@@ -93,3 +93,56 @@ export type ChunkUploaderEventMap = {
 };
 
 export type Unsubscribe = () => void;
+
+// Batch types
+
+export interface BatchUploadOptions extends ChunkUploadOptions {
+    maxConcurrentFiles?: number;
+    endpoints?: ChunkUploadOptions['endpoints'] & {
+        batchInitiate?: string;
+        batchUpload?: string;
+        batchStatus?: string;
+    };
+}
+
+export interface BatchInitiateResponse {
+    batch_id: string;
+}
+
+export interface BatchProgressEvent {
+    batchId: string;
+    completedFiles: number;
+    totalFiles: number;
+    failedFiles: number;
+    percentage: number;
+    currentFile: { name: string; progress: number } | null;
+}
+
+export interface BatchResult {
+    batchId: string;
+    totalFiles: number;
+    completedFiles: number;
+    failedFiles: number;
+    files: UploadResult[];
+}
+
+export interface BatchUploaderState {
+    batchId: string | null;
+    totalFiles: number;
+    completedFiles: number;
+    failedFiles: number;
+    progress: number;
+    isUploading: boolean;
+    isComplete: boolean;
+    error: string | null;
+    currentFileName: string | null;
+}
+
+export type BatchUploaderEventMap = {
+    progress: BatchProgressEvent;
+    fileComplete: UploadResult;
+    fileError: UploadError;
+    complete: BatchResult;
+    error: UploadError;
+    stateChange: BatchUploaderState;
+};

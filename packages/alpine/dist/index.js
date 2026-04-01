@@ -66,11 +66,80 @@ function registerChunkUpload(Alpine) {
   }));
 }
 
+// src/batch-upload.ts
+import { BatchUploader } from "@netipar/chunky-core";
+function registerBatchUpload(Alpine) {
+  Alpine.data("batchUpload", (options = {}) => ({
+    batchId: null,
+    totalFiles: 0,
+    completedFiles: 0,
+    failedFiles: 0,
+    progress: 0,
+    isUploading: false,
+    isComplete: false,
+    error: null,
+    currentFileName: null,
+    _uploader: null,
+    init() {
+      this._uploader = new BatchUploader(options);
+      this._uploader.on("stateChange", (state) => {
+        this.batchId = state.batchId;
+        this.totalFiles = state.totalFiles;
+        this.completedFiles = state.completedFiles;
+        this.failedFiles = state.failedFiles;
+        this.progress = state.progress;
+        this.isUploading = state.isUploading;
+        this.isComplete = state.isComplete;
+        this.error = state.error;
+        this.currentFileName = state.currentFileName;
+      });
+      this._uploader.on("progress", (event) => {
+        this.$dispatch("chunky:batch-progress", event);
+      });
+      this._uploader.on("fileComplete", (result) => {
+        this.$dispatch("chunky:batch-file-complete", result);
+      });
+      this._uploader.on("fileError", (error) => {
+        this.$dispatch("chunky:batch-file-error", error);
+      });
+      this._uploader.on("complete", (result) => {
+        this.$dispatch("chunky:batch-complete", result);
+      });
+      this._uploader.on("error", (error) => {
+        this.$dispatch("chunky:batch-error", error);
+      });
+    },
+    destroy() {
+      this._uploader?.destroy();
+    },
+    async upload(files, metadata) {
+      return this._uploader.upload(files, metadata);
+    },
+    handleFileInput(event) {
+      const input = event.target;
+      const files = input?.files;
+      if (files && files.length > 0) {
+        this.upload(Array.from(files));
+      }
+    },
+    cancel() {
+      this._uploader.cancel();
+    },
+    pause() {
+      this._uploader.pause();
+    },
+    resume() {
+      this._uploader.resume();
+    }
+  }));
+}
+
 // src/index.ts
 import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
+  registerBatchUpload,
   registerChunkUpload,
   setDefaults
 };

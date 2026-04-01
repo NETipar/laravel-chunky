@@ -20,9 +20,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core2.createDefaults,
-  getDefaults: () => import_chunky_core2.getDefaults,
-  setDefaults: () => import_chunky_core2.setDefaults,
+  createDefaults: () => import_chunky_core3.createDefaults,
+  getDefaults: () => import_chunky_core3.getDefaults,
+  setDefaults: () => import_chunky_core3.setDefaults,
+  useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload
 });
 module.exports = __toCommonJS(src_exports);
@@ -107,6 +108,89 @@ function useChunkUpload(options = {}) {
   };
 }
 
-// src/index.ts
+// src/useBatchUpload.ts
+var import_react2 = require("react");
 var import_chunky_core2 = require("@netipar/chunky-core");
+function useBatchUpload(options = {}) {
+  const optionsKey = (0, import_react2.useMemo)(() => JSON.stringify(options), [options]);
+  const uploaderRef = (0, import_react2.useRef)(null);
+  const [batchId, setBatchId] = (0, import_react2.useState)(null);
+  const [totalFiles, setTotalFiles] = (0, import_react2.useState)(0);
+  const [completedFiles, setCompletedFiles] = (0, import_react2.useState)(0);
+  const [failedFiles, setFailedFiles] = (0, import_react2.useState)(0);
+  const [progress, setProgress] = (0, import_react2.useState)(0);
+  const [isUploading, setIsUploading] = (0, import_react2.useState)(false);
+  const [isComplete, setIsComplete] = (0, import_react2.useState)(false);
+  const [error, setError] = (0, import_react2.useState)(null);
+  const [currentFileName, setCurrentFileName] = (0, import_react2.useState)(null);
+  (0, import_react2.useEffect)(() => {
+    const uploader = new import_chunky_core2.BatchUploader(options);
+    uploaderRef.current = uploader;
+    const unsub = uploader.on("stateChange", (state) => {
+      setBatchId(state.batchId);
+      setTotalFiles(state.totalFiles);
+      setCompletedFiles(state.completedFiles);
+      setFailedFiles(state.failedFiles);
+      setProgress(state.progress);
+      setIsUploading(state.isUploading);
+      setIsComplete(state.isComplete);
+      setError(state.error);
+      setCurrentFileName(state.currentFileName);
+    });
+    return () => {
+      unsub();
+      uploader.destroy();
+    };
+  }, [optionsKey]);
+  const upload = (0, import_react2.useCallback)(
+    (files, metadata) => uploaderRef.current.upload(files, metadata),
+    []
+  );
+  const cancel = (0, import_react2.useCallback)(() => uploaderRef.current.cancel(), []);
+  const pause = (0, import_react2.useCallback)(() => uploaderRef.current.pause(), []);
+  const resume = (0, import_react2.useCallback)(() => uploaderRef.current.resume(), []);
+  const onProgress = (0, import_react2.useCallback)(
+    (cb) => uploaderRef.current.on("progress", cb),
+    []
+  );
+  const onFileComplete = (0, import_react2.useCallback)(
+    (cb) => uploaderRef.current.on("fileComplete", cb),
+    []
+  );
+  const onFileError = (0, import_react2.useCallback)(
+    (cb) => uploaderRef.current.on("fileError", cb),
+    []
+  );
+  const onComplete = (0, import_react2.useCallback)(
+    (cb) => uploaderRef.current.on("complete", cb),
+    []
+  );
+  const onError = (0, import_react2.useCallback)(
+    (cb) => uploaderRef.current.on("error", cb),
+    []
+  );
+  return {
+    batchId,
+    totalFiles,
+    completedFiles,
+    failedFiles,
+    progress,
+    isUploading,
+    isComplete,
+    error,
+    currentFileName,
+    upload,
+    cancel,
+    pause,
+    resume,
+    onProgress,
+    onFileComplete,
+    onFileError,
+    onComplete,
+    onError
+  };
+}
+
+// src/index.ts
+var import_chunky_core3 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

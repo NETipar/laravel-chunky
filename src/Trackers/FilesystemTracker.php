@@ -2,6 +2,7 @@
 
 namespace NETipar\Chunky\Trackers;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\UploadMetadata;
@@ -129,7 +130,7 @@ class FilesystemTracker implements UploadTracker
         return config('chunky.temp_directory')."/{$uploadId}/metadata.json";
     }
 
-    private function disk(): \Illuminate\Contracts\Filesystem\Filesystem
+    private function disk(): Filesystem
     {
         return Storage::disk(config('chunky.disk'));
     }

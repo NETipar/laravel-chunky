@@ -4,6 +4,7 @@ namespace NETipar\Chunky\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use NETipar\Chunky\Enums\UploadStatus;
 
 class ChunkedUpload extends Model
@@ -24,6 +25,14 @@ class ChunkedUpload extends Model
             'completed_at' => 'datetime',
             'expires_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @return BelongsTo<ChunkyBatch, $this>
+     */
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(ChunkyBatch::class, 'batch_id', 'batch_id');
     }
 
     public function isExpired(): bool

@@ -1,6 +1,6 @@
 ---
 name: chunky-development
-description: Build and integrate chunk-based file upload features using the netipar/laravel-chunky package, including upload initiation, chunk handling, pause/resume, context-based validation, save callbacks, event listeners, and frontend integration with Vue 3, React, Alpine.js, or Livewire.
+description: Build and integrate chunk-based file upload features using the netipar/laravel-chunky package, including upload initiation, chunk handling, pause/resume, batch uploads, context-based validation, save callbacks, event listeners, DTOs, and frontend integration with Vue 3, React, Alpine.js, or Livewire.
 ---
 
 # Chunky File Upload Integration Development
@@ -10,11 +10,12 @@ description: Build and integrate chunk-based file upload features using the neti
 Use this skill when:
 - Implementing chunk-based file uploads in a Laravel application
 - Handling large file uploads with progress tracking and pause/resume
+- Uploading multiple files as a batch with completion tracking
 - Registering upload contexts with validation rules and save callbacks
-- Listening for upload events (initiated, chunk uploaded, assembled, completed)
+- Listening for upload events (initiated, chunk uploaded, assembled, completed, batch completed)
 - Integrating the frontend upload UI with Vue 3, React, Alpine.js, or Livewire
 - Configuring chunk size, storage disk, tracker driver, or route middleware
-- Querying upload status or processing completed uploads
+- Querying upload or batch status
 
 ## Package overview
 
@@ -23,7 +24,8 @@ The `netipar/laravel-chunky` package provides chunk-based file uploads for Larav
 - Namespace: `NETipar\Chunky\`
 - Facade: `NETipar\Chunky\Facades\Chunky`
 - Config: `config/chunky.php`
-- Routes: `POST /api/chunky/upload`, `POST /api/chunky/upload/{uploadId}/chunks`, `GET /api/chunky/upload/{uploadId}` (auto-registered)
+- Upload routes: `POST /api/chunky/upload`, `POST /api/chunky/upload/{uploadId}/chunks`, `GET /api/chunky/upload/{uploadId}`
+- Batch routes: `POST /api/chunky/batch`, `POST /api/chunky/batch/{batchId}/upload`, `GET /api/chunky/batch/{batchId}`
 
 ### Frontend packages (npm)
 
@@ -58,13 +60,18 @@ Livewire needs no npm package -- the component is included in the Composer packa
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
-Chunky::simple(...)        // Quick context: validate + move file to directory
-Chunky::register(...)      // Register a class-based context
-Chunky::context(...)       // Register inline context with rules/save closures
-Chunky::initiate(...)      // Programmatic upload start
-Chunky::uploadChunk(...)   // Programmatic chunk upload
-Chunky::status(...)        // Query upload status (returns UploadMetadata)
-Chunky::hasContext(...)    // Check if context exists
+Chunky::simple(...)              // Quick context: validate + move file to directory
+Chunky::register(...)            // Register a class-based context
+Chunky::context(...)             // Register inline context with rules/save closures
+Chunky::initiate(...)            // Programmatic upload start (returns InitiateResult)
+Chunky::uploadChunk(...)         // Programmatic chunk upload (returns ChunkUploadResult)
+Chunky::status(...)              // Query upload status (returns UploadMetadata)
+Chunky::hasContext(...)          // Check if context exists
+Chunky::initiateBatch(...)       // Create batch (returns BatchMetadata)
+Chunky::initiateInBatch(...)     // Add file to batch (returns InitiateResult)
+Chunky::getBatchStatus(...)      // Query batch status (returns BatchMetadata)
+Chunky::markBatchUploadCompleted(...)  // Mark batch file completed (called by AssembleFileJob)
+Chunky::markBatchUploadFailed(...)     // Mark batch file failed (called by AssembleFileJob)
 ```
 
 ## Register upload contexts
@@ -170,9 +177,52 @@ $metadata->uploadedChunks; // array<int, int>
 $metadata->status;         // UploadStatus enum
 $metadata->finalPath;      // ?string
 
+$metadata->batchId;        // ?string (UUID, null if not in batch)
+
 $metadata->progress();     // float (0-100)
 $metadata->toArray();      // array
 UploadMetadata::fromArray($data); // static constructor
+```
+
+## InitiateResult DTO
+
+`NETipar\Chunky\Data\InitiateResult` -- returned by `initiate()` and `initiateInBatch()`:
+
+```php
+$result->uploadId;    // string (UUID)
+$result->chunkSize;   // int
+$result->totalChunks; // int
+$result->batchId;     // ?string (null for non-batch uploads)
+
+$result->toArray();   // array (batch_id only included when non-null)
+```
+
+## ChunkUploadResult DTO
+
+`NETipar\Chunky\Data\ChunkUploadResult` -- returned by `uploadChunk()`:
+
+```php
+$result->isComplete; // bool
+$result->metadata;   // UploadMetadata
+```
+
+## BatchMetadata DTO
+
+`NETipar\Chunky\Data\BatchMetadata` -- returned by `initiateBatch()` and `getBatchStatus()`:
+
+```php
+$batch->batchId;        // string (UUID)
+$batch->totalFiles;     // int
+$batch->completedFiles; // int
+$batch->failedFiles;    // int
+$batch->status;         // BatchStatus enum
+$batch->context;        // ?string
+
+$batch->pendingFiles(); // int
+$batch->isFinished();   // bool (completedFiles + failedFiles >= totalFiles)
+$batch->progress();     // float (0-100)
+$batch->toArray();      // array
+BatchMetadata::fromArray($data); // static constructor
 ```
 
 ## UploadStatus enum
@@ -183,7 +233,20 @@ use NETipar\Chunky\Enums\UploadStatus;
 UploadStatus::Pending;    // 'pending'
 UploadStatus::Assembling; // 'assembling'
 UploadStatus::Completed;  // 'completed'
+UploadStatus::Failed;     // 'failed' (assembly error)
 UploadStatus::Expired;    // 'expired'
+```
+
+## BatchStatus enum
+
+```php
+use NETipar\Chunky\Enums\BatchStatus;
+
+BatchStatus::Pending;            // 'pending'
+BatchStatus::Processing;         // 'processing'
+BatchStatus::Completed;          // 'completed'
+BatchStatus::PartiallyCompleted; // 'partially_completed'
+BatchStatus::Expired;            // 'expired'
 ```
 
 ## Listening to events
@@ -216,6 +279,9 @@ protected $listen = [
 | `ChunkUploadFailed` | `uploadId`, `chunkIndex`, `exception` | On chunk error |
 | `FileAssembled` | `uploadId`, `finalPath`, `disk`, `fileName`, `fileSize` | After file assembly |
 | `UploadCompleted` | `upload` (UploadMetadata), `uploadId`, `finalPath`, `disk`, `metadata` | Full upload complete |
+| `BatchInitiated` | `batchId`, `totalFiles` | Batch created |
+| `BatchCompleted` | `batchId`, `totalFiles` | All batch files completed |
+| `BatchPartiallyCompleted` | `batchId`, `completedFiles`, `failedFiles`, `totalFiles` | Batch done with failures |
 
 ### Event listener example
 
@@ -259,6 +325,9 @@ Routes are auto-registered with configurable prefix and middleware:
 | `POST` | `/api/chunky/upload` | `chunky.initiate` | Initiate upload |
 | `POST` | `/api/chunky/upload/{uploadId}/chunks` | `chunky.chunk` | Upload a chunk |
 | `GET` | `/api/chunky/upload/{uploadId}` | `chunky.status` | Get upload status |
+| `POST` | `/api/chunky/batch` | `chunky.batch.initiate` | Initiate batch |
+| `POST` | `/api/chunky/batch/{batchId}/upload` | `chunky.batch.upload` | Add file to batch |
+| `GET` | `/api/chunky/batch/{batchId}` | `chunky.batch.status` | Get batch status |
 
 ### Initiate upload request
 
@@ -509,18 +578,137 @@ uploader.retry();
 uploader.destroy(); // Cleanup
 ```
 
+## Batch upload (multiple files)
+
+Upload multiple files as a batch and get a single event when all files complete.
+
+### Backend programmatic usage
+
+```php
+use NETipar\Chunky\Facades\Chunky;
+
+// Create batch
+$batch = Chunky::initiateBatch(totalFiles: 5, context: 'documents');
+// $batch->batchId, $batch->totalFiles, $batch->status
+
+// Add files to batch
+$file1 = Chunky::initiateInBatch($batch->batchId, 'photo1.jpg', 5242880);
+$file2 = Chunky::initiateInBatch($batch->batchId, 'photo2.jpg', 3145728);
+// Each returns InitiateResult with batchId set
+
+// Query batch status
+$status = Chunky::getBatchStatus($batch->batchId);
+// $status->completedFiles, $status->failedFiles, $status->isFinished(), $status->progress()
+```
+
+### Batch events
+
+```php
+use NETipar\Chunky\Events\BatchCompleted;
+use NETipar\Chunky\Events\BatchPartiallyCompleted;
+
+protected $listen = [
+    BatchCompleted::class => [
+        \App\Listeners\NotifyBatchDone::class,
+    ],
+    BatchPartiallyCompleted::class => [
+        \App\Listeners\HandlePartialBatch::class,
+    ],
+];
+```
+
+### Frontend: Vue 3 batch upload
+
+```vue
+<script setup lang="ts">
+import { useBatchUpload } from '@netipar/chunky-vue3';
+
+const {
+    progress, isUploading, isComplete, completedFiles, totalFiles,
+    failedFiles, currentFileName, error,
+    upload, cancel, pause, resume,
+    onFileComplete, onComplete, onFileError,
+} = useBatchUpload({ maxConcurrentFiles: 2, context: 'documents' });
+
+function onFilesChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files?.length) {
+        upload(Array.from(input.files));
+    }
+}
+</script>
+```
+
+### Frontend: React batch upload
+
+```tsx
+import { useBatchUpload } from '@netipar/chunky-react';
+
+const { progress, isUploading, completedFiles, totalFiles, upload } =
+    useBatchUpload({ maxConcurrentFiles: 2 });
+```
+
+### Frontend: Alpine.js batch upload
+
+```html
+<div x-data="batchUpload({ maxConcurrentFiles: 2 })">
+    <input type="file" multiple x-on:change="handleFileInput($event)" />
+    <span x-text="completedFiles + '/' + totalFiles"></span>
+</div>
+```
+
+Alpine batch dispatches: `chunky:batch-progress`, `chunky:batch-file-complete`, `chunky:batch-file-error`, `chunky:batch-complete`, `chunky:batch-error`.
+
+### Frontend: Core batch upload
+
+```typescript
+import { BatchUploader } from '@netipar/chunky-core';
+
+const batch = new BatchUploader({ maxConcurrentFiles: 2, context: 'documents' });
+
+batch.on('fileComplete', (result) => console.log('File done:', result.fileName));
+batch.on('complete', (result) => console.log(`${result.completedFiles}/${result.totalFiles} done`));
+
+await batch.upload(files);
+batch.destroy();
+```
+
+### Batch behavior
+
+- `maxConcurrentFiles` (default: 2) controls how many files upload in parallel
+- Each file still uses its own `ChunkUploader` with `maxConcurrent` for chunk parallelism
+- Single file passed to `BatchUploader` skips batch creation, uses regular `ChunkUploader`
+- **Failure policy**: Lenient -- failed files don't block others, batch ends as `PartiallyCompleted`
+- Batch expires after `chunky.expiration` minutes (default: 24h)
+- `AssembleFileJob::failed()` marks individual uploads as `Failed` and updates batch counters
+
+### Database: chunky_batches table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | ULID | Primary key |
+| `batch_id` | string | Unique batch identifier (UUID) |
+| `total_files` | int | Expected file count |
+| `completed_files` | int | Successfully assembled files |
+| `failed_files` | int | Failed assembly files |
+| `context` | string | Upload context (nullable) |
+| `metadata` | JSON | Custom metadata (nullable) |
+| `status` | string | pending, processing, completed, partially_completed, expired |
+| `completed_at` | timestamp | When batch completed |
+| `expires_at` | timestamp | When batch expires |
+
 ## Programmatic backend usage
 
 ```php
 use NETipar\Chunky\Facades\Chunky;
 
-// Initiate
+// Initiate (returns InitiateResult DTO)
 $result = Chunky::initiate('large-file.zip', 524288000, 'application/zip');
-// Returns: ['upload_id' => '...', 'chunk_size' => 1048576, 'total_chunks' => 500]
+// $result->uploadId, $result->chunkSize, $result->totalChunks
 
-// Query status
+// Query status (returns UploadMetadata DTO or null)
 $metadata = Chunky::status($uploadId);
-// Returns: UploadMetadata DTO or null
+// $metadata->progress(), $metadata->fileName, $metadata->status, $metadata->batchId
 ```
 
 ## Error handling
@@ -600,6 +788,7 @@ return [
 |--------|------|-------------|
 | `id` | ULID | Primary key |
 | `upload_id` | string | Unique upload identifier (UUID) |
+| `batch_id` | string | Batch identifier (nullable, indexed) |
 | `file_name` | string | Original file name |
 | `file_size` | bigint | Total file size in bytes |
 | `mime_type` | string | MIME type (nullable) |
@@ -610,7 +799,7 @@ return [
 | `context` | string | Upload context (nullable) |
 | `final_path` | string | Path after assembly (nullable) |
 | `metadata` | JSON | Custom metadata from frontend |
-| `status` | string | pending, assembling, completed, expired |
+| `status` | string | pending, assembling, completed, failed, expired |
 | `completed_at` | timestamp | When upload completed |
 | `expires_at` | timestamp | When upload expires |
 

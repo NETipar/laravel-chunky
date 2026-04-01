@@ -20,9 +20,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core2.createDefaults,
-  getDefaults: () => import_chunky_core2.getDefaults,
-  setDefaults: () => import_chunky_core2.setDefaults,
+  createDefaults: () => import_chunky_core3.createDefaults,
+  getDefaults: () => import_chunky_core3.getDefaults,
+  setDefaults: () => import_chunky_core3.setDefaults,
+  useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload
 });
 module.exports = __toCommonJS(src_exports);
@@ -77,6 +78,56 @@ function useChunkUpload(options = {}) {
   };
 }
 
-// src/index.ts
+// src/useBatchUpload.ts
+var import_vue2 = require("vue");
 var import_chunky_core2 = require("@netipar/chunky-core");
+function useBatchUpload(options = {}) {
+  const uploader = new import_chunky_core2.BatchUploader(options);
+  const batchId = (0, import_vue2.ref)(null);
+  const totalFiles = (0, import_vue2.ref)(0);
+  const completedFiles = (0, import_vue2.ref)(0);
+  const failedFiles = (0, import_vue2.ref)(0);
+  const progress = (0, import_vue2.ref)(0);
+  const isUploading = (0, import_vue2.ref)(false);
+  const isComplete = (0, import_vue2.ref)(false);
+  const error = (0, import_vue2.ref)(null);
+  const currentFileName = (0, import_vue2.ref)(null);
+  uploader.on("stateChange", (state) => {
+    batchId.value = state.batchId;
+    totalFiles.value = state.totalFiles;
+    completedFiles.value = state.completedFiles;
+    failedFiles.value = state.failedFiles;
+    progress.value = state.progress;
+    isUploading.value = state.isUploading;
+    isComplete.value = state.isComplete;
+    error.value = state.error;
+    currentFileName.value = state.currentFileName;
+  });
+  if ((0, import_vue2.getCurrentInstance)()) {
+    (0, import_vue2.onBeforeUnmount)(() => uploader.destroy());
+  }
+  return {
+    batchId,
+    totalFiles,
+    completedFiles,
+    failedFiles,
+    progress,
+    isUploading,
+    isComplete,
+    error,
+    currentFileName,
+    upload: (files, metadata) => uploader.upload(files, metadata),
+    cancel: () => uploader.cancel(),
+    pause: () => uploader.pause(),
+    resume: () => uploader.resume(),
+    onProgress: (cb) => uploader.on("progress", cb),
+    onFileComplete: (cb) => uploader.on("fileComplete", cb),
+    onFileError: (cb) => uploader.on("fileError", cb),
+    onComplete: (cb) => uploader.on("complete", cb),
+    onError: (cb) => uploader.on("error", cb)
+  };
+}
+
+// src/index.ts
+var import_chunky_core3 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

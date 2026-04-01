@@ -1,0 +1,70 @@
+<?php
+
+namespace NETipar\Chunky\Data;
+
+use NETipar\Chunky\Enums\BatchStatus;
+
+class BatchMetadata
+{
+    public function __construct(
+        public readonly string $batchId,
+        public readonly int $totalFiles,
+        public readonly int $completedFiles,
+        public readonly int $failedFiles,
+        public readonly BatchStatus $status,
+        public readonly ?string $context = null,
+    ) {}
+
+    public function pendingFiles(): int
+    {
+        return $this->totalFiles - $this->completedFiles - $this->failedFiles;
+    }
+
+    public function isFinished(): bool
+    {
+        return $this->completedFiles + $this->failedFiles >= $this->totalFiles;
+    }
+
+    public function progress(): float
+    {
+        if ($this->totalFiles === 0) {
+            return 0;
+        }
+
+        return round(($this->completedFiles / $this->totalFiles) * 100, 2);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'batch_id' => $this->batchId,
+            'total_files' => $this->totalFiles,
+            'completed_files' => $this->completedFiles,
+            'failed_files' => $this->failedFiles,
+            'pending_files' => $this->pendingFiles(),
+            'context' => $this->context,
+            'status' => $this->status->value,
+            'is_finished' => $this->isFinished(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            batchId: $data['batch_id'],
+            totalFiles: (int) $data['total_files'],
+            completedFiles: (int) ($data['completed_files'] ?? 0),
+            failedFiles: (int) ($data['failed_files'] ?? 0),
+            status: isset($data['status']) && $data['status'] instanceof BatchStatus
+                ? $data['status']
+                : BatchStatus::tryFrom($data['status'] ?? 'pending') ?? BatchStatus::Pending,
+            context: $data['context'] ?? null,
+        );
+    }
+}

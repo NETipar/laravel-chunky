@@ -78,12 +78,96 @@ function useChunkUpload(options = {}) {
   };
 }
 
+// src/useBatchUpload.ts
+import { useState as useState2, useRef as useRef2, useEffect as useEffect2, useCallback as useCallback2, useMemo as useMemo2 } from "react";
+import { BatchUploader } from "@netipar/chunky-core";
+function useBatchUpload(options = {}) {
+  const optionsKey = useMemo2(() => JSON.stringify(options), [options]);
+  const uploaderRef = useRef2(null);
+  const [batchId, setBatchId] = useState2(null);
+  const [totalFiles, setTotalFiles] = useState2(0);
+  const [completedFiles, setCompletedFiles] = useState2(0);
+  const [failedFiles, setFailedFiles] = useState2(0);
+  const [progress, setProgress] = useState2(0);
+  const [isUploading, setIsUploading] = useState2(false);
+  const [isComplete, setIsComplete] = useState2(false);
+  const [error, setError] = useState2(null);
+  const [currentFileName, setCurrentFileName] = useState2(null);
+  useEffect2(() => {
+    const uploader = new BatchUploader(options);
+    uploaderRef.current = uploader;
+    const unsub = uploader.on("stateChange", (state) => {
+      setBatchId(state.batchId);
+      setTotalFiles(state.totalFiles);
+      setCompletedFiles(state.completedFiles);
+      setFailedFiles(state.failedFiles);
+      setProgress(state.progress);
+      setIsUploading(state.isUploading);
+      setIsComplete(state.isComplete);
+      setError(state.error);
+      setCurrentFileName(state.currentFileName);
+    });
+    return () => {
+      unsub();
+      uploader.destroy();
+    };
+  }, [optionsKey]);
+  const upload = useCallback2(
+    (files, metadata) => uploaderRef.current.upload(files, metadata),
+    []
+  );
+  const cancel = useCallback2(() => uploaderRef.current.cancel(), []);
+  const pause = useCallback2(() => uploaderRef.current.pause(), []);
+  const resume = useCallback2(() => uploaderRef.current.resume(), []);
+  const onProgress = useCallback2(
+    (cb) => uploaderRef.current.on("progress", cb),
+    []
+  );
+  const onFileComplete = useCallback2(
+    (cb) => uploaderRef.current.on("fileComplete", cb),
+    []
+  );
+  const onFileError = useCallback2(
+    (cb) => uploaderRef.current.on("fileError", cb),
+    []
+  );
+  const onComplete = useCallback2(
+    (cb) => uploaderRef.current.on("complete", cb),
+    []
+  );
+  const onError = useCallback2(
+    (cb) => uploaderRef.current.on("error", cb),
+    []
+  );
+  return {
+    batchId,
+    totalFiles,
+    completedFiles,
+    failedFiles,
+    progress,
+    isUploading,
+    isComplete,
+    error,
+    currentFileName,
+    upload,
+    cancel,
+    pause,
+    resume,
+    onProgress,
+    onFileComplete,
+    onFileError,
+    onComplete,
+    onError
+  };
+}
+
 // src/index.ts
 import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
   setDefaults,
+  useBatchUpload,
   useChunkUpload
 };
 //# sourceMappingURL=index.js.map

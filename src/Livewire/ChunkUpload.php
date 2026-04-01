@@ -2,6 +2,7 @@
 
 namespace NETipar\Chunky\Livewire;
 
+use Illuminate\Contracts\View\View;
 use Livewire\Component;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Enums\UploadStatus;
@@ -79,7 +80,7 @@ class ChunkUpload extends Component
         ]);
     }
 
-    public function render(): \Illuminate\Contracts\View\View
+    public function render(): View
     {
         return view('chunky::livewire.chunk-upload');
     }

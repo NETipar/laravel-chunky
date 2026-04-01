@@ -20,10 +20,11 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core2.createDefaults,
-  getDefaults: () => import_chunky_core2.getDefaults,
+  createDefaults: () => import_chunky_core3.createDefaults,
+  getDefaults: () => import_chunky_core3.getDefaults,
+  registerBatchUpload: () => registerBatchUpload,
   registerChunkUpload: () => registerChunkUpload,
-  setDefaults: () => import_chunky_core2.setDefaults
+  setDefaults: () => import_chunky_core3.setDefaults
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -95,6 +96,74 @@ function registerChunkUpload(Alpine) {
   }));
 }
 
-// src/index.ts
+// src/batch-upload.ts
 var import_chunky_core2 = require("@netipar/chunky-core");
+function registerBatchUpload(Alpine) {
+  Alpine.data("batchUpload", (options = {}) => ({
+    batchId: null,
+    totalFiles: 0,
+    completedFiles: 0,
+    failedFiles: 0,
+    progress: 0,
+    isUploading: false,
+    isComplete: false,
+    error: null,
+    currentFileName: null,
+    _uploader: null,
+    init() {
+      this._uploader = new import_chunky_core2.BatchUploader(options);
+      this._uploader.on("stateChange", (state) => {
+        this.batchId = state.batchId;
+        this.totalFiles = state.totalFiles;
+        this.completedFiles = state.completedFiles;
+        this.failedFiles = state.failedFiles;
+        this.progress = state.progress;
+        this.isUploading = state.isUploading;
+        this.isComplete = state.isComplete;
+        this.error = state.error;
+        this.currentFileName = state.currentFileName;
+      });
+      this._uploader.on("progress", (event) => {
+        this.$dispatch("chunky:batch-progress", event);
+      });
+      this._uploader.on("fileComplete", (result) => {
+        this.$dispatch("chunky:batch-file-complete", result);
+      });
+      this._uploader.on("fileError", (error) => {
+        this.$dispatch("chunky:batch-file-error", error);
+      });
+      this._uploader.on("complete", (result) => {
+        this.$dispatch("chunky:batch-complete", result);
+      });
+      this._uploader.on("error", (error) => {
+        this.$dispatch("chunky:batch-error", error);
+      });
+    },
+    destroy() {
+      this._uploader?.destroy();
+    },
+    async upload(files, metadata) {
+      return this._uploader.upload(files, metadata);
+    },
+    handleFileInput(event) {
+      const input = event.target;
+      const files = input?.files;
+      if (files && files.length > 0) {
+        this.upload(Array.from(files));
+      }
+    },
+    cancel() {
+      this._uploader.cancel();
+    },
+    pause() {
+      this._uploader.pause();
+    },
+    resume() {
+      this._uploader.resume();
+    }
+  }));
+}
+
+// src/index.ts
+var import_chunky_core3 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

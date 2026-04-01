@@ -3,10 +3,11 @@
 use NETipar\Chunky\Enums\UploadStatus;
 
 it('has expected cases', function () {
-    expect(UploadStatus::cases())->toHaveCount(4);
+    expect(UploadStatus::cases())->toHaveCount(5);
     expect(UploadStatus::Pending->value)->toBe('pending');
     expect(UploadStatus::Assembling->value)->toBe('assembling');
     expect(UploadStatus::Completed->value)->toBe('completed');
+    expect(UploadStatus::Failed->value)->toBe('failed');
     expect(UploadStatus::Expired->value)->toBe('expired');
 });
 

@@ -15,6 +15,7 @@ class DatabaseTracker implements UploadTracker
     {
         ChunkedUpload::create([
             'upload_id' => $uploadId,
+            'batch_id' => $metadata->batchId,
             'file_name' => $metadata->fileName,
             'file_size' => $metadata->fileSize,
             'mime_type' => $metadata->mimeType,
@@ -62,6 +63,7 @@ class DatabaseTracker implements UploadTracker
 
         return UploadMetadata::fromArray([
             'upload_id' => $upload->upload_id,
+            'batch_id' => $upload->batch_id,
             'file_name' => $upload->file_name,
             'file_size' => $upload->file_size,
             'mime_type' => $upload->mime_type,

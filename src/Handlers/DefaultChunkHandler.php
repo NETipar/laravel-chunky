@@ -2,6 +2,7 @@
 
 namespace NETipar\Chunky\Handlers;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Contracts\ChunkHandler;
@@ -60,7 +61,7 @@ class DefaultChunkHandler implements ChunkHandler
         return config('chunky.temp_directory')."/{$uploadId}/chunk_{$chunkIndex}";
     }
 
-    private function disk(): \Illuminate\Contracts\Filesystem\Filesystem
+    private function disk(): Filesystem
     {
         return Storage::disk(config('chunky.disk'));
     }

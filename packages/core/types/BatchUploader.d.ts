@@ -27,7 +27,6 @@ export declare class BatchUploader {
     private getHeaders;
     private fetchJson;
     upload(files: File[], metadata?: Record<string, unknown>): Promise<BatchResult>;
-    private uploadSingle;
     private uploadFileInBatch;
     private emitProgress;
     cancel(): void;

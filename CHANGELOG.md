@@ -2,6 +2,19 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.9.0 - 2026-04-02
+
+### Changed
+- **`BatchUploader` always creates a batch**, even for single files — no more special-case single-file path
+- Removed `uploadSingle()` internal method — 1 file = batch of 1
+- Consistent behavior: every upload gets a `batchId`, every upload fires `BatchCompleted`
+
+### Why
+The frontend shouldn't need to decide upfront whether it's a single or multi-file upload. With this change, `useBatchUpload` is the single entry point for all uploads. The only overhead for a single file is one extra HTTP request (batch initiation).
+
+### npm packages
+- All packages bumped to v0.9.0 (core, vue3, react, alpine synchronized)
+
 ## v0.8.0 - 2026-04-01
 
 ### Added — Backend

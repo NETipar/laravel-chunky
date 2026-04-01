@@ -414,7 +414,7 @@ batch.destroy();
 5. When each file's assembly completes, the batch counter increments atomically
 6. When all files are done, `BatchCompleted` (or `BatchPartiallyCompleted`) event fires
 
-Single file passed to `BatchUploader` skips batch creation and uses regular `ChunkUploader` directly.
+Every upload creates a batch — even a single file becomes a batch of 1. This ensures consistent behavior: every upload gets a `batchId` and fires `BatchCompleted`. `useBatchUpload` is the single entry point for all uploads.
 
 **Failure policy**: Lenient -- if a file fails, other files continue. The batch ends with `PartiallyCompleted` status.
 

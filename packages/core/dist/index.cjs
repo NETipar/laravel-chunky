@@ -461,9 +461,6 @@ var BatchUploader = class {
     if (this.isUploading) {
       throw new Error("Batch upload already in progress.");
     }
-    if (files.length === 1) {
-      return this.uploadSingle(files[0], metadata);
-    }
     this.abortController = new AbortController();
     this.totalFiles = files.length;
     this.completedFiles = 0;
@@ -541,59 +538,6 @@ var BatchUploader = class {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Batch upload failed";
       this.error = message;
-      this.emitStateChange();
-      const uploadError = {
-        uploadId: null,
-        message,
-        cause: err
-      };
-      this.emit("error", uploadError);
-      throw err;
-    } finally {
-      this.isUploading = false;
-      this.emitStateChange();
-    }
-  }
-  async uploadSingle(file, metadata) {
-    this.totalFiles = 1;
-    this.completedFiles = 0;
-    this.failedFiles = 0;
-    this.progress = 0;
-    this.isUploading = true;
-    this.isComplete = false;
-    this.error = null;
-    this.currentFileName = file.name;
-    this.results = [];
-    this.emitStateChange();
-    const uploader = new ChunkUploader(this.options, this.scope);
-    this.uploaders = [uploader];
-    uploader.on("progress", (event) => {
-      this.progress = event.percentage;
-      this.emitStateChange();
-      this.emitProgress();
-    });
-    try {
-      const result = await uploader.upload(file, metadata);
-      this.completedFiles = 1;
-      this.isComplete = true;
-      this.progress = 100;
-      this.currentFileName = null;
-      this.results = [result];
-      this.emitStateChange();
-      this.emit("fileComplete", result);
-      const batchResult = {
-        batchId: result.uploadId,
-        totalFiles: 1,
-        completedFiles: 1,
-        failedFiles: 0,
-        files: [result]
-      };
-      this.emit("complete", batchResult);
-      return batchResult;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
-      this.error = message;
-      this.failedFiles = 1;
       this.emitStateChange();
       const uploadError = {
         uploadId: null,

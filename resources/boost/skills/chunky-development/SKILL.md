@@ -680,7 +680,7 @@ batch.destroy();
 
 - `maxConcurrentFiles` (default: 2) controls how many files upload in parallel
 - Each file still uses its own `ChunkUploader` with `maxConcurrent` for chunk parallelism
-- Single file passed to `BatchUploader` skips batch creation, uses regular `ChunkUploader`
+- Every upload creates a batch (even 1 file = batch of 1) for consistent `batchId` and `BatchCompleted` events
 - **Failure policy**: Lenient -- failed files don't block others, batch ends as `PartiallyCompleted`
 - Batch expires after `chunky.expiration` minutes (default: 24h)
 - `AssembleFileJob::failed()` marks individual uploads as `Failed` and updates batch counters

@@ -45,4 +45,13 @@ return [
 
     // Automatic cleanup
     'auto_cleanup' => true,
+
+    // Broadcasting (Laravel Echo / WebSocket)
+    // Enable to broadcast UploadCompleted, BatchCompleted, BatchPartiallyCompleted
+    // via private channels. Requires Laravel broadcasting to be configured.
+    'broadcasting' => [
+        'enabled' => env('CHUNKY_BROADCASTING', false),
+        'channel_prefix' => 'chunky',
+        'queue' => null,
+    ],
 ];

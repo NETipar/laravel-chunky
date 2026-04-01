@@ -20,11 +20,13 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core3.createDefaults,
-  getDefaults: () => import_chunky_core3.getDefaults,
-  setDefaults: () => import_chunky_core3.setDefaults,
+  createDefaults: () => import_chunky_core4.createDefaults,
+  getDefaults: () => import_chunky_core4.getDefaults,
+  setDefaults: () => import_chunky_core4.setDefaults,
+  useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
-  useChunkUpload: () => useChunkUpload
+  useChunkUpload: () => useChunkUpload,
+  useUploadEcho: () => useUploadEcho
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -128,6 +130,36 @@ function useBatchUpload(options = {}) {
   };
 }
 
-// src/index.ts
+// src/useChunkyEcho.ts
+var import_vue3 = require("vue");
 var import_chunky_core3 = require("@netipar/chunky-core");
+function useUploadEcho(echo, uploadId, callback, channelPrefix) {
+  let cleanup = null;
+  (0, import_vue3.watch)(uploadId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = (0, import_chunky_core3.listenForUploadComplete)(echo, id, callback, channelPrefix);
+    }
+  }, { immediate: true });
+  if ((0, import_vue3.getCurrentInstance)()) {
+    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  }
+}
+function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
+  let cleanup = null;
+  (0, import_vue3.watch)(batchId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = (0, import_chunky_core3.listenForBatchComplete)(echo, id, callbacks, channelPrefix);
+    }
+  }, { immediate: true });
+  if ((0, import_vue3.getCurrentInstance)()) {
+    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  }
+}
+
+// src/index.ts
+var import_chunky_core4 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

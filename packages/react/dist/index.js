@@ -161,13 +161,35 @@ function useBatchUpload(options = {}) {
   };
 }
 
+// src/useChunkyEcho.ts
+import { useEffect as useEffect3 } from "react";
+import { listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+function useUploadEcho(echo, uploadId, callback, channelPrefix) {
+  useEffect3(() => {
+    if (!uploadId) {
+      return;
+    }
+    return listenForUploadComplete(echo, uploadId, callback, channelPrefix);
+  }, [uploadId]);
+}
+function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
+  useEffect3(() => {
+    if (!batchId) {
+      return;
+    }
+    return listenForBatchComplete(echo, batchId, callbacks, channelPrefix);
+  }, [batchId]);
+}
+
 // src/index.ts
 import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
   setDefaults,
+  useBatchEcho,
   useBatchUpload,
-  useChunkUpload
+  useChunkUpload,
+  useUploadEcho
 };
 //# sourceMappingURL=index.js.map

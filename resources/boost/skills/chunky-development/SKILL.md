@@ -1,6 +1,6 @@
 ---
 name: chunky-development
-description: Build and integrate chunk-based file upload features using the netipar/laravel-chunky package, including upload initiation, chunk handling, pause/resume, batch uploads, context-based validation, save callbacks, event listeners, DTOs, and frontend integration with Vue 3, React, Alpine.js, or Livewire.
+description: Build and integrate chunk-based file upload features using the netipar/laravel-chunky package, including upload initiation, chunk handling, pause/resume, batch uploads, context-based validation, save callbacks, event listeners, DTOs, Laravel Echo broadcasting, and frontend integration with Vue 3, React, Alpine.js, or Livewire.
 ---
 
 # Chunky File Upload Integration Development
@@ -13,6 +13,7 @@ Use this skill when:
 - Uploading multiple files as a batch with completion tracking
 - Registering upload contexts with validation rules and save callbacks
 - Listening for upload events (initiated, chunk uploaded, assembled, completed, batch completed)
+- Setting up real-time broadcasting with Laravel Echo (Reverb, Pusher, etc.)
 - Integrating the frontend upload UI with Vue 3, React, Alpine.js, or Livewire
 - Configuring chunk size, storage disk, tracker driver, or route middleware
 - Querying upload or batch status
@@ -697,6 +698,98 @@ batch.destroy();
 | `completed_at` | timestamp | When batch completed |
 | `expires_at` | timestamp | When batch expires |
 
+## Broadcasting (Laravel Echo)
+
+Real-time notifications when uploads/batches complete. Disabled by default.
+
+### Enable
+
+```
+CHUNKY_BROADCASTING=true
+```
+
+Config options in `config/chunky.php`:
+
+```php
+'broadcasting' => [
+    'enabled' => env('CHUNKY_BROADCASTING', false),
+    'channel_prefix' => 'chunky',  // private channel prefix
+    'queue' => null,                // broadcast queue (null = default)
+],
+```
+
+### Broadcastable events
+
+| Event | Channel | Payload |
+|-------|---------|---------|
+| `UploadCompleted` | `{prefix}.uploads.{uploadId}` | `uploadId`, `finalPath`, `disk`, `fileName`, `fileSize`, `context`, `status` |
+| `BatchCompleted` | `{prefix}.batches.{batchId}` | `batchId`, `totalFiles` |
+| `BatchPartiallyCompleted` | `{prefix}.batches.{batchId}` | `batchId`, `completedFiles`, `failedFiles`, `totalFiles` |
+
+All use `broadcastWhen()` — zero overhead when broadcasting is disabled. Compatible with Reverb, Pusher, Ably, soketi.
+
+### Channel authorization
+
+The package does NOT register channel authorization. The user must define it in `routes/channels.php`:
+
+```php
+Broadcast::channel('chunky.uploads.{uploadId}', function ($user, $uploadId) {
+    return true; // or verify user owns the upload
+});
+
+Broadcast::channel('chunky.batches.{batchId}', function ($user, $batchId) {
+    return true;
+});
+```
+
+### Frontend: Vue 3
+
+```vue
+<script setup>
+import { useChunkUpload, useUploadEcho } from '@netipar/chunky-vue3';
+
+const echo = inject('echo');
+const { upload, uploadId } = useChunkUpload();
+
+useUploadEcho(echo, uploadId, (data) => {
+    console.log('Upload ready:', data.fileName);
+});
+</script>
+```
+
+### Frontend: React
+
+```tsx
+import { useChunkUpload, useUploadEcho } from '@netipar/chunky-react';
+
+function FileUpload({ echo }) {
+    const { upload, uploadId } = useChunkUpload();
+    useUploadEcho(echo, uploadId, (data) => console.log('Ready:', data.fileName));
+}
+```
+
+### Frontend: Core
+
+```typescript
+import { listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
+
+const unsub = listenForUploadComplete(echo, uploadId, (data) => { ... });
+unsub(); // cleanup
+
+const unsub2 = listenForBatchComplete(echo, batchId, {
+    onComplete: (data) => { ... },
+    onPartiallyCompleted: (data) => { ... },
+});
+```
+
+### Echo type interfaces
+
+```typescript
+import type { EchoInstance, UploadCompletedData, BatchCompletedData, BatchPartiallyCompletedData } from '@netipar/chunky-core';
+```
+
+`EchoInstance` matches Laravel Echo's `private()` → `listen()` / `stopListening()` API.
+
 ## Programmatic backend usage
 
 ```php
@@ -756,6 +849,9 @@ Full `config/chunky.php`:
 | `routes.middleware` | `['api']` | Route middleware |
 | `verify_integrity` | `true` | SHA-256 checksum verification |
 | `auto_cleanup` | `true` | Auto-cleanup expired uploads |
+| `broadcasting.enabled` | `false` | Enable WebSocket broadcasting |
+| `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
+| `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
 
 ### Common configurations
 

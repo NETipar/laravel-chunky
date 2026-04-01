@@ -98,13 +98,45 @@ function useBatchUpload(options = {}) {
   };
 }
 
+// src/useChunkyEcho.ts
+import { watch, onBeforeUnmount as onBeforeUnmount3, getCurrentInstance as getCurrentInstance3 } from "vue";
+import { listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+function useUploadEcho(echo, uploadId, callback, channelPrefix) {
+  let cleanup = null;
+  watch(uploadId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = listenForUploadComplete(echo, id, callback, channelPrefix);
+    }
+  }, { immediate: true });
+  if (getCurrentInstance3()) {
+    onBeforeUnmount3(() => cleanup?.());
+  }
+}
+function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
+  let cleanup = null;
+  watch(batchId, (id) => {
+    cleanup?.();
+    cleanup = null;
+    if (id) {
+      cleanup = listenForBatchComplete(echo, id, callbacks, channelPrefix);
+    }
+  }, { immediate: true });
+  if (getCurrentInstance3()) {
+    onBeforeUnmount3(() => cleanup?.());
+  }
+}
+
 // src/index.ts
 import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
   setDefaults,
+  useBatchEcho,
   useBatchUpload,
-  useChunkUpload
+  useChunkUpload,
+  useUploadEcho
 };
 //# sourceMappingURL=index.js.map

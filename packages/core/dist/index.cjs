@@ -24,6 +24,8 @@ __export(src_exports, {
   ChunkUploader: () => ChunkUploader,
   createDefaults: () => createDefaults,
   getDefaults: () => getDefaults,
+  listenForBatchComplete: () => listenForBatchComplete,
+  listenForUploadComplete: () => listenForUploadComplete,
   setDefaults: () => setDefaults
 });
 module.exports = __toCommonJS(src_exports);
@@ -660,4 +662,26 @@ var BatchUploader = class {
     this.uploaders = [];
   }
 };
+
+// src/echo.ts
+function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
+  channel.listen(".UploadCompleted", callback);
+  return () => {
+    channel.stopListening(".UploadCompleted");
+  };
+}
+function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.batches.${batchId}`);
+  if (callbacks.onComplete) {
+    channel.listen(".BatchCompleted", callbacks.onComplete);
+  }
+  if (callbacks.onPartiallyCompleted) {
+    channel.listen(".BatchPartiallyCompleted", callbacks.onPartiallyCompleted);
+  }
+  return () => {
+    channel.stopListening(".BatchCompleted");
+    channel.stopListening(".BatchPartiallyCompleted");
+  };
+}
 //# sourceMappingURL=index.cjs.map

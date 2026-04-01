@@ -2,11 +2,13 @@
 
 namespace NETipar\Chunky\Events;
 
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use NETipar\Chunky\Data\UploadMetadata;
 
-class UploadCompleted
+class UploadCompleted implements ShouldBroadcast
 {
     use Dispatchable, SerializesModels;
 
@@ -26,5 +28,46 @@ class UploadCompleted
         $this->finalPath = $upload->finalPath ?? '';
         $this->disk = $upload->disk;
         $this->metadata = $upload->metadata ?: null;
+    }
+
+    /**
+     * @return array<int, PrivateChannel>
+     */
+    public function broadcastOn(): array
+    {
+        $prefix = config('chunky.broadcasting.channel_prefix', 'chunky');
+
+        return [new PrivateChannel("{$prefix}.uploads.{$this->uploadId}")];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'UploadCompleted';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [
+            'uploadId' => $this->uploadId,
+            'finalPath' => $this->finalPath,
+            'disk' => $this->disk,
+            'fileName' => $this->upload->fileName,
+            'fileSize' => $this->upload->fileSize,
+            'context' => $this->upload->context,
+            'status' => $this->upload->status->value,
+        ];
+    }
+
+    public function broadcastQueue(): ?string
+    {
+        return config('chunky.broadcasting.queue');
+    }
+
+    public function broadcastWhen(): bool
+    {
+        return config('chunky.broadcasting.enabled', false);
     }
 }

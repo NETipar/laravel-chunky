@@ -1,5 +1,6 @@
 export { ChunkUploader } from './ChunkUploader';
 export { BatchUploader } from './BatchUploader';
+export { listenForUploadComplete, listenForBatchComplete } from './echo';
 export { setDefaults, getDefaults, createDefaults } from './config';
 export type { DefaultsScope } from './config';
 export type {
@@ -21,3 +22,10 @@ export type {
     BatchUploaderState,
     BatchUploaderEventMap,
 } from './types';
+export type {
+    EchoInstance,
+    EchoChannel,
+    UploadCompletedData,
+    BatchCompletedData,
+    BatchPartiallyCompletedData,
+} from './echo';

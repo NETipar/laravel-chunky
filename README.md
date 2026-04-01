@@ -595,6 +595,87 @@ class ProcessUploadedFile
 | `BatchCompleted` | batchId, totalFiles | All batch files completed |
 | `BatchPartiallyCompleted` | batchId, completedFiles, failedFiles, totalFiles | Batch done with failures |
 
+## Broadcasting (Laravel Echo)
+
+Get real-time notifications when uploads or batches complete. Broadcasting is **disabled by default** -- enable it in your `.env`:
+
+```
+CHUNKY_BROADCASTING=true
+```
+
+Three events are broadcastable: `UploadCompleted`, `BatchCompleted`, `BatchPartiallyCompleted`. They use private channels and require channel authorization in your `routes/channels.php`:
+
+```php
+use Illuminate\Support\Facades\Broadcast;
+
+Broadcast::channel('chunky.uploads.{uploadId}', function ($user, $uploadId) {
+    // Verify the user owns this upload
+    return true;
+});
+
+Broadcast::channel('chunky.batches.{batchId}', function ($user, $batchId) {
+    return true;
+});
+```
+
+### Vue 3
+
+```vue
+<script setup>
+import { useChunkUpload, useUploadEcho } from '@netipar/chunky-vue3';
+
+const echo = inject('echo');
+const { upload, uploadId } = useChunkUpload();
+
+useUploadEcho(echo, uploadId, (data) => {
+    console.log('Upload ready:', data.fileName);
+});
+</script>
+```
+
+### React
+
+```tsx
+import { useChunkUpload, useUploadEcho } from '@netipar/chunky-react';
+
+function FileUpload({ echo }) {
+    const { upload, uploadId } = useChunkUpload();
+
+    useUploadEcho(echo, uploadId, (data) => {
+        console.log('Upload ready:', data.fileName);
+    });
+
+    // ...
+}
+```
+
+### Batch Echo
+
+```typescript
+// Vue 3
+import { useBatchUpload, useBatchEcho } from '@netipar/chunky-vue3';
+
+const { upload, batchId } = useBatchUpload();
+
+useBatchEcho(echo, batchId, {
+    onComplete: (data) => console.log(`All ${data.totalFiles} files ready`),
+    onPartiallyCompleted: (data) => console.log(`${data.failedFiles} files failed`),
+});
+```
+
+### Core (Framework-agnostic)
+
+```typescript
+import { listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
+
+const unsubscribe = listenForUploadComplete(echo, uploadId, (data) => {
+    console.log('Ready:', data.fileName);
+});
+
+// Cleanup when done
+unsubscribe();
+```
+
 ## Using the Facade
 
 ```php
@@ -652,6 +733,9 @@ Full `config/chunky.php`:
 | `routes.middleware` | `['api']` | Route middleware |
 | `verify_integrity` | `true` | SHA-256 checksum verification |
 | `auto_cleanup` | `true` | Auto-cleanup expired uploads |
+| `broadcasting.enabled` | `false` | Enable WebSocket broadcasting |
+| `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
+| `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
 
 ## Tracking Drivers
 

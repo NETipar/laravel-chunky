@@ -630,11 +630,35 @@ var BatchUploader = class {
     this.uploaders = [];
   }
 };
+
+// src/echo.ts
+function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
+  channel.listen(".UploadCompleted", callback);
+  return () => {
+    channel.stopListening(".UploadCompleted");
+  };
+}
+function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.batches.${batchId}`);
+  if (callbacks.onComplete) {
+    channel.listen(".BatchCompleted", callbacks.onComplete);
+  }
+  if (callbacks.onPartiallyCompleted) {
+    channel.listen(".BatchPartiallyCompleted", callbacks.onPartiallyCompleted);
+  }
+  return () => {
+    channel.stopListening(".BatchCompleted");
+    channel.stopListening(".BatchPartiallyCompleted");
+  };
+}
 export {
   BatchUploader,
   ChunkUploader,
   createDefaults,
   getDefaults,
+  listenForBatchComplete,
+  listenForUploadComplete,
   setDefaults
 };
 //# sourceMappingURL=index.js.map

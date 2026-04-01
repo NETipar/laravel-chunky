@@ -20,11 +20,13 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core3.createDefaults,
-  getDefaults: () => import_chunky_core3.getDefaults,
-  setDefaults: () => import_chunky_core3.setDefaults,
+  createDefaults: () => import_chunky_core4.createDefaults,
+  getDefaults: () => import_chunky_core4.getDefaults,
+  setDefaults: () => import_chunky_core4.setDefaults,
+  useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
-  useChunkUpload: () => useChunkUpload
+  useChunkUpload: () => useChunkUpload,
+  useUploadEcho: () => useUploadEcho
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -191,6 +193,26 @@ function useBatchUpload(options = {}) {
   };
 }
 
-// src/index.ts
+// src/useChunkyEcho.ts
+var import_react3 = require("react");
 var import_chunky_core3 = require("@netipar/chunky-core");
+function useUploadEcho(echo, uploadId, callback, channelPrefix) {
+  (0, import_react3.useEffect)(() => {
+    if (!uploadId) {
+      return;
+    }
+    return (0, import_chunky_core3.listenForUploadComplete)(echo, uploadId, callback, channelPrefix);
+  }, [uploadId]);
+}
+function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
+  (0, import_react3.useEffect)(() => {
+    if (!batchId) {
+      return;
+    }
+    return (0, import_chunky_core3.listenForBatchComplete)(echo, batchId, callbacks, channelPrefix);
+  }, [batchId]);
+}
+
+// src/index.ts
+var import_chunky_core4 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

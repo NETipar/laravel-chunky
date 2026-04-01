@@ -2,6 +2,25 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.7.0 - 2026-04-01
+
+### Added — Broadcasting
+- **Laravel Echo / Broadcasting support**: optional real-time notifications via private WebSocket channels
+- `UploadCompleted`, `BatchCompleted`, `BatchPartiallyCompleted` implement `ShouldBroadcast`
+- `broadcastWhen()` guard: zero overhead when broadcasting is disabled (default)
+- Configurable channel prefix (`chunky.broadcasting.channel_prefix`) and broadcast queue
+- Private channels: `{prefix}.uploads.{uploadId}`, `{prefix}.batches.{batchId}`
+- `config/chunky.php` new `broadcasting` section (`enabled`, `channel_prefix`, `queue`)
+
+### Added — Frontend
+- Echo helpers: `listenForUploadComplete()`, `listenForBatchComplete()` with typed interfaces
+- Vue 3 composables: `useUploadEcho()`, `useBatchEcho()` with auto-cleanup
+- React hooks: `useUploadEcho()`, `useBatchEcho()` with useEffect cleanup
+- Typed `EchoInstance`, `EchoChannel`, `UploadCompletedData`, `BatchCompletedData`, `BatchPartiallyCompletedData` interfaces
+
+### npm packages
+- All packages bumped to v0.7.0 (core, vue3, react, alpine synchronized)
+
 ## v0.6.0 - 2026-04-01
 
 ### Added — Backend

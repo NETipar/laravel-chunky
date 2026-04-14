@@ -13,6 +13,7 @@ use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
+use NETipar\Chunky\Events\UploadFailed;
 
 class AssembleFileJob implements ShouldQueue
 {
@@ -48,14 +49,27 @@ class AssembleFileJob implements ShouldQueue
 
         $handler->cleanup($this->uploadId);
 
-        $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
-
         $completedMetadata = $metadata->withStatus(UploadStatus::Completed, $finalPath);
 
         if ($metadata->context) {
             $saveCallback = $manager->getContextSaveCallback($metadata->context);
-            $saveCallback?->__invoke($completedMetadata);
+
+            try {
+                $saveCallback?->__invoke($completedMetadata);
+            } catch (\Throwable $e) {
+                $tracker->updateStatus($this->uploadId, UploadStatus::Failed);
+
+                UploadFailed::dispatch($completedMetadata, $e->getMessage());
+
+                if ($completedMetadata->batchId) {
+                    $manager->markBatchUploadFailed($completedMetadata->batchId);
+                }
+
+                throw $e;
+            }
         }
+
+        $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
 
         UploadCompleted::dispatch($completedMetadata);
 
@@ -69,7 +83,15 @@ class AssembleFileJob implements ShouldQueue
         $tracker = app(UploadTracker::class);
         $metadata = $tracker->getMetadata($this->uploadId);
 
+        if ($metadata?->status === UploadStatus::Failed) {
+            return;
+        }
+
         $tracker->updateStatus($this->uploadId, UploadStatus::Failed);
+
+        if ($metadata) {
+            UploadFailed::dispatch($metadata->withStatus(UploadStatus::Failed), $e->getMessage());
+        }
 
         if ($metadata?->batchId) {
             $manager = app(ChunkyManager::class);

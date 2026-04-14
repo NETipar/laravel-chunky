@@ -2,7 +2,7 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
-## v0.9.1 - 2026-04-14
+## v0.9.2 - 2026-04-14
 
 ### Fixed
 - `AssembleFileJob` no longer marks an upload as `Completed` before the context save callback runs — if the callback throws, the upload is now correctly marked `Failed` and its batch failure counter is incremented

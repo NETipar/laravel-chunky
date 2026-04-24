@@ -2,6 +2,7 @@
 
 namespace NETipar\Chunky\Trackers;
 
+use Illuminate\Support\Facades\DB;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
@@ -33,8 +34,23 @@ class DatabaseTracker implements UploadTracker
 
     public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): void
     {
-        $upload = $this->findOrFail($uploadId);
-        $upload->markChunkUploaded($chunkIndex, $checksum);
+        DB::transaction(function () use ($uploadId, $chunkIndex, $checksum): void {
+            $upload = ChunkedUpload::where('upload_id', $uploadId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $upload) {
+                throw new ChunkyException("Upload {$uploadId} not found.");
+            }
+
+            if ($upload->isExpired()) {
+                $upload->update(['status' => UploadStatus::Expired]);
+
+                throw UploadExpiredException::forUpload($uploadId);
+            }
+
+            $upload->markChunkUploaded($chunkIndex, $checksum);
+        });
     }
 
     /**

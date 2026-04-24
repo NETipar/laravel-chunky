@@ -2,6 +2,14 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.9.3 - 2026-04-24
+
+### Fixed
+- **Race condition in `DatabaseTracker::markChunkUploaded()` — concurrent chunk uploads lost writes.** The previous implementation read `uploaded_chunks` from the model, mutated the PHP array in memory, and wrote it back with `update()` — a classic read-modify-write without locking. With the default client-side concurrency of 3 parallel chunk requests, two workers would read the same pre-state, both append their own index, and the second `update()` would clobber the first. Symptom: a file with N chunks would end up stuck at `is_complete: false` with fewer than N indices in `uploaded_chunks`, and the `BatchCompleted` broadcast never fired. Fix wraps the read-mutate-write in `DB::transaction()` + `lockForUpdate()`, so the row is locked for the duration of the update and writes serialize correctly. Works on MySQL, Postgres, and SQLite (SQLite serializes the transaction at the BEGIN level; set `busy_timeout` and `journal_mode=WAL` on the connection if you see `database is locked` errors under load).
+
+### Tests
+- `DatabaseTrackerTest` covers the transactional path and asserts that `markChunkUploaded` opens a DB transaction.
+
 ## v0.9.2 - 2026-04-14
 
 ### Fixed

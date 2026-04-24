@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Exceptions\ChunkyException;
@@ -138,3 +139,42 @@ it('throws exception for expired upload', function () {
 
     $tracker->markChunkUploaded('test-upload', 0);
 })->throws(UploadExpiredException::class);
+
+it('wraps markChunkUploaded in a database transaction to prevent racing writes', function () {
+    $tracker = createTracker();
+    $tracker->initiate('test-upload', createMetadata());
+
+    $transactionBegan = false;
+    DB::listen(function ($query) use (&$transactionBegan): void {
+        if (str_contains(strtolower($query->sql), 'for update')) {
+            $transactionBegan = true;
+        }
+    });
+    DB::beforeExecuting(function ($query) use (&$transactionBegan): void {
+        if (str_contains(strtolower($query), 'for update')) {
+            $transactionBegan = true;
+        }
+    });
+
+    DB::connection()->beforeStartingTransaction(function () use (&$transactionBegan): void {
+        $transactionBegan = true;
+    });
+
+    $tracker->markChunkUploaded('test-upload', 0);
+
+    expect($transactionBegan)
+        ->toBeTrue('markChunkUploaded must begin a transaction to atomically read-modify-write uploaded_chunks');
+});
+
+it('persists every chunk index when markChunkUploaded is called repeatedly with the same uploadId', function () {
+    $tracker = createTracker();
+    $tracker->initiate('test-upload', createMetadata(totalChunks: 4));
+
+    $tracker->markChunkUploaded('test-upload', 0);
+    $tracker->markChunkUploaded('test-upload', 1);
+    $tracker->markChunkUploaded('test-upload', 2);
+    $tracker->markChunkUploaded('test-upload', 3);
+
+    expect($tracker->getUploadedChunks('test-upload'))->toBe([0, 1, 2, 3]);
+    expect($tracker->isComplete('test-upload'))->toBeTrue();
+});

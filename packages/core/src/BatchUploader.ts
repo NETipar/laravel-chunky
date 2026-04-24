@@ -268,21 +268,21 @@ export class BatchUploader {
         this.uploaders.push(uploader);
 
         uploader.on('progress', () => {
-            this.emitProgress();
+            this.emitProgress(uploader);
         });
 
         return uploader.upload(file, metadata);
     }
 
-    private emitProgress(): void {
+    private emitProgress(uploader?: ChunkUploader): void {
         this.emit('progress', {
             batchId: this.batchId ?? '',
             completedFiles: this.completedFiles,
             totalFiles: this.totalFiles,
             failedFiles: this.failedFiles,
             percentage: this.progress,
-            currentFile: this.currentFileName
-                ? { name: this.currentFileName, progress: this.progress }
+            currentFile: uploader?.currentFile
+                ? { name: uploader.currentFile.name, progress: uploader.progress }
                 : null,
         });
     }

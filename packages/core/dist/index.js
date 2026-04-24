@@ -532,18 +532,18 @@ var BatchUploader = class {
     );
     this.uploaders.push(uploader);
     uploader.on("progress", () => {
-      this.emitProgress();
+      this.emitProgress(uploader);
     });
     return uploader.upload(file, metadata);
   }
-  emitProgress() {
+  emitProgress(uploader) {
     this.emit("progress", {
       batchId: this.batchId ?? "",
       completedFiles: this.completedFiles,
       totalFiles: this.totalFiles,
       failedFiles: this.failedFiles,
       percentage: this.progress,
-      currentFile: this.currentFileName ? { name: this.currentFileName, progress: this.progress } : null
+      currentFile: uploader?.currentFile ? { name: uploader.currentFile.name, progress: uploader.progress } : null
     });
   }
   cancel() {

@@ -2,6 +2,14 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.9.4 - 2026-04-24
+
+### Fixed
+- **`BatchProgressEvent.currentFile.progress` was stuck at 0% until a file finished uploading.** `BatchUploader.emitProgress()` populated `currentFile.progress` from `this.progress`, which is the batch-level percentage — that value only advances when a whole file completes. So every chunk-progress tick emitted an event claiming the in-flight file was at 0% until the final chunk flipped it to 100%. Frontends that bind a per-file progress bar to `currentFile.progress` (including the Alpine and Vue composables shipped with this package) showed a frozen 0% bar for the entire duration of each upload. Fix plumbs the active `ChunkUploader` through to `emitProgress(uploader)` so `currentFile` carries the uploader's real per-file `progress` and `currentFile.name`. The post-file-completion `emitProgress()` call inside the worker loop now emits `currentFile: null` (instead of the stale previous filename with a bogus `progress: 0`), which also prevents a 100% → 0% UI flash between files in concurrent batches.
+
+### npm packages
+- All packages bumped to v0.9.4 (core carries the fix; vue3 / react / alpine re-published for version-sync consistency, no source changes there).
+
 ## v0.9.3 - 2026-04-24
 
 ### Fixed

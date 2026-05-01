@@ -19,6 +19,16 @@ class AssembleFileJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * Allow the queue to retry the assembly if a worker crashed mid-job. The
+     * tracker's `claimForAssembly()` is now able to take over a stale claim
+     * (status is Assembling but the row hasn't been touched in a while), so
+     * a retry actually makes progress instead of hitting the CAS guard.
+     */
+    public int $tries = 3;
+
+    public int $backoff = 30;
+
     public function __construct(
         public readonly string $uploadId,
     ) {}
@@ -28,6 +38,13 @@ class AssembleFileJob implements ShouldQueue
         $metadata = $tracker->getMetadata($this->uploadId);
 
         if (! $metadata) {
+            return;
+        }
+
+        // Skip the work entirely if the upload already reached a terminal
+        // state — covers the case where the worker died after updateStatus()
+        // but before dispatching follow-up events, and the queue retries us.
+        if (in_array($metadata->status, [UploadStatus::Completed, UploadStatus::Failed, UploadStatus::Cancelled, UploadStatus::Expired], true)) {
             return;
         }
 
@@ -49,8 +66,6 @@ class AssembleFileJob implements ShouldQueue
             $metadata->fileSize,
         );
 
-        $handler->cleanup($this->uploadId);
-
         $completedMetadata = $metadata->withStatus(UploadStatus::Completed, $finalPath);
 
         if ($metadata->context) {
@@ -60,6 +75,7 @@ class AssembleFileJob implements ShouldQueue
                 $saveCallback?->__invoke($completedMetadata);
             } catch (\Throwable $e) {
                 $tracker->updateStatus($this->uploadId, UploadStatus::Failed);
+                $handler->cleanup($this->uploadId);
 
                 UploadFailed::dispatch($completedMetadata, $e->getMessage());
 
@@ -73,6 +89,11 @@ class AssembleFileJob implements ShouldQueue
 
         $tracker->updateStatus($this->uploadId, UploadStatus::Completed, $finalPath);
 
+        // Clean up only after the upload is in a terminal Completed state, so
+        // a save-callback failure or worker crash mid-flight doesn't leave us
+        // with no chunks AND no completed file — letting a retry recover.
+        $handler->cleanup($this->uploadId);
+
         UploadCompleted::dispatch($completedMetadata);
 
         if ($completedMetadata->batchId) {
@@ -85,7 +106,16 @@ class AssembleFileJob implements ShouldQueue
         $tracker = app(UploadTracker::class);
         $metadata = $tracker->getMetadata($this->uploadId);
 
-        if ($metadata?->status === UploadStatus::Failed) {
+        // If the upload already settled into ANY terminal state, leave it
+        // alone. In particular, refusing to flip Completed → Failed prevents
+        // a queue retry of an already-successful handle() (see the in-handle
+        // crash window) from confusing the frontend with a UploadFailed
+        // event after a UploadCompleted has already gone out.
+        if ($metadata !== null && in_array(
+            $metadata->status,
+            [UploadStatus::Completed, UploadStatus::Failed, UploadStatus::Cancelled, UploadStatus::Expired],
+            true,
+        )) {
             return;
         }
 

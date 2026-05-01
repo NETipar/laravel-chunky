@@ -34,7 +34,7 @@ class DatabaseTracker implements UploadTracker
 
     public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
     {
-        return DB::transaction(function () use ($uploadId, $chunkIndex, $checksum): UploadMetadata {
+        return DB::transaction(function () use ($uploadId, $chunkIndex): UploadMetadata {
             $upload = ChunkedUpload::where('upload_id', $uploadId)
                 ->lockForUpdate()
                 ->first();
@@ -49,7 +49,17 @@ class DatabaseTracker implements UploadTracker
                 throw UploadExpiredException::forUpload($uploadId);
             }
 
-            $upload->markChunkUploaded($chunkIndex, $checksum);
+            // Reject late chunk writes against an upload that has already
+            // settled into a terminal or in-progress-elsewhere state. Without
+            // this guard a chunk POST that races a cancel/complete leaves
+            // orphan files on disk and inconsistent tracker rows.
+            if ($upload->status !== UploadStatus::Pending) {
+                throw new ChunkyException(
+                    "Upload {$uploadId} is no longer accepting chunks (status: {$upload->status->value}).",
+                );
+            }
+
+            $upload->markChunkUploaded($chunkIndex);
 
             return $this->modelToMetadata($upload->refresh());
         });
@@ -127,9 +137,25 @@ class DatabaseTracker implements UploadTracker
 
     public function claimForAssembly(string $uploadId): bool
     {
+        $staleThreshold = now()->subMinutes(
+            (int) config('chunky.assembly_stale_after_minutes', 10),
+        );
+
+        // The CAS allows two transitions:
+        //  - Pending → Assembling: the normal first claim.
+        //  - Assembling → Assembling (refreshed updated_at) when the row
+        //    hasn't been touched in `assembly_stale_after_minutes`. This
+        //    lets a retry recover an upload whose first worker died after
+        //    flipping the status but before persisting Completed.
         $updated = ChunkedUpload::where('upload_id', $uploadId)
-            ->where('status', UploadStatus::Pending)
-            ->update(['status' => UploadStatus::Assembling]);
+            ->where(function ($query) use ($staleThreshold) {
+                $query->where('status', UploadStatus::Pending)
+                    ->orWhere(function ($query) use ($staleThreshold) {
+                        $query->where('status', UploadStatus::Assembling)
+                            ->where('updated_at', '<', $staleThreshold);
+                    });
+            })
+            ->update(['status' => UploadStatus::Assembling, 'updated_at' => now()]);
 
         return $updated > 0;
     }
@@ -139,9 +165,22 @@ class DatabaseTracker implements UploadTracker
      */
     public function expiredUploadIds(): array
     {
+        $staleThreshold = now()->subMinutes(
+            (int) config('chunky.assembly_stale_after_minutes', 10),
+        );
+
+        // Skip uploads that are still actively being assembled (Assembling
+        // with a recent updated_at), but DO include stale Assembling rows
+        // so a crash mid-assembly doesn't leak forever.
         return ChunkedUpload::query()
             ->where('expires_at', '<', now())
-            ->whereNotIn('status', [UploadStatus::Assembling])
+            ->where(function ($query) use ($staleThreshold) {
+                $query->where('status', '!=', UploadStatus::Assembling)
+                    ->orWhere(function ($query) use ($staleThreshold) {
+                        $query->where('status', UploadStatus::Assembling)
+                            ->where('updated_at', '<', $staleThreshold);
+                    });
+            })
             ->pluck('upload_id')
             ->all();
     }

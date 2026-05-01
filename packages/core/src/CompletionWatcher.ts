@@ -99,6 +99,7 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
 
     let resolved = false;
     let echoCleanup: (() => void) | null = null;
+    let echoSubscribed = false;
     let pollStartTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -204,8 +205,13 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
             });
 
             if (!response.ok) {
-                if (response.status === 404) {
-                    failFatal(new Error(`Batch ${batchId} not found.`));
+                // Treat unrecoverable HTTP statuses as fatal so we don't
+                // burn requests in a 2-second loop until the wall-clock
+                // timeout. 401/403 mean the user is no longer authorised
+                // (session expired or permissions changed); 404 means the
+                // batch was forgotten / the wrong id.
+                if (response.status === 401 || response.status === 403 || response.status === 404) {
+                    failFatal(new Error(`Batch ${batchId} request failed: HTTP ${response.status}`));
                     return;
                 }
 
@@ -233,6 +239,19 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
         pollTimer = setTimeout(poll, pollIntervalMs);
     };
 
+    const startPollNow = (): void => {
+        if (pollStartTimer) {
+            clearTimeout(pollStartTimer);
+            pollStartTimer = null;
+        }
+
+        if (resolved) {
+            return;
+        }
+
+        void poll();
+    };
+
     if (echo) {
         echoCleanup = listenForBatchComplete(
             echo,
@@ -240,8 +259,27 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
             {
                 onComplete: (data) => resolveBroadcast('complete', data),
                 onPartiallyCompleted: (data) => resolveBroadcast('partial', data),
-                onSubscribed,
-                onSubscribeError,
+                onSubscribed: () => {
+                    echoSubscribed = true;
+
+                    // Echo confirmed the subscription; the broadcast event
+                    // will deliver the result, no need to also poll. Saves
+                    // one HTTP request per active wait — a real cost when
+                    // the dashboard has many watchers open.
+                    if (pollStartTimer) {
+                        clearTimeout(pollStartTimer);
+                        pollStartTimer = null;
+                    }
+
+                    onSubscribed?.();
+                },
+                onSubscribeError: (err) => {
+                    // Subscription failed — kick off polling immediately
+                    // instead of waiting for the start delay, so the user
+                    // gets a result roughly when they would have anyway.
+                    startPollNow();
+                    onSubscribeError?.(err);
+                },
             },
             channelPrefix,
         );
@@ -249,6 +287,15 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
 
     pollStartTimer = setTimeout(() => {
         pollStartTimer = null;
+
+        // If Echo got confirmed in the meantime, don't poll — the broadcast
+        // event will resolve us. (The onSubscribed handler above also
+        // clears this timer, but be defensive in case callbacks fire in an
+        // unexpected order.)
+        if (echoSubscribed) {
+            return;
+        }
+
         void poll();
     }, pollStartDelayMs);
 

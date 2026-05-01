@@ -22,6 +22,13 @@ const DEFAULT_BATCH_ENDPOINTS = {
     batchStatus: '/api/chunky/batch/{batchId}',
 };
 
+interface PendingBatch {
+    files: File[];
+    metadata?: Record<string, unknown>;
+    resolve: (result: BatchResult) => void;
+    reject: (error: unknown) => void;
+}
+
 export class BatchUploader {
     batchId: string | null = null;
     totalFiles = 0;
@@ -47,6 +54,12 @@ export class BatchUploader {
     private isPausedBatch = false;
     private resumeBarrier: Promise<void> | null = null;
     private resumeBarrierResolve: (() => void) | null = null;
+    private pendingQueue: PendingBatch[] = [];
+    // Set by `cancel()` for the duration of the current upload() call so the
+    // catch/finally branches can tell "the user cancelled" apart from "an
+    // unrelated error happened" and avoid emitting a redundant `error` event
+    // or a late `complete` after a `cancel`.
+    private cancelledThisRun = false;
 
     constructor(options: BatchUploadOptions = {}, scope?: DefaultsScope) {
         this.options = options;
@@ -151,6 +164,7 @@ export class BatchUploader {
         this.uploaders = [];
         this.lastComplete = null;
         this.lastError = null;
+        this.cancelledThisRun = false;
         this.emitStateChange();
 
         const signal = this.abortController.signal;
@@ -227,6 +241,20 @@ export class BatchUploader {
 
             await Promise.all(workers);
 
+            // If `cancel()` ran during the very last tick (after all workers
+            // resolved but before this point), don't emit `complete` —
+            // honour the cancel that already went out and surface the
+            // partial result without a sticky-cache replay.
+            if (this.cancelledThisRun || this.abortController?.signal.aborted) {
+                return {
+                    batchId: this.batchId ?? '',
+                    totalFiles: this.totalFiles,
+                    completedFiles: this.completedFiles,
+                    failedFiles: this.failedFiles,
+                    files: this.results,
+                };
+            }
+
             this.isComplete = true;
             this.currentFileName = null;
             this.progress = 100;
@@ -244,6 +272,23 @@ export class BatchUploader {
 
             return result;
         } catch (err) {
+            // Tear down any in-flight per-file uploaders so they stop
+            // POSTing chunks against a batch the caller has already given
+            // up on. Without this, `error` fires on the public surface but
+            // the network keeps churning until each ChunkUploader naturally
+            // finishes.
+            for (const uploader of this.uploaders) {
+                uploader.cancel();
+            }
+
+            // If the caller already cancelled, the `cancel` event has gone
+            // out and `error` would be redundant noise. Re-throw so the
+            // returned promise still rejects (pause/resume helpers depend
+            // on this), but skip the public `error` notification.
+            if (this.cancelledThisRun) {
+                throw err;
+            }
+
             const message = err instanceof Error ? err.message : 'Batch upload failed';
             this.error = message;
             this.emitStateChange();
@@ -259,6 +304,59 @@ export class BatchUploader {
         } finally {
             this.isUploading = false;
             this.emitStateChange();
+            this.drainQueue();
+        }
+    }
+
+    /**
+     * Queue files for upload. If no batch is currently running, this behaves
+     * exactly like `upload()`. If a batch is in progress, the files are held
+     * until the current batch completes (or fails) and then run in their own
+     * batch. The returned promise resolves with the eventual `BatchResult`.
+     *
+     * If `cancel()` or `destroy()` is invoked before the queued batch starts,
+     * the returned promise rejects with the corresponding error.
+     */
+    enqueue(files: File[], metadata?: Record<string, unknown>): Promise<BatchResult> {
+        if (!this.isUploading) {
+            return this.upload(files, metadata);
+        }
+
+        return new Promise<BatchResult>((resolve, reject) => {
+            this.pendingQueue.push({ files, metadata, resolve, reject });
+        });
+    }
+
+    private drainQueue(): void {
+        if (this.isUploading || this.pendingQueue.length === 0) {
+            return;
+        }
+
+        // Defer to a microtask so we don't recurse inside the previous
+        // upload's `finally` stack frame. Re-check state inside the microtask
+        // because `cancel()` / `destroy()` may have flushed the queue between
+        // schedule time and run time.
+        queueMicrotask(() => {
+            if (this.isUploading || this.pendingQueue.length === 0) {
+                return;
+            }
+
+            const next = this.pendingQueue.shift()!;
+
+            this.upload(next.files, next.metadata).then(next.resolve, next.reject);
+        });
+    }
+
+    private rejectPendingQueue(reason: string): void {
+        if (this.pendingQueue.length === 0) {
+            return;
+        }
+
+        const pending = this.pendingQueue.splice(0);
+        const error = new Error(reason);
+
+        for (const item of pending) {
+            item.reject(error);
         }
     }
 
@@ -335,6 +433,7 @@ export class BatchUploader {
     cancel(): void {
         const cancelledBatchId = this.batchId;
 
+        this.cancelledThisRun = true;
         this.abortController?.abort();
 
         // Release the pause barrier so any awaiting workers can observe the abort.
@@ -347,6 +446,8 @@ export class BatchUploader {
         for (const uploader of this.uploaders) {
             uploader.cancel();
         }
+
+        this.rejectPendingQueue('Batch upload cancelled before queued upload could start.');
 
         this.isUploading = false;
         this.isComplete = false;
@@ -397,6 +498,10 @@ export class BatchUploader {
     }
 
     destroy(): void {
+        // Reject queued items with the destroy reason BEFORE cancel() runs,
+        // because cancel() will otherwise empty the queue under the generic
+        // "cancelled" reason and the destroy-specific reject becomes a no-op.
+        this.rejectPendingQueue('BatchUploader destroyed before queued upload could start.');
         this.cancel();
         this.listeners.clear();
 

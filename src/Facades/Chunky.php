@@ -4,6 +4,9 @@ namespace NETipar\Chunky\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Data\BatchMetadata;
+use NETipar\Chunky\Data\ChunkUploadResult;
+use NETipar\Chunky\Data\InitiateResult;
 use NETipar\Chunky\Data\UploadMetadata;
 
 /**
@@ -13,9 +16,15 @@ use NETipar\Chunky\Data\UploadMetadata;
  * @method static array getContextRules(string $name)
  * @method static \Closure|null getContextSaveCallback(string $name)
  * @method static bool hasContext(string $name)
- * @method static array initiate(string $fileName, int $fileSize, ?string $mimeType = null, array $metadata = [], ?string $context = null)
- * @method static array uploadChunk(string $uploadId, int $chunkIndex, \Illuminate\Http\UploadedFile $chunk)
+ * @method static InitiateResult initiate(string $fileName, int $fileSize, ?string $mimeType = null, array $metadata = [], ?string $context = null)
+ * @method static ChunkUploadResult uploadChunk(string $uploadId, int $chunkIndex, \Illuminate\Http\UploadedFile $chunk)
  * @method static UploadMetadata|null status(string $uploadId)
+ * @method static bool cancel(string $uploadId)
+ * @method static BatchMetadata initiateBatch(int $totalFiles, ?string $context = null, array $metadata = [])
+ * @method static InitiateResult initiateInBatch(string $batchId, string $fileName, int $fileSize, ?string $mimeType = null, array $metadata = [], ?string $context = null)
+ * @method static BatchMetadata|null getBatchStatus(string $batchId)
+ * @method static void markBatchUploadCompleted(string $batchId)
+ * @method static void markBatchUploadFailed(string $batchId)
  *
  * @see ChunkyManager
  */

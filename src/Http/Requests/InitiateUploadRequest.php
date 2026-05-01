@@ -18,8 +18,18 @@ class InitiateUploadRequest extends FormRequest
      */
     public function rules(): array
     {
+        // file_name regex: rejects path-traversal characters (`/`, `\`, NUL,
+        // Windows reserved chars) and the `.` / `..` directory references.
+        // The handler additionally applies basename() as a defence-in-depth
+        // measure when assembling the final path.
         $rules = [
-            'file_name' => ['required', 'string', 'max:255'],
+            'file_name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[^\/\\\\\x00:*?"<>|]+$/u',
+                'not_in:.,..',
+            ],
             'file_size' => ['required', 'integer', 'min:1'],
             'mime_type' => ['nullable', 'string', 'max:255'],
             'metadata' => ['nullable', 'array'],

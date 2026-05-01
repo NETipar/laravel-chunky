@@ -241,7 +241,13 @@ export class ChunkUploader {
             return result;
         } catch (err) {
             if (this.autoRetry && retriesLeft > 0) {
-                const delay = Math.pow(2, this.maxRetries - retriesLeft) * 1000;
+                // Exponential backoff with full jitter (AWS-style). Without
+                // jitter, N parallel chunk workers retry in lockstep and
+                // hammer a struggling server in a thundering herd.
+                const baseDelay = Math.pow(2, this.maxRetries - retriesLeft) * 1000;
+                const jitter = Math.random() * 250;
+                const delay = baseDelay + jitter;
+
                 await new Promise((resolve) => setTimeout(resolve, delay));
 
                 return this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, retriesLeft - 1);
@@ -298,6 +304,21 @@ export class ChunkUploader {
         }
 
         this.abortController?.abort();
+
+        // The resume branch below assumes `this.uploadId` belongs to `file`.
+        // If the caller passes a *different* File than the one we last
+        // started uploading (common after a failure: user retries with a
+        // different file instead of cancelling first), we must NOT continue
+        // the previous server-side upload — it would assemble random bytes
+        // from the new file under the old uploadId and corrupt the result.
+        // Detect the mismatch and fall through to a fresh initiate.
+        if (this.uploadId && this.lastFile !== file) {
+            this.uploadId = null;
+            this.pendingChunks = [];
+            this.lastMetadata = undefined;
+            this.serverChunkSize = null;
+            this.totalChunks = 0;
+        }
 
         this.lastFile = file;
         this.lastMetadata = metadata;

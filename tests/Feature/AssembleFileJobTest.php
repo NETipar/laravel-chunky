@@ -132,6 +132,23 @@ it('dispatches UploadFailed and marks batch failed in failed() callback', functi
     Event::assertDispatched(UploadFailed::class, fn ($e) => $e->uploadId === 'up-4' && $e->reason === 'queue died');
 });
 
+it('does not flip Completed back to Failed when failed() runs after a successful handle()', function () {
+    seedUpload('up-6');
+
+    // Simulate a successful handle(): the upload reaches Completed status.
+    app(UploadTracker::class)->updateStatus('up-6', UploadStatus::Completed, 'final/path.bin');
+
+    // Queue retries `failed()` for some unrelated post-success reason
+    // (broker hiccup, dispatch threw after updateStatus). The status must
+    // remain Completed and no UploadFailed event must fire.
+    (new AssembleFileJob('up-6'))->failed(new RuntimeException('post-completion noise'));
+
+    $metadata = app(UploadTracker::class)->getMetadata('up-6');
+
+    expect($metadata->status)->toBe(UploadStatus::Completed);
+    Event::assertNotDispatched(UploadFailed::class);
+});
+
 it('does not double-dispatch UploadFailed when failed() runs after handle() already failed', function () {
     app(ChunkyManager::class)->context('boom', save: function () {
         throw new RuntimeException('save failed');

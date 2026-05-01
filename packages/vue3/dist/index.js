@@ -1,5 +1,5 @@
 // src/useChunkUpload.ts
-import { ref, onBeforeUnmount, getCurrentInstance } from "vue";
+import { ref, getCurrentScope, onScopeDispose } from "vue";
 import { ChunkUploader } from "@netipar/chunky-core";
 function useChunkUpload(options = {}) {
   const uploader = new ChunkUploader(options);
@@ -23,8 +23,8 @@ function useChunkUpload(options = {}) {
     totalChunks.value = state.totalChunks;
     currentFile.value = state.currentFile;
   });
-  if (getCurrentInstance()) {
-    onBeforeUnmount(() => uploader.destroy());
+  if (getCurrentScope()) {
+    onScopeDispose(() => uploader.destroy());
   }
   return {
     progress,
@@ -41,6 +41,7 @@ function useChunkUpload(options = {}) {
     resume: () => uploader.resume(),
     cancel: () => uploader.cancel(),
     retry: () => uploader.retry(),
+    destroy: () => uploader.destroy(),
     onProgress: (cb) => uploader.on("progress", cb),
     onChunkUploaded: (cb) => uploader.on("chunkUploaded", cb),
     onComplete: (cb) => uploader.on("complete", cb),
@@ -49,7 +50,7 @@ function useChunkUpload(options = {}) {
 }
 
 // src/useBatchUpload.ts
-import { ref as ref2, onBeforeUnmount as onBeforeUnmount2, getCurrentInstance as getCurrentInstance2 } from "vue";
+import { ref as ref2, getCurrentScope as getCurrentScope2, onScopeDispose as onScopeDispose2 } from "vue";
 import { BatchUploader } from "@netipar/chunky-core";
 function useBatchUpload(options = {}) {
   const uploader = new BatchUploader(options);
@@ -73,8 +74,8 @@ function useBatchUpload(options = {}) {
     error.value = state.error;
     currentFileName.value = state.currentFileName;
   });
-  if (getCurrentInstance2()) {
-    onBeforeUnmount2(() => uploader.destroy());
+  if (getCurrentScope2()) {
+    onScopeDispose2(() => uploader.destroy());
   }
   return {
     batchId,
@@ -87,9 +88,11 @@ function useBatchUpload(options = {}) {
     error,
     currentFileName,
     upload: (files, metadata) => uploader.upload(files, metadata),
+    enqueue: (files, metadata) => uploader.enqueue(files, metadata),
     cancel: () => uploader.cancel(),
     pause: () => uploader.pause(),
     resume: () => uploader.resume(),
+    destroy: () => uploader.destroy(),
     onProgress: (cb) => uploader.on("progress", cb),
     onFileProgress: (cb) => uploader.on("fileProgress", cb),
     onFileComplete: (cb) => uploader.on("fileComplete", cb),
@@ -100,7 +103,7 @@ function useBatchUpload(options = {}) {
 }
 
 // src/useChunkyEcho.ts
-import { watch, onBeforeUnmount as onBeforeUnmount3, getCurrentInstance as getCurrentInstance3 } from "vue";
+import { watch, getCurrentScope as getCurrentScope3, onScopeDispose as onScopeDispose3 } from "vue";
 import { listenForUser, listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
 function useUserEcho(echo, userId, callbacks, channelPrefix) {
   let cleanup = null;
@@ -111,8 +114,8 @@ function useUserEcho(echo, userId, callbacks, channelPrefix) {
       cleanup = listenForUser(echo, id, callbacks, channelPrefix);
     }
   }, { immediate: true });
-  if (getCurrentInstance3()) {
-    onBeforeUnmount3(() => cleanup?.());
+  if (getCurrentScope3()) {
+    onScopeDispose3(() => cleanup?.());
   }
 }
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
@@ -124,8 +127,8 @@ function useUploadEcho(echo, uploadId, callback, channelPrefix) {
       cleanup = listenForUploadComplete(echo, id, callback, channelPrefix);
     }
   }, { immediate: true });
-  if (getCurrentInstance3()) {
-    onBeforeUnmount3(() => cleanup?.());
+  if (getCurrentScope3()) {
+    onScopeDispose3(() => cleanup?.());
   }
 }
 function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
@@ -137,13 +140,13 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
       cleanup = listenForBatchComplete(echo, id, callbacks, channelPrefix);
     }
   }, { immediate: true });
-  if (getCurrentInstance3()) {
-    onBeforeUnmount3(() => cleanup?.());
+  if (getCurrentScope3()) {
+    onScopeDispose3(() => cleanup?.());
   }
 }
 
 // src/useBatchCompletion.ts
-import { onBeforeUnmount as onBeforeUnmount4, ref as ref3, watch as watch2, getCurrentInstance as getCurrentInstance4 } from "vue";
+import { ref as ref3, watch as watch2, getCurrentScope as getCurrentScope4, onScopeDispose as onScopeDispose4 } from "vue";
 import { watchBatchCompletion } from "@netipar/chunky-core";
 function useBatchCompletion(batchId, options = {}) {
   const isWaiting = ref3(false);
@@ -206,8 +209,8 @@ function useBatchCompletion(batchId, options = {}) {
     },
     { immediate: true }
   );
-  if (getCurrentInstance4()) {
-    onBeforeUnmount4(stop);
+  if (getCurrentScope4()) {
+    onScopeDispose4(stop);
   }
   return {
     isWaiting,

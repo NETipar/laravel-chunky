@@ -19,8 +19,25 @@ return [
     // Chunk expiration in minutes
     'expiration' => 1440,
 
+    // After this many minutes, an upload that has been stuck in the
+    // `assembling` status is considered stale and may be re-claimed by a
+    // retrying AssembleFileJob. Default: 10 minutes — long enough for any
+    // realistic single-file assembly, short enough to recover quickly when
+    // a worker crashed mid-job.
+    'assembly_stale_after_minutes' => 10,
+
+    // Bypass FilesystemTracker's boot-time check that the configured disk
+    // exposes a local path. Only set this to true if you have provided your
+    // own external locking mechanism for the tracker mutation paths.
+    'skip_local_disk_guard' => false,
+
     // Max file size in bytes - 0 = unlimited
     'max_file_size' => 0,
+
+    // Max number of files allowed per batch (DOS protection — without it
+    // a malicious caller could request a billion-file batch and exhaust
+    // memory/storage during validation).
+    'max_files_per_batch' => 1000,
 
     // Allowed MIME types - empty = all
     'allowed_mimes' => [],
@@ -54,5 +71,11 @@ return [
         'channel_prefix' => 'chunky',
         'queue' => null,
         'user_channel' => true,
+        // When true (default), Chunky auto-registers `Broadcast::channel()`
+        // callbacks for upload/batch/user channels. The callbacks delegate
+        // to the bound Authorizer service. Set to false if you want to
+        // register the channel auth callbacks yourself (e.g. in your app's
+        // routes/channels.php).
+        'register_channels' => true,
     ],
 ];

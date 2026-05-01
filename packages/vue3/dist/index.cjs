@@ -58,8 +58,8 @@ function useChunkUpload(options = {}) {
     totalChunks.value = state.totalChunks;
     currentFile.value = state.currentFile;
   });
-  if ((0, import_vue.getCurrentInstance)()) {
-    (0, import_vue.onBeforeUnmount)(() => uploader.destroy());
+  if ((0, import_vue.getCurrentScope)()) {
+    (0, import_vue.onScopeDispose)(() => uploader.destroy());
   }
   return {
     progress,
@@ -76,6 +76,7 @@ function useChunkUpload(options = {}) {
     resume: () => uploader.resume(),
     cancel: () => uploader.cancel(),
     retry: () => uploader.retry(),
+    destroy: () => uploader.destroy(),
     onProgress: (cb) => uploader.on("progress", cb),
     onChunkUploaded: (cb) => uploader.on("chunkUploaded", cb),
     onComplete: (cb) => uploader.on("complete", cb),
@@ -108,8 +109,8 @@ function useBatchUpload(options = {}) {
     error.value = state.error;
     currentFileName.value = state.currentFileName;
   });
-  if ((0, import_vue2.getCurrentInstance)()) {
-    (0, import_vue2.onBeforeUnmount)(() => uploader.destroy());
+  if ((0, import_vue2.getCurrentScope)()) {
+    (0, import_vue2.onScopeDispose)(() => uploader.destroy());
   }
   return {
     batchId,
@@ -122,9 +123,11 @@ function useBatchUpload(options = {}) {
     error,
     currentFileName,
     upload: (files, metadata) => uploader.upload(files, metadata),
+    enqueue: (files, metadata) => uploader.enqueue(files, metadata),
     cancel: () => uploader.cancel(),
     pause: () => uploader.pause(),
     resume: () => uploader.resume(),
+    destroy: () => uploader.destroy(),
     onProgress: (cb) => uploader.on("progress", cb),
     onFileProgress: (cb) => uploader.on("fileProgress", cb),
     onFileComplete: (cb) => uploader.on("fileComplete", cb),
@@ -146,8 +149,8 @@ function useUserEcho(echo, userId, callbacks, channelPrefix) {
       cleanup = (0, import_chunky_core3.listenForUser)(echo, id, callbacks, channelPrefix);
     }
   }, { immediate: true });
-  if ((0, import_vue3.getCurrentInstance)()) {
-    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  if ((0, import_vue3.getCurrentScope)()) {
+    (0, import_vue3.onScopeDispose)(() => cleanup?.());
   }
 }
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
@@ -159,8 +162,8 @@ function useUploadEcho(echo, uploadId, callback, channelPrefix) {
       cleanup = (0, import_chunky_core3.listenForUploadComplete)(echo, id, callback, channelPrefix);
     }
   }, { immediate: true });
-  if ((0, import_vue3.getCurrentInstance)()) {
-    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  if ((0, import_vue3.getCurrentScope)()) {
+    (0, import_vue3.onScopeDispose)(() => cleanup?.());
   }
 }
 function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
@@ -172,8 +175,8 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
       cleanup = (0, import_chunky_core3.listenForBatchComplete)(echo, id, callbacks, channelPrefix);
     }
   }, { immediate: true });
-  if ((0, import_vue3.getCurrentInstance)()) {
-    (0, import_vue3.onBeforeUnmount)(() => cleanup?.());
+  if ((0, import_vue3.getCurrentScope)()) {
+    (0, import_vue3.onScopeDispose)(() => cleanup?.());
   }
 }
 
@@ -241,8 +244,8 @@ function useBatchCompletion(batchId, options = {}) {
     },
     { immediate: true }
   );
-  if ((0, import_vue4.getCurrentInstance)()) {
-    (0, import_vue4.onBeforeUnmount)(stop);
+  if ((0, import_vue4.getCurrentScope)()) {
+    (0, import_vue4.onScopeDispose)(stop);
   }
   return {
     isWaiting,

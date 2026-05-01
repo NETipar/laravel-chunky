@@ -162,6 +162,13 @@ class ChunkyManager
 
     public function uploadChunk(string $uploadId, int $chunkIndex, UploadedFile $chunk): ChunkUploadResult
     {
+        // Pre-flight status check before we write the chunk to disk. The
+        // tracker's markChunkUploaded() also enforces this under a lock
+        // (defence-in-depth against races); doing the check here as well
+        // means we don't create orphan chunk files when a late POST hits
+        // a cancelled/completed upload.
+        $this->assertCanAcceptChunk($uploadId);
+
         try {
             $this->handler->store($uploadId, $chunkIndex, $chunk);
             $metadata = $this->tracker->markChunkUploaded($uploadId, $chunkIndex);
@@ -175,6 +182,21 @@ class ChunkyManager
         } catch (\Throwable $e) {
             ChunkUploadFailed::dispatch($uploadId, $chunkIndex, $e);
             throw $e;
+        }
+    }
+
+    private function assertCanAcceptChunk(string $uploadId): void
+    {
+        $metadata = $this->tracker->getMetadata($uploadId);
+
+        if (! $metadata) {
+            throw new ChunkyException("Upload {$uploadId} not found.");
+        }
+
+        if ($metadata->status !== UploadStatus::Pending) {
+            throw new ChunkyException(
+                "Upload {$uploadId} is no longer accepting chunks (status: {$metadata->status->value}).",
+            );
         }
     }
 
@@ -493,6 +515,12 @@ class ChunkyManager
 
     private function validateBatchExists(string $batchId): void
     {
+        $terminalStatuses = [
+            BatchStatus::Completed,
+            BatchStatus::PartiallyCompleted,
+            BatchStatus::Expired,
+        ];
+
         if (config('chunky.tracker') === 'database') {
             $batch = ChunkyBatch::where('batch_id', $batchId)->first();
 
@@ -503,6 +531,12 @@ class ChunkyManager
             if ($batch->isExpired()) {
                 $batch->update(['status' => BatchStatus::Expired]);
                 throw new ChunkyException("Batch {$batchId} has expired.");
+            }
+
+            if (in_array($batch->status, $terminalStatuses, true)) {
+                throw new ChunkyException(
+                    "Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value}).",
+                );
             }
 
             return;
@@ -518,6 +552,15 @@ class ChunkyManager
             $batchData['status'] = BatchStatus::Expired->value;
             $this->writeBatchJson($batchId, $batchData);
             throw new ChunkyException("Batch {$batchId} has expired.");
+        }
+
+        $statusValue = $batchData['status'] ?? null;
+        $terminalValues = array_map(fn (BatchStatus $s) => $s->value, $terminalStatuses);
+
+        if (in_array($statusValue, $terminalValues, true)) {
+            throw new ChunkyException(
+                "Batch {$batchId} is no longer accepting uploads (status: {$statusValue}).",
+            );
         }
     }
 

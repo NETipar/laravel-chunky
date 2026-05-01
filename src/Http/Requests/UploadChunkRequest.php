@@ -3,13 +3,16 @@
 namespace NETipar\Chunky\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use NETipar\Chunky\Authorization\AuthorizesChunkyRequests;
 use NETipar\Chunky\Contracts\UploadTracker;
 
 class UploadChunkRequest extends FormRequest
 {
+    use AuthorizesChunkyRequests;
+
     public function authorize(): bool
     {
-        return true;
+        return $this->userOwnsUpload();
     }
 
     /**

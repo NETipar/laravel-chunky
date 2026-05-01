@@ -116,11 +116,19 @@ function useBatchUpload(options = {}) {
     (files, metadata) => uploaderRef.current.upload(files, metadata),
     []
   );
+  const enqueue = useCallback2(
+    (files, metadata) => uploaderRef.current.enqueue(files, metadata),
+    []
+  );
   const cancel = useCallback2(() => uploaderRef.current.cancel(), []);
   const pause = useCallback2(() => uploaderRef.current.pause(), []);
   const resume = useCallback2(() => uploaderRef.current.resume(), []);
   const onProgress = useCallback2(
     (cb) => uploaderRef.current.on("progress", cb),
+    []
+  );
+  const onFileProgress = useCallback2(
+    (cb) => uploaderRef.current.on("fileProgress", cb),
     []
   );
   const onFileComplete = useCallback2(
@@ -150,10 +158,12 @@ function useBatchUpload(options = {}) {
     error,
     currentFileName,
     upload,
+    enqueue,
     cancel,
     pause,
     resume,
     onProgress,
+    onFileProgress,
     onFileComplete,
     onFileError,
     onComplete,

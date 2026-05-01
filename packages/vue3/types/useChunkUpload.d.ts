@@ -15,6 +15,12 @@ export interface ChunkUploadReturn {
     resume: () => boolean;
     cancel: () => void;
     retry: () => boolean;
+    /**
+     * Tear down the uploader manually. Required when the composable is used
+     * outside a component scope (e.g. in a Pinia store) where the automatic
+     * `onScopeDispose` cleanup does not fire.
+     */
+    destroy: () => void;
     onProgress: (callback: (event: ProgressEvent) => void) => Unsubscribe;
     onChunkUploaded: (callback: (chunk: ChunkInfo) => void) => Unsubscribe;
     onComplete: (callback: (result: UploadResult) => void) => Unsubscribe;

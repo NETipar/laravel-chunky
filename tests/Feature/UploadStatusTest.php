@@ -24,8 +24,7 @@ it('returns upload status', function () {
     $statusResponse->assertOk()
         ->assertJsonStructure([
             'upload_id', 'file_name', 'file_size', 'mime_type',
-            'chunk_size', 'total_chunks', 'disk', 'status',
-            'uploaded_chunks', 'final_path',
+            'chunk_size', 'total_chunks', 'status', 'uploaded_chunks',
         ])
         ->assertJson([
             'upload_id' => $uploadId,
@@ -34,6 +33,13 @@ it('returns upload status', function () {
             'status' => 'pending',
             'uploaded_chunks' => [],
         ]);
+
+    // Internal fields must never leak through the public status endpoint.
+    $statusResponse->assertJsonMissing(['disk' => true]);
+    expect($statusResponse->json())
+        ->not->toHaveKey('disk')
+        ->not->toHaveKey('final_path')
+        ->not->toHaveKey('user_id');
 });
 
 it('returns 404 for non-existent upload', function () {

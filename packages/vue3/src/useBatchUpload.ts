@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue';
+import { ref, getCurrentScope, onScopeDispose, type Ref } from 'vue';
 import { BatchUploader } from '@netipar/chunky-core';
 import type {
     BatchProgressEvent,
@@ -22,9 +22,16 @@ export interface BatchUploadReturn {
     currentFileName: Ref<string | null>;
 
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
+    enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;
     resume: () => void;
+    /**
+     * Tear down the uploader manually. Required when the composable is used
+     * outside a component scope (e.g. in a Pinia store) where the automatic
+     * `onScopeDispose` cleanup does not fire.
+     */
+    destroy: () => void;
 
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;
     onFileProgress: (callback: (event: FileProgressEvent) => void) => Unsubscribe;
@@ -59,8 +66,12 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         currentFileName.value = state.currentFileName;
     });
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(() => uploader.destroy());
+    // `getCurrentScope()` works in component setup() AND in Pinia stores,
+    // effectScope blocks, etc. — anywhere with a reactive scope. The old
+    // `getCurrentInstance()` check was component-only, so consumers using
+    // the composable from a store leaked the uploader forever.
+    if (getCurrentScope()) {
+        onScopeDispose(() => uploader.destroy());
     }
 
     return {
@@ -75,9 +86,11 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         currentFileName,
 
         upload: (files, metadata) => uploader.upload(files, metadata),
+        enqueue: (files, metadata) => uploader.enqueue(files, metadata),
         cancel: () => uploader.cancel(),
         pause: () => uploader.pause(),
         resume: () => uploader.resume(),
+        destroy: () => uploader.destroy(),
 
         onProgress: (cb) => uploader.on('progress', cb),
         onFileProgress: (cb) => uploader.on('fileProgress', cb),

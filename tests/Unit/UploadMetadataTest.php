@@ -85,6 +85,29 @@ it('creates a new instance with updated status via withStatus', function () {
     expect($metadata->finalPath)->toBeNull();
 });
 
+it('strips disk, final_path and user_id from the public array payload', function () {
+    $metadata = new UploadMetadata(
+        uploadId: 'pub-1',
+        fileName: 'document.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+        chunkSize: 1024,
+        totalChunks: 1,
+        disk: 's3',
+        context: null,
+        finalPath: 'chunky/uploads/pub-1/document.pdf',
+        userId: 42,
+    );
+
+    $public = $metadata->toPublicArray();
+
+    expect($public)
+        ->toHaveKey('upload_id', 'pub-1')
+        ->not->toHaveKey('disk')
+        ->not->toHaveKey('final_path')
+        ->not->toHaveKey('user_id');
+});
+
 it('defaults to pending status when constructing from array', function () {
     $metadata = UploadMetadata::fromArray([
         'upload_id' => 'test',

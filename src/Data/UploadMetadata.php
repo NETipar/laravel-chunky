@@ -100,4 +100,21 @@ class UploadMetadata
             'user_id' => $this->userId,
         ];
     }
+
+    /**
+     * Same as toArray() but strips fields that should not leave the server:
+     * the storage `disk`, the absolute `final_path`, and the owning `user_id`.
+     * Used by the public status endpoint so probe-style requests can't leak
+     * internal paths or user attribution.
+     *
+     * @return array<string, mixed>
+     */
+    public function toPublicArray(): array
+    {
+        $payload = $this->toArray();
+
+        unset($payload['disk'], $payload['final_path'], $payload['user_id']);
+
+        return $payload;
+    }
 }

@@ -11,9 +11,16 @@ export interface BatchUploadReturn {
     error: Ref<string | null>;
     currentFileName: Ref<string | null>;
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
+    enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;
     resume: () => void;
+    /**
+     * Tear down the uploader manually. Required when the composable is used
+     * outside a component scope (e.g. in a Pinia store) where the automatic
+     * `onScopeDispose` cleanup does not fire.
+     */
+    destroy: () => void;
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;
     onFileProgress: (callback: (event: FileProgressEvent) => void) => Unsubscribe;
     onFileComplete: (callback: (result: UploadResult) => void) => Unsubscribe;

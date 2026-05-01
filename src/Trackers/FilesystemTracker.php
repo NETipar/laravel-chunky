@@ -3,6 +3,7 @@
 namespace NETipar\Chunky\Trackers;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\UploadMetadata;
@@ -12,6 +13,19 @@ use NETipar\Chunky\Exceptions\UploadExpiredException;
 
 class FilesystemTracker implements UploadTracker
 {
+    public function __construct()
+    {
+        // The mutation paths in this tracker rely on flock() against a real
+        // local file path. On non-local Flysystem drivers (S3, GCS, etc.)
+        // `disk()->path()` throws and we silently fall back to running the
+        // critical sections lock-free — every chunk-write/claim/status flip
+        // becomes a lost-update race. Refuse to boot in that combination
+        // instead of inviting silent data loss.
+        if (! (bool) config('chunky.skip_local_disk_guard', false)) {
+            $this->assertLocalDisk();
+        }
+    }
+
     public function initiate(string $uploadId, UploadMetadata $metadata): void
     {
         $data = [
@@ -31,6 +45,15 @@ class FilesystemTracker implements UploadTracker
     {
         return $this->withLock($uploadId, function () use ($uploadId, $chunkIndex): UploadMetadata {
             $data = $this->readRawMetadata($uploadId);
+            $status = $data['status'] ?? UploadStatus::Pending->value;
+
+            // See DatabaseTracker::markChunkUploaded for the full rationale.
+            if ($status !== UploadStatus::Pending->value) {
+                throw new ChunkyException(
+                    "Upload {$uploadId} is no longer accepting chunks (status: {$status}).",
+                );
+            }
+
             $chunks = $data['uploaded_chunks'] ?? [];
 
             if (! in_array($chunkIndex, $chunks)) {
@@ -105,15 +128,32 @@ class FilesystemTracker implements UploadTracker
 
         return $this->withLock($uploadId, function () use ($uploadId): bool {
             $data = $this->readRawMetadata($uploadId);
+            $status = $data['status'] ?? UploadStatus::Pending->value;
+            $now = now();
 
-            if (($data['status'] ?? UploadStatus::Pending->value) !== UploadStatus::Pending->value) {
-                return false;
+            if ($status === UploadStatus::Pending->value) {
+                $data['status'] = UploadStatus::Assembling->value;
+                $data['claimed_at'] = $now->toIso8601String();
+                $this->writeRawMetadata($uploadId, $data);
+
+                return true;
             }
 
-            $data['status'] = UploadStatus::Assembling->value;
-            $this->writeRawMetadata($uploadId, $data);
+            // Stale-claim takeover: previous worker flipped to Assembling
+            // but never persisted a terminal status — most likely crashed.
+            if ($status === UploadStatus::Assembling->value) {
+                $staleAfter = (int) config('chunky.assembly_stale_after_minutes', 10);
+                $claimedAt = $data['claimed_at'] ?? null;
 
-            return true;
+                if ($claimedAt === null || $now->isAfter(Carbon::parse($claimedAt)->addMinutes($staleAfter))) {
+                    $data['claimed_at'] = $now->toIso8601String();
+                    $this->writeRawMetadata($uploadId, $data);
+
+                    return true;
+                }
+            }
+
+            return false;
         });
     }
 
@@ -124,6 +164,8 @@ class FilesystemTracker implements UploadTracker
     {
         $directories = $this->disk()->directories(config('chunky.temp_directory'));
         $expired = [];
+        $staleAfter = (int) config('chunky.assembly_stale_after_minutes', 10);
+        $now = now();
 
         foreach ($directories as $directory) {
             $uploadId = basename($directory);
@@ -141,10 +183,21 @@ class FilesystemTracker implements UploadTracker
             $data = json_decode((string) $this->disk()->get($metadataPath), true) ?? [];
 
             if (($data['status'] ?? null) === UploadStatus::Assembling->value) {
-                continue;
+                // Skip in-flight assemblies, but reclaim the slot if the
+                // assembly has been stuck longer than the stale window —
+                // that almost always indicates a crashed worker.
+                $claimedAt = $data['claimed_at'] ?? null;
+
+                if ($claimedAt === null) {
+                    continue;
+                }
+
+                if (! $now->isAfter(Carbon::parse($claimedAt)->addMinutes($staleAfter))) {
+                    continue;
+                }
             }
 
-            if (isset($data['expires_at']) && now()->isAfter($data['expires_at'])) {
+            if (isset($data['expires_at']) && $now->isAfter($data['expires_at'])) {
                 $expired[] = $uploadId;
             }
         }
@@ -199,6 +252,22 @@ class FilesystemTracker implements UploadTracker
     private function disk(): Filesystem
     {
         return Storage::disk(config('chunky.disk'));
+    }
+
+    private function assertLocalDisk(): void
+    {
+        try {
+            $this->disk()->path('chunky-probe');
+        } catch (\Throwable $e) {
+            throw new ChunkyException(
+                'FilesystemTracker requires a local-path-capable disk because its '
+                .'mutation paths depend on flock(). Switch chunky.tracker to '
+                .'"database", or use a local Laravel disk for chunky.disk. '
+                .'(Set chunky.skip_local_disk_guard=true to bypass this check '
+                .'if you have implemented external locking.)',
+                previous: $e,
+            );
+        }
     }
 
     /**

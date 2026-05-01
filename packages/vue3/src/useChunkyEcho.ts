@@ -1,4 +1,4 @@
-import { watch, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue';
+import { watch, getCurrentScope, onScopeDispose, type Ref } from 'vue';
 import { listenForUser, listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
 import type {
     EchoInstance,
@@ -28,8 +28,8 @@ export function useUserEcho(
         }
     }, { immediate: true });
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(() => cleanup?.());
+    if (getCurrentScope()) {
+        onScopeDispose(() => cleanup?.());
     }
 }
 
@@ -50,8 +50,8 @@ export function useUploadEcho(
         }
     }, { immediate: true });
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(() => cleanup?.());
+    if (getCurrentScope()) {
+        onScopeDispose(() => cleanup?.());
     }
 }
 
@@ -75,7 +75,7 @@ export function useBatchEcho(
         }
     }, { immediate: true });
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(() => cleanup?.());
+    if (getCurrentScope()) {
+        onScopeDispose(() => cleanup?.());
     }
 }

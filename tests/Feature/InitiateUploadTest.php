@@ -104,6 +104,32 @@ it('rejects unregistered context', function () {
         ->assertJsonValidationErrors(['context']);
 });
 
+it('rejects path-traversal sequences in file_name', function () {
+    $cases = ['../../etc/passwd', 'evil/../bad.txt', '..', '.', "with\0null.txt", 'C:\\Windows\\evil'];
+
+    foreach ($cases as $name) {
+        $response = $this->postJson('/api/chunky/upload', [
+            'file_name' => $name,
+            'file_size' => 1000,
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors(['file_name']);
+    }
+});
+
+it('accepts unicode and normal punctuation in file_name', function () {
+    Event::fake([UploadInitiated::class]);
+
+    foreach (['árvíztűrő.pdf', 'name with spaces.txt', 'a (1).png', 'résumé.docx'] as $name) {
+        $response = $this->postJson('/api/chunky/upload', [
+            'file_name' => $name,
+            'file_size' => 1000,
+        ]);
+
+        $response->assertStatus(201);
+    }
+});
+
 it('merges context validation rules', function () {
     $manager = app(ChunkyManager::class);
     $manager->context('strict', rules: fn () => [

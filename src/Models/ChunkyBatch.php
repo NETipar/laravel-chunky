@@ -15,7 +15,19 @@ class ChunkyBatch extends Model
 
     protected $table = 'chunky_batches';
 
-    protected $guarded = [];
+    /** @var array<int, string> */
+    protected $fillable = [
+        'batch_id',
+        'user_id',
+        'total_files',
+        'completed_files',
+        'failed_files',
+        'context',
+        'metadata',
+        'status',
+        'completed_at',
+        'expires_at',
+    ];
 
     protected function casts(): array
     {

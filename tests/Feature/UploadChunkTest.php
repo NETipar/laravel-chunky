@@ -99,6 +99,25 @@ it('rejects a chunk_index above total_chunks', function () {
     $response->assertStatus(422)->assertJsonValidationErrors(['chunk_index']);
 });
 
+it('rejects late chunks against a cancelled upload with HTTP 409', function () {
+    $uploadId = initiateUpload($this);
+
+    // Cancel the upload first.
+    $this->deleteJson("/api/chunky/upload/{$uploadId}")->assertStatus(204);
+
+    // A late chunk POST must not be accepted.
+    $chunk = UploadedFile::fake()->create('chunk', 1024);
+
+    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
+        'chunk' => $chunk,
+        'chunk_index' => 0,
+    ]);
+
+    $response->assertStatus(409);
+
+    expect($response->json('message'))->toContain('no longer accepting chunks');
+});
+
 it('skips checksum verification when disabled', function () {
     config(['chunky.verify_integrity' => false]);
 

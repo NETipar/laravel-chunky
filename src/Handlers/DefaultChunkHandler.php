@@ -31,7 +31,16 @@ class DefaultChunkHandler implements ChunkHandler
 
     public function assemble(string $uploadId, string $fileName, int $totalChunks): string
     {
-        $finalPath = config('chunky.final_directory')."/{$uploadId}/{$fileName}";
+        // Defence-in-depth against path traversal even if validation was
+        // bypassed: basename() strips any leading directory components, and
+        // the leading "." / ".." cases are rejected outright.
+        $safeFileName = basename($fileName);
+
+        if ($safeFileName === '' || $safeFileName === '.' || $safeFileName === '..') {
+            throw new \RuntimeException("Refusing to assemble upload {$uploadId}: invalid file name.");
+        }
+
+        $finalPath = config('chunky.final_directory')."/{$uploadId}/{$safeFileName}";
         $disk = $this->disk();
 
         $tempFile = tempnam(sys_get_temp_dir(), 'chunky-');

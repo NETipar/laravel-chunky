@@ -56,6 +56,10 @@ export function registerBatchUpload(Alpine: any): void {
                 (this as any).$dispatch('chunky:batch-progress', event);
             });
 
+            this._uploader.on('fileProgress', (event) => {
+                (this as any).$dispatch('chunky:batch-file-progress', event);
+            });
+
             this._uploader.on('fileComplete', (result) => {
                 (this as any).$dispatch('chunky:batch-file-complete', result);
             });

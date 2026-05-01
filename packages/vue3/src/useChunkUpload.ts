@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue';
+import { ref, getCurrentScope, onScopeDispose, type Ref } from 'vue';
 import { ChunkUploader } from '@netipar/chunky-core';
 import type {
     ChunkInfo,
@@ -25,6 +25,12 @@ export interface ChunkUploadReturn {
     resume: () => boolean;
     cancel: () => void;
     retry: () => boolean;
+    /**
+     * Tear down the uploader manually. Required when the composable is used
+     * outside a component scope (e.g. in a Pinia store) where the automatic
+     * `onScopeDispose` cleanup does not fire.
+     */
+    destroy: () => void;
 
     onProgress: (callback: (event: ProgressEvent) => void) => Unsubscribe;
     onChunkUploaded: (callback: (chunk: ChunkInfo) => void) => Unsubscribe;
@@ -57,8 +63,8 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
         currentFile.value = state.currentFile;
     });
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(() => uploader.destroy());
+    if (getCurrentScope()) {
+        onScopeDispose(() => uploader.destroy());
     }
 
     return {
@@ -77,6 +83,7 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
         resume: () => uploader.resume(),
         cancel: () => uploader.cancel(),
         retry: () => uploader.retry(),
+        destroy: () => uploader.destroy(),
 
         onProgress: (cb) => uploader.on('progress', cb),
         onChunkUploaded: (cb) => uploader.on('chunkUploaded', cb),

@@ -3,8 +3,11 @@
 namespace NETipar\Chunky;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Component;
+use NETipar\Chunky\Authorization\Authorizer;
+use NETipar\Chunky\Authorization\DefaultAuthorizer;
 use NETipar\Chunky\Console\CleanupCommand;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
@@ -26,6 +29,8 @@ class ChunkyServiceProvider extends ServiceProvider
                 default => new DatabaseTracker,
             };
         });
+
+        $this->app->singleton(Authorizer::class, DefaultAuthorizer::class);
 
         $this->app->singleton(ChunkyManager::class, function ($app) {
             return new ChunkyManager(
@@ -56,9 +61,27 @@ class ChunkyServiceProvider extends ServiceProvider
         ], 'chunky-views');
 
         $this->registerRoutes();
+        $this->registerBroadcastChannels();
         $this->registerContexts();
         $this->registerLivewireComponents();
         $this->registerCleanup();
+    }
+
+    private function registerBroadcastChannels(): void
+    {
+        if (! config('chunky.broadcasting.enabled', false)) {
+            return;
+        }
+
+        if (! config('chunky.broadcasting.register_channels', true)) {
+            return;
+        }
+
+        if (! class_exists(Broadcast::class)) {
+            return;
+        }
+
+        require __DIR__.'/../routes/channels.php';
     }
 
     private function registerCleanup(): void

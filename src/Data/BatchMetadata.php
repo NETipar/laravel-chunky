@@ -26,7 +26,28 @@ class BatchMetadata
         return $this->completedFiles + $this->failedFiles >= $this->totalFiles;
     }
 
+    /**
+     * Total processing progress (0–100). Includes failed files because
+     * "failed" is a terminal state — the batch is just as "done" with a
+     * file whether it succeeded or failed. Use successProgress() for the
+     * success-only view.
+     */
     public function progress(): float
+    {
+        if ($this->totalFiles === 0) {
+            return 0;
+        }
+
+        $processed = $this->completedFiles + $this->failedFiles;
+
+        return round(($processed / $this->totalFiles) * 100, 2);
+    }
+
+    /**
+     * Success-only progress (0–100): the share of files that have completed
+     * successfully. Always less than or equal to progress().
+     */
+    public function successProgress(): float
     {
         if ($this->totalFiles === 0) {
             return 0;

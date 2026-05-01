@@ -4,6 +4,7 @@ import type {
     BatchProgressEvent,
     BatchResult,
     BatchUploadOptions,
+    FileProgressEvent,
     Unsubscribe,
     UploadError,
     UploadResult,
@@ -21,11 +22,13 @@ export interface BatchUploadReturn {
     currentFileName: string | null;
 
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
+    enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;
     resume: () => void;
 
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;
+    onFileProgress: (callback: (event: FileProgressEvent) => void) => Unsubscribe;
     onFileComplete: (callback: (result: UploadResult) => void) => Unsubscribe;
     onFileError: (callback: (error: UploadError) => void) => Unsubscribe;
     onComplete: (callback: (result: BatchResult) => void) => Unsubscribe;
@@ -73,12 +76,22 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         [],
     );
 
+    const enqueue = useCallback(
+        (files: File[], metadata?: Record<string, unknown>) => uploaderRef.current!.enqueue(files, metadata),
+        [],
+    );
+
     const cancel = useCallback(() => uploaderRef.current!.cancel(), []);
     const pause = useCallback(() => uploaderRef.current!.pause(), []);
     const resume = useCallback(() => uploaderRef.current!.resume(), []);
 
     const onProgress = useCallback(
         (cb: (event: BatchProgressEvent) => void) => uploaderRef.current!.on('progress', cb),
+        [],
+    );
+
+    const onFileProgress = useCallback(
+        (cb: (event: FileProgressEvent) => void) => uploaderRef.current!.on('fileProgress', cb),
         [],
     );
 
@@ -114,11 +127,13 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         currentFileName,
 
         upload,
+        enqueue,
         cancel,
         pause,
         resume,
 
         onProgress,
+        onFileProgress,
         onFileComplete,
         onFileError,
         onComplete,

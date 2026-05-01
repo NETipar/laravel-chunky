@@ -11,7 +11,25 @@ class ChunkedUpload extends Model
 {
     use HasUlids;
 
-    protected $guarded = [];
+    /** @var array<int, string> */
+    protected $fillable = [
+        'upload_id',
+        'batch_id',
+        'user_id',
+        'file_name',
+        'file_size',
+        'mime_type',
+        'chunk_size',
+        'total_chunks',
+        'uploaded_chunks',
+        'disk',
+        'context',
+        'final_path',
+        'metadata',
+        'status',
+        'completed_at',
+        'expires_at',
+    ];
 
     protected function casts(): array
     {
@@ -45,7 +63,7 @@ class ChunkedUpload extends Model
         return count($this->uploaded_chunks ?? []) >= $this->total_chunks;
     }
 
-    public function markChunkUploaded(int $chunkIndex, ?string $checksum = null): void
+    public function markChunkUploaded(int $chunkIndex): void
     {
         $chunks = $this->uploaded_chunks ?? [];
 

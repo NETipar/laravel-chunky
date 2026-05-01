@@ -261,7 +261,9 @@ var ChunkUploader = class {
       return result;
     } catch (err) {
       if (this.autoRetry && retriesLeft > 0) {
-        const delay = Math.pow(2, this.maxRetries - retriesLeft) * 1e3;
+        const baseDelay = Math.pow(2, this.maxRetries - retriesLeft) * 1e3;
+        const jitter = Math.random() * 250;
+        const delay = baseDelay + jitter;
         await new Promise((resolve) => setTimeout(resolve, delay));
         return this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, retriesLeft - 1);
       }
@@ -304,6 +306,13 @@ var ChunkUploader = class {
       throw new Error("Upload already in progress. Cancel or wait for completion before starting a new upload.");
     }
     this.abortController?.abort();
+    if (this.uploadId && this.lastFile !== file) {
+      this.uploadId = null;
+      this.pendingChunks = [];
+      this.lastMetadata = void 0;
+      this.serverChunkSize = null;
+      this.totalChunks = 0;
+    }
     this.lastFile = file;
     this.lastMetadata = metadata;
     this.currentFile = file;
@@ -460,6 +469,12 @@ var BatchUploader = class {
     this.isPausedBatch = false;
     this.resumeBarrier = null;
     this.resumeBarrierResolve = null;
+    this.pendingQueue = [];
+    // Set by `cancel()` for the duration of the current upload() call so the
+    // catch/finally branches can tell "the user cancelled" apart from "an
+    // unrelated error happened" and avoid emitting a redundant `error` event
+    // or a late `complete` after a `cancel`.
+    this.cancelledThisRun = false;
     this.options = options;
     this.scope = scope;
     this.maxConcurrentFiles = options.maxConcurrentFiles ?? 2;
@@ -546,6 +561,7 @@ var BatchUploader = class {
     this.uploaders = [];
     this.lastComplete = null;
     this.lastError = null;
+    this.cancelledThisRun = false;
     this.emitStateChange();
     const signal = this.abortController.signal;
     try {
@@ -603,6 +619,15 @@ var BatchUploader = class {
         () => next()
       );
       await Promise.all(workers);
+      if (this.cancelledThisRun || this.abortController?.signal.aborted) {
+        return {
+          batchId: this.batchId ?? "",
+          totalFiles: this.totalFiles,
+          completedFiles: this.completedFiles,
+          failedFiles: this.failedFiles,
+          files: this.results
+        };
+      }
       this.isComplete = true;
       this.currentFileName = null;
       this.progress = 100;
@@ -617,6 +642,12 @@ var BatchUploader = class {
       this.emit("complete", result);
       return result;
     } catch (err) {
+      for (const uploader of this.uploaders) {
+        uploader.cancel();
+      }
+      if (this.cancelledThisRun) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : "Batch upload failed";
       this.error = message;
       this.emitStateChange();
@@ -630,6 +661,46 @@ var BatchUploader = class {
     } finally {
       this.isUploading = false;
       this.emitStateChange();
+      this.drainQueue();
+    }
+  }
+  /**
+   * Queue files for upload. If no batch is currently running, this behaves
+   * exactly like `upload()`. If a batch is in progress, the files are held
+   * until the current batch completes (or fails) and then run in their own
+   * batch. The returned promise resolves with the eventual `BatchResult`.
+   *
+   * If `cancel()` or `destroy()` is invoked before the queued batch starts,
+   * the returned promise rejects with the corresponding error.
+   */
+  enqueue(files, metadata) {
+    if (!this.isUploading) {
+      return this.upload(files, metadata);
+    }
+    return new Promise((resolve, reject) => {
+      this.pendingQueue.push({ files, metadata, resolve, reject });
+    });
+  }
+  drainQueue() {
+    if (this.isUploading || this.pendingQueue.length === 0) {
+      return;
+    }
+    queueMicrotask(() => {
+      if (this.isUploading || this.pendingQueue.length === 0) {
+        return;
+      }
+      const next = this.pendingQueue.shift();
+      this.upload(next.files, next.metadata).then(next.resolve, next.reject);
+    });
+  }
+  rejectPendingQueue(reason) {
+    if (this.pendingQueue.length === 0) {
+      return;
+    }
+    const pending = this.pendingQueue.splice(0);
+    const error = new Error(reason);
+    for (const item of pending) {
+      item.reject(error);
     }
   }
   async uploadFileInBatch(file, metadata) {
@@ -688,6 +759,7 @@ var BatchUploader = class {
   }
   cancel() {
     const cancelledBatchId = this.batchId;
+    this.cancelledThisRun = true;
     this.abortController?.abort();
     this.isPausedBatch = false;
     const resolve = this.resumeBarrierResolve;
@@ -697,6 +769,7 @@ var BatchUploader = class {
     for (const uploader of this.uploaders) {
       uploader.cancel();
     }
+    this.rejectPendingQueue("Batch upload cancelled before queued upload could start.");
     this.isUploading = false;
     this.isComplete = false;
     this.currentFileName = null;
@@ -735,6 +808,7 @@ var BatchUploader = class {
     this.emitStateChange();
   }
   destroy() {
+    this.rejectPendingQueue("BatchUploader destroyed before queued upload could start.");
     this.cancel();
     this.listeners.clear();
     for (const uploader of this.uploaders) {
@@ -834,6 +908,7 @@ function watchBatchCompletion(options) {
   const url = statusEndpoint.replace("{batchId}", batchId);
   let resolved = false;
   let echoCleanup = null;
+  let echoSubscribed = false;
   let pollStartTimer = null;
   let pollTimer = null;
   let timeoutTimer = null;
@@ -912,8 +987,8 @@ function watchBatchCompletion(options) {
         signal: abortController.signal
       });
       if (!response.ok) {
-        if (response.status === 404) {
-          failFatal(new Error(`Batch ${batchId} not found.`));
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          failFatal(new Error(`Batch ${batchId} request failed: HTTP ${response.status}`));
           return;
         }
         throw new Error(`Batch status request failed: HTTP ${response.status}`);
@@ -934,6 +1009,16 @@ function watchBatchCompletion(options) {
     }
     pollTimer = setTimeout(poll, pollIntervalMs);
   };
+  const startPollNow = () => {
+    if (pollStartTimer) {
+      clearTimeout(pollStartTimer);
+      pollStartTimer = null;
+    }
+    if (resolved) {
+      return;
+    }
+    void poll();
+  };
   if (echo) {
     echoCleanup = listenForBatchComplete(
       echo,
@@ -941,14 +1026,27 @@ function watchBatchCompletion(options) {
       {
         onComplete: (data) => resolveBroadcast("complete", data),
         onPartiallyCompleted: (data) => resolveBroadcast("partial", data),
-        onSubscribed,
-        onSubscribeError
+        onSubscribed: () => {
+          echoSubscribed = true;
+          if (pollStartTimer) {
+            clearTimeout(pollStartTimer);
+            pollStartTimer = null;
+          }
+          onSubscribed?.();
+        },
+        onSubscribeError: (err) => {
+          startPollNow();
+          onSubscribeError?.(err);
+        }
       },
       channelPrefix
     );
   }
   pollStartTimer = setTimeout(() => {
     pollStartTimer = null;
+    if (echoSubscribed) {
+      return;
+    }
     void poll();
   }, pollStartDelayMs);
   if (timeoutMs > 0) {

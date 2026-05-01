@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, watch, getCurrentInstance, type Ref } from 'vue';
+import { ref, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue';
 import { watchBatchCompletion } from '@netipar/chunky-core';
 import type {
     BatchCompletionResult,
@@ -107,8 +107,8 @@ export function useBatchCompletion(
         { immediate: true },
     );
 
-    if (getCurrentInstance()) {
-        onBeforeUnmount(stop);
+    if (getCurrentScope()) {
+        onScopeDispose(stop);
     }
 
     return {

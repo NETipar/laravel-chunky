@@ -2,6 +2,21 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.13.1 - 2026-05-01
+
+Test-coverage and operational hardening pass on top of v0.13.0. No new public API; one new boot-time guard that fails fast on a misconfigured Cache lock driver, and 19 new tests covering the v0.13.0 features.
+
+### Added
+- **Boot-time guard for `chunky.lock_driver = 'cache'`.** Throws `RuntimeException` at service-provider boot if `cache.default` is `array` or `file` — both drivers silently no-op on `Cache::lock()` and would let upload races slip through unnoticed. Switch to Redis / Memcached / DB / DynamoDB, or set `chunky.lock_driver` back to `flock`.
+- **Stale-claim recovery integration tests** (`AssembleClaimTest`): simulate a worker crash mid-assembly, verify a retry can take over the claim, run to `Completed`, and emit `UploadCompleted`. Also covers `expiredUploadIds()` skipping fresh `Assembling` rows but including stale ones — the cleanup-doesn't-leak invariant.
+- **`FilesystemTracker` boot-guard tests**: local disk boots fine; non-local disk + `flock` mode throws with a helpful message; non-local disk + `cache` mode boots fine; `skip_local_disk_guard = true` escape hatch works.
+- **Broadcast payload sanitisation tests**: `UploadCompleted` and `UploadFailed` strip `disk` / `finalPath` by default; opt-in via `chunky.broadcasting.expose_internal_paths = true` puts them back. Locks the v0.13.0 wire-format change.
+- **Path-traversal tests** (`PathTraversalTest`): the assembler's `basename()` defence-in-depth strips leading directories from hostile file names, and rejects dot-only names that collapse to empty. The `simple()` context save callback applies the same guard end-to-end (verified by inspecting where the moved file actually lands on a fake disk).
+- **`LockDriverCompatTest`** covers the four cache.default × lock_driver combinations relevant to the new boot guard.
+
+### npm packages
+- All packages bumped to `0.13.1` (no source changes in the JS packages — re-publish for version-sync consistency with the PHP release).
+
 ## v0.13.0 - 2026-05-01
 
 This release applies the remaining items from the v0.12.0 deep review (cross-cutting concerns + nits) plus a few new findings from the implementation pass. The headline change is **opt-in support for cloud disks** in the FilesystemTracker via Cache-backed locks, alongside built-in idempotency for chunk POSTs and a metrics-callback surface for observability integrations.

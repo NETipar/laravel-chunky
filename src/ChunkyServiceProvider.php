@@ -65,6 +65,33 @@ class ChunkyServiceProvider extends ServiceProvider
         $this->registerContexts();
         $this->registerLivewireComponents();
         $this->registerCleanup();
+        $this->assertLockDriverCompatibility();
+    }
+
+    /**
+     * If the operator opted into Cache::lock-backed locking, the configured
+     * cache driver must actually support atomic locks. The `array` and
+     * `file` drivers do not — they'll silently no-op (`array` per request)
+     * or use last-write-wins file flocks that don't work across hosts. Fail
+     * fast on misconfig instead of letting a race condition surface in
+     * production.
+     */
+    private function assertLockDriverCompatibility(): void
+    {
+        if (config('chunky.lock_driver', 'flock') !== 'cache') {
+            return;
+        }
+
+        $store = config('cache.default');
+        $unsafe = ['array', 'file'];
+
+        if (in_array($store, $unsafe, true)) {
+            throw new \RuntimeException(
+                "chunky.lock_driver = 'cache' requires a cache driver that supports atomic locks "
+                ."(redis, memcached, database, dynamodb). The current cache.default is '{$store}', "
+                .'which does not. Switch the cache driver or set chunky.lock_driver back to "flock".',
+            );
+        }
     }
 
     private function registerBroadcastChannels(): void

@@ -12,6 +12,19 @@ class DefaultChunkHandler implements ChunkHandler
     public function store(string $uploadId, int $chunkIndex, UploadedFile $chunk): void
     {
         $path = $this->chunkPath($uploadId, $chunkIndex);
+        $realPath = $chunk->getRealPath();
+
+        if ($realPath !== false && is_file($realPath)) {
+            $stream = fopen($realPath, 'rb');
+
+            try {
+                $this->disk()->writeStream($path, $stream);
+            } finally {
+                fclose($stream);
+            }
+
+            return;
+        }
 
         $this->disk()->put($path, $chunk->getContent());
     }

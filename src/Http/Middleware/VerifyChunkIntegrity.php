@@ -22,7 +22,10 @@ class VerifyChunkIntegrity
             return $next($request);
         }
 
-        $actualChecksum = hash('sha256', $chunk->getContent());
+        $path = $chunk->getRealPath();
+        $actualChecksum = $path !== false && is_file($path)
+            ? hash_file('sha256', $path)
+            : hash('sha256', $chunk->getContent());
 
         if (! hash_equals($checksum, $actualChecksum)) {
             throw ChunkIntegrityException::checksumMismatch(

@@ -19,32 +19,45 @@ class DefaultChunkHandler implements ChunkHandler
     public function assemble(string $uploadId, string $fileName, int $totalChunks): string
     {
         $finalPath = config('chunky.final_directory')."/{$uploadId}/{$fileName}";
-        $tempFilePath = $this->chunkPath($uploadId, 0);
+        $disk = $this->disk();
 
-        // Use stream to assemble for memory efficiency
-        $finalFullPath = $this->disk()->path($finalPath);
-        $directory = dirname($finalFullPath);
+        $tempFile = tempnam(sys_get_temp_dir(), 'chunky-');
+        $output = fopen($tempFile, 'wb');
 
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
+        try {
+            for ($i = 0; $i < $totalChunks; $i++) {
+                $input = $disk->readStream($this->chunkPath($uploadId, $i));
 
-        $outputStream = fopen($finalFullPath, 'wb');
+                if ($input === false || $input === null) {
+                    throw new \RuntimeException("Chunk {$i} for upload {$uploadId} could not be read.");
+                }
 
-        for ($i = 0; $i < $totalChunks; $i++) {
-            $chunkPath = $this->chunkPath($uploadId, $i);
-            $chunkFullPath = $this->disk()->path($chunkPath);
-
-            $inputStream = fopen($chunkFullPath, 'rb');
-
-            while (! feof($inputStream)) {
-                fwrite($outputStream, fread($inputStream, 8192));
+                try {
+                    while (! feof($input)) {
+                        fwrite($output, fread($input, 8192));
+                    }
+                } finally {
+                    fclose($input);
+                }
             }
 
-            fclose($inputStream);
-        }
+            fclose($output);
+            $output = null;
 
-        fclose($outputStream);
+            $upload = fopen($tempFile, 'rb');
+
+            try {
+                $disk->writeStream($finalPath, $upload);
+            } finally {
+                fclose($upload);
+            }
+        } finally {
+            if (is_resource($output)) {
+                fclose($output);
+            }
+
+            @unlink($tempFile);
+        }
 
         return $finalPath;
     }

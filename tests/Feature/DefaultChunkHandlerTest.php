@@ -59,3 +59,24 @@ it('cleans up temp directory after assembly', function () {
 
     Storage::disk('local')->assertMissing('chunky/temp/upload-789');
 });
+
+it('assembles chunks via filesystem streams without relying on disk()->path()', function () {
+    $handler = new DefaultChunkHandler;
+
+    for ($i = 0; $i < 5; $i++) {
+        $handler->store('stream-1', $i, UploadedFile::fake()->createWithContent("chunk_{$i}", "block-{$i}-"));
+    }
+
+    $finalPath = $handler->assemble('stream-1', 'big.bin', 5);
+
+    expect(Storage::disk('local')->get($finalPath))->toBe('block-0-block-1-block-2-block-3-block-4-');
+});
+
+it('throws when a chunk is missing during assembly', function () {
+    $handler = new DefaultChunkHandler;
+
+    $handler->store('missing-1', 0, UploadedFile::fake()->createWithContent('chunk_0', 'a'));
+
+    expect(fn () => $handler->assemble('missing-1', 'file.bin', 2))
+        ->toThrow(RuntimeException::class);
+});

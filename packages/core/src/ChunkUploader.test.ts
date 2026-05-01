@@ -30,7 +30,7 @@ describe('ChunkUploader', () => {
         expect(result.totalChunks).toBe(2);
 
         // Each chunk POST should have an Idempotency-Key shaped (uploadId:chunkIndex).
-        const chunkCalls = fetch.mock.calls.filter(
+        const chunkCalls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
             (c: unknown[]) => (c[1] as RequestInit).method === 'POST' && (c[0] as string).includes('/chunks'),
         );
         expect(chunkCalls.length).toBe(2);
@@ -73,7 +73,7 @@ describe('ChunkUploader', () => {
         expect(result.uploadId).toBe('u-new');
 
         // First call after the first failure should be a fresh POST /upload (init), not GET /upload/u-stale.
-        const calls = fetch.mock.calls;
+        const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
         const firstAfterFailure = calls[2];
         expect((firstAfterFailure[1] as RequestInit).method).toBe('POST');
         expect(firstAfterFailure[0] as string).toMatch(/\/upload$/);

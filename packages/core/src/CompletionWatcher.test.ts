@@ -134,4 +134,54 @@ describe('CompletionWatcher', () => {
         // No callbacks should fire after cancel.
         expect(onComplete).not.toHaveBeenCalled();
     });
+
+    it('extendTimeoutOnProgressMs starts the safeguard even when timeoutMs=0', async () => {
+        // Regression test for the v0.17.2 fix: previously the progress
+        // extension was a no-op when no static timeout was set, because
+        // it only refreshed an existing timer. Now it (re)creates the
+        // timer on every progress tick.
+        let callCount = 0;
+        globalThis.fetch = vi.fn().mockImplementation(() => {
+            callCount++;
+            // First two polls show progress (different processed counts),
+            // subsequent polls don't — we expect the timer to fire after
+            // extendTimeoutOnProgressMs of no progress.
+            const completed = callCount === 1 ? 1 : 2;
+
+            return Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        batch_id: 'b',
+                        total_files: 5,
+                        completed_files: completed,
+                        failed_files: 0,
+                        pending_files: 5 - completed,
+                        context: null,
+                        status: 'processing',
+                        is_finished: false,
+                    }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } },
+                ),
+            );
+        }) as unknown as typeof globalThis.fetch;
+
+        const onTimeout = vi.fn();
+        const cancel = watchBatchCompletion({
+            batchId: 'b',
+            pollStartDelayMs: 0,
+            pollIntervalMs: 5,
+            pollMaxIntervalMs: 5,
+            pollBackoffFactor: 1,
+            timeoutMs: 0, // KEY: no static deadline.
+            extendTimeoutOnProgressMs: 50,
+            onTimeout,
+        });
+
+        // Wait long enough for at least 2 progress polls + the
+        // extension window expiring with no further progress.
+        await new Promise((r) => setTimeout(r, 200));
+        cancel();
+
+        expect(onTimeout).toHaveBeenCalled();
+    });
 });

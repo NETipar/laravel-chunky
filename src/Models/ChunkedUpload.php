@@ -7,8 +7,30 @@ namespace NETipar\Chunky\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use NETipar\Chunky\Enums\UploadStatus;
 
+/**
+ * @property string $id
+ * @property string $upload_id
+ * @property ?string $batch_id
+ * @property ?string $user_id
+ * @property string $file_name
+ * @property int $file_size
+ * @property ?string $mime_type
+ * @property int $chunk_size
+ * @property int $total_chunks
+ * @property array<int, int> $uploaded_chunks
+ * @property string $disk
+ * @property ?string $context
+ * @property ?string $final_path
+ * @property ?array<string, mixed> $metadata
+ * @property UploadStatus $status
+ * @property ?Carbon $completed_at
+ * @property Carbon $expires_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
+ */
 class ChunkedUpload extends Model
 {
     use HasUlids;

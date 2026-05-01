@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
     // Tracking driver: 'database' | 'filesystem'
     'tracker' => env('CHUNKY_TRACKER', 'database'),

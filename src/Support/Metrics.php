@@ -97,7 +97,21 @@ class Metrics
         }
 
         // Callable: closure, [obj, 'method'], or 'Class@method'.
+        // Closure handlers are kept for v0.13.0 backward compat but break
+        // `php artisan config:cache` because closures aren't serialisable.
+        // @deprecated since v0.20 — pass a class string instead so the
+        // handler resolves through the container at runtime. Slated for
+        // removal in v1.0.
         if (is_callable($handler)) {
+            if ($handler instanceof \Closure) {
+                @trigger_error(
+                    "Closure handlers for chunky.metrics.{$event} are deprecated as of v0.20 and will be "
+                    .'removed in v1.0 — use a class-string handler (resolved through the container) instead. '
+                    .'Closure handlers also break `php artisan config:cache`.',
+                    E_USER_DEPRECATED,
+                );
+            }
+
             $handler($payload);
 
             return;

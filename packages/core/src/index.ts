@@ -37,7 +37,6 @@ export type {
     BatchResult,
     BatchUploaderState,
     BatchUploaderEventMap,
-    EventCallback,
     JsonPrimitive,
     JsonValue,
     JsonObject,

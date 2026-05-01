@@ -20,6 +20,13 @@ jobs:
           php-version: '8.4'
           coverage: none
 
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-8.4-
+
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
@@ -39,6 +46,13 @@ jobs:
           php-version: '8.4'
           coverage: none
 
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-8.4-
+
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
@@ -57,6 +71,13 @@ jobs:
         with:
           php-version: '8.4'
           coverage: none
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-8.4-
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist

@@ -3,12 +3,15 @@ import { vi } from 'vitest';
 /**
  * Build a mock fetch that returns successive responses from a queue.
  * Each entry can be a Response object, a partial JSON body, or a thrower.
+ *
+ * Cast to `typeof fetch` so callers can assign the return value to
+ * `globalThis.fetch` without per-test casts.
  */
 export function mockFetchSequence(
     responses: Array<Partial<{ status: number; json: unknown; throws: Error }>>,
-): ReturnType<typeof vi.fn> {
+): typeof fetch {
     let i = 0;
-    return vi.fn(async (_url: string, _init?: RequestInit) => {
+    const impl = vi.fn(async (_url: string, _init?: RequestInit) => {
         const r = responses[Math.min(i++, responses.length - 1)];
 
         if (r.throws) {
@@ -20,6 +23,8 @@ export function mockFetchSequence(
             headers: { 'Content-Type': 'application/json' },
         });
     });
+
+    return impl as unknown as typeof fetch;
 }
 
 export function makeFile(name: string, size: number = 1024): File {

@@ -7,10 +7,26 @@ namespace NETipar\Chunky\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use NETipar\Chunky\Enums\BatchStatus;
 use NETipar\Chunky\Events\BatchCompleted;
 use NETipar\Chunky\Events\BatchPartiallyCompleted;
 
+/**
+ * @property string $id
+ * @property string $batch_id
+ * @property ?string $user_id
+ * @property int $total_files
+ * @property int $completed_files
+ * @property int $failed_files
+ * @property ?string $context
+ * @property ?array<string, mixed> $metadata
+ * @property BatchStatus $status
+ * @property ?Carbon $completed_at
+ * @property Carbon $expires_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
+ */
 class ChunkyBatch extends Model
 {
     use HasUlids;

@@ -56,7 +56,7 @@ it('lists removable uploads in dry-run mode without deleting', function () {
     seedExpiredUpload('exp-2', now()->subDay());
 
     $this->artisan('chunky:cleanup --dry-run')
-        ->expectsOutputToContain('Would remove: exp-2')
+        ->expectsOutputToContain('Would remove upload: exp-2')
         ->assertExitCode(0);
 
     expect(ChunkedUpload::where('upload_id', 'exp-2')->exists())->toBeTrue();

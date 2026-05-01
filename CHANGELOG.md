@@ -6,6 +6,33 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.20.0 - 2026-05-02
+
+Polish minor: cleanup ergonomics, model docblocks, multi-language
+translations, deprecation warnings on closure metric handlers, and a
+substantial frontend test suite.
+
+### Added
+- **CleanupCommand options.** `--limit=N` to stop after N removals, `--skip-uploads` and `--skip-batches` to run only one half of the sweep. Useful for staged cleanup on large stores.
+- **Batch cleanup** in the cleanup command. The default sweep now also walks expired batches via `BatchTracker::expiredBatchIds()`. The DB driver enumerates `chunky_batches` rows past `expires_at`; the FS driver walks the per-batch directories.
+- **FK migration.** New `add_chunked_uploads_batch_id_foreign_key` migration adds a `chunked_uploads.batch_id → chunky_batches.batch_id` foreign key with `nullOnDelete()`. Skipped on SQLite (which can't add FKs after table creation).
+- **Eloquent `@property` annotations** on `ChunkedUpload` and `ChunkyBatch`. PHPStan baseline cut from 45 entries to 6. Custom code that depends on Larastan's property inference now type-checks without help.
+- **`pint.json` enforces `declare_strict_types`** and alphabetised imports across the codebase.
+- **`sideEffects: false`** on every npm package — bundlers can tree-shake unused exports cleanly.
+- **Localised HTTP messages** for `de`, `es`, `fr`, `hu` alongside the existing `en`. Publish with `php artisan vendor:publish --tag=chunky-lang`.
+- **Closure metric handler deprecation.** `Metrics::dispatch()` triggers `E_USER_DEPRECATED` when a closure handler is invoked, pointing operators at the class-string alternative (which `config:cache` can serialise). Slated for removal in v1.0.
+- **Composer cache in CI.** The Pint, PHPStan, and audit jobs use `actions/cache@v4` to reuse the `vendor` directory between runs — about 90 seconds saved per PR.
+- **BatchUploader test suite.** 12 new tests covering basic uploads, sticky-replay race fix, queue behaviour, memory leak fix, fileError UploadError shape, and endpoint validation. Frontend test count: 16 → 29.
+- **CompletionWatcher regression test** for the v0.17.2 `extendTimeoutOnProgressMs + timeoutMs=0` fix.
+
+### Changed
+- **`Metrics` closure handlers are deprecated.** They keep working for back-compat but trigger an `E_USER_DEPRECATED` notice. Migrate to class-string handlers (resolved through the container) before v1.0.
+- **`EventCallback` removed from the public export** of `@netipar/chunky-core`. It was an internal type that crept onto the surface during the v0.17 hardening; consumers should use the per-uploader `EventMap` types when they need typed event listeners.
+- **Test helper `mockFetchSequence` returns `typeof fetch`** instead of a raw vitest `Mock`, so callers can assign it to `globalThis.fetch` without per-test casts.
+
+### npm packages
+- All packages bumped to `0.20.0` (frontend additions — `sideEffects: false`, EventCallback unexport, test suite expansion).
+
 ## v0.19.0 - 2026-05-02
 
 Architecture-maturity minor. Gate-aware authorizer, unified event base

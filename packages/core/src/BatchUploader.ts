@@ -135,11 +135,11 @@ export class BatchUploader {
         return headers;
     }
 
-    private async fetchJson<T>(url: string, init: RequestInit): Promise<T> {
+    private async fetchJson<T>(url: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
         const response = await fetch(url, {
             ...init,
             credentials: this.options.withCredentials !== false ? 'include' : 'same-origin',
-            signal: this.abortController?.signal,
+            signal: signal ?? this.abortController?.signal,
         });
 
         if (!response.ok) {
@@ -169,6 +169,8 @@ export class BatchUploader {
         this.lastError = null;
         this.emitStateChange();
 
+        const signal = this.abortController.signal;
+
         try {
             // Initiate batch on server
             const batchResponse = await this.fetchJson<BatchInitiateResponse>(
@@ -182,6 +184,7 @@ export class BatchUploader {
                         metadata: metadata ?? null,
                     }),
                 },
+                signal,
             );
 
             this.batchId = batchResponse.batch_id;

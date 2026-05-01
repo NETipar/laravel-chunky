@@ -41,6 +41,9 @@ export class BatchUploader {
     private listeners = new Map<string, Set<Function>>();
     private lastComplete: BatchResult | null = null;
     private lastError: UploadError | null = null;
+    private isPausedBatch = false;
+    private resumeBarrier: Promise<void> | null = null;
+    private resumeBarrierResolve: (() => void) | null = null;
 
     constructor(options: BatchUploadOptions = {}, scope?: DefaultsScope) {
         this.options = options;
@@ -200,6 +203,14 @@ export class BatchUploader {
                         return;
                     }
 
+                    if (this.isPausedBatch && this.resumeBarrier) {
+                        await this.resumeBarrier;
+
+                        if (this.abortController?.signal.aborted) {
+                            return;
+                        }
+                    }
+
                     const currentIndex = fileIndex++;
                     const file = fileQueue[currentIndex];
 
@@ -314,6 +325,13 @@ export class BatchUploader {
 
         this.abortController?.abort();
 
+        // Release the pause barrier so any awaiting workers can observe the abort.
+        this.isPausedBatch = false;
+        const resolve = this.resumeBarrierResolve;
+        this.resumeBarrier = null;
+        this.resumeBarrierResolve = null;
+        resolve?.();
+
         for (const uploader of this.uploaders) {
             uploader.cancel();
         }
@@ -328,15 +346,42 @@ export class BatchUploader {
     }
 
     pause(): void {
+        if (!this.isUploading) {
+            return;
+        }
+
+        this.isPausedBatch = true;
+
+        if (!this.resumeBarrier) {
+            this.resumeBarrier = new Promise<void>((resolve) => {
+                this.resumeBarrierResolve = resolve;
+            });
+        }
+
         for (const uploader of this.uploaders) {
             uploader.pause();
         }
+
+        this.emitStateChange();
     }
 
     resume(): void {
+        if (!this.isPausedBatch) {
+            return;
+        }
+
+        this.isPausedBatch = false;
+
+        const resolve = this.resumeBarrierResolve;
+        this.resumeBarrier = null;
+        this.resumeBarrierResolve = null;
+        resolve?.();
+
         for (const uploader of this.uploaders) {
             uploader.resume();
         }
+
+        this.emitStateChange();
     }
 
     destroy(): void {

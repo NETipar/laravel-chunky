@@ -44,7 +44,8 @@
         "@netipar/chunky-core": "workspace:^"
     },
     "peerDependencies": {
-        "vue": "^3.4"
+        "vue": "^3.4",
+        "dropzone": "^6.0"
     },
     "peerDependenciesMeta": {
         "dropzone": {

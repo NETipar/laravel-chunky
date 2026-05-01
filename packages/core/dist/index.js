@@ -800,6 +800,9 @@ function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
   if (callbacks.onUploadComplete) {
     channel.listen(".UploadCompleted", callbacks.onUploadComplete);
   }
+  if (callbacks.onUploadFailed) {
+    channel.listen(".UploadFailed", callbacks.onUploadFailed);
+  }
   if (callbacks.onBatchComplete) {
     channel.listen(".BatchCompleted", callbacks.onBatchComplete);
   }
@@ -814,6 +817,7 @@ function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
   }
   return () => {
     channel.stopListening(".UploadCompleted");
+    channel.stopListening(".UploadFailed");
     channel.stopListening(".BatchCompleted");
     channel.stopListening(".BatchPartiallyCompleted");
   };
@@ -823,6 +827,25 @@ function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chun
   channel.listen(".UploadCompleted", callback);
   return () => {
     channel.stopListening(".UploadCompleted");
+  };
+}
+function listenForUploadEvents(echo, uploadId, callbacks, channelPrefix = "chunky") {
+  const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
+  if (callbacks.onComplete) {
+    channel.listen(".UploadCompleted", callbacks.onComplete);
+  }
+  if (callbacks.onFailed) {
+    channel.listen(".UploadFailed", callbacks.onFailed);
+  }
+  if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
+    channel.subscribed(callbacks.onSubscribed);
+  }
+  if (callbacks.onSubscribeError && typeof channel.error === "function") {
+    channel.error(callbacks.onSubscribeError);
+  }
+  return () => {
+    channel.stopListening(".UploadCompleted");
+    channel.stopListening(".UploadFailed");
   };
 }
 function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunky") {
@@ -1073,6 +1096,7 @@ export {
   getDefaults,
   listenForBatchComplete,
   listenForUploadComplete,
+  listenForUploadEvents,
   listenForUser,
   setDefaults,
   watchBatchCompletion

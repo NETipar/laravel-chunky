@@ -1,6 +1,11 @@
 export { ChunkUploader } from './ChunkUploader';
 export { BatchUploader } from './BatchUploader';
-export { listenForUser, listenForUploadComplete, listenForBatchComplete } from './echo';
+export {
+    listenForUser,
+    listenForUploadComplete,
+    listenForUploadEvents,
+    listenForBatchComplete,
+} from './echo';
 export { watchBatchCompletion } from './CompletionWatcher';
 export { setDefaults, getDefaults, createDefaults } from './config';
 export { UploadHttpError } from './types';
@@ -38,6 +43,7 @@ export type {
     EchoInstance,
     EchoChannel,
     UploadCompletedData,
+    UploadFailedData,
     BatchCompletedData,
     BatchPartiallyCompletedData,
 } from './echo';

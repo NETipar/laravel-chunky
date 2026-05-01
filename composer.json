@@ -1,12 +1,36 @@
 {
     "name": "netipar/laravel-chunky",
-    "description": "Chunk-based file upload package for Laravel with event-driven architecture",
-    "keywords": ["laravel", "chunk", "upload", "file"],
+    "description": "Chunk-based file upload package for Laravel with event-driven architecture, resume support, batch upload, and framework-agnostic frontend clients for Vue 3, React, Alpine.js, and Livewire.",
+    "keywords": [
+        "laravel",
+        "chunk",
+        "upload",
+        "file",
+        "file-upload",
+        "resumable",
+        "large-files",
+        "batch-upload",
+        "s3",
+        "echo",
+        "broadcasting",
+        "vue",
+        "react",
+        "alpine",
+        "livewire"
+    ],
     "license": "MIT",
+    "homepage": "https://github.com/NETipar/laravel-chunky",
+    "support": {
+        "issues": "https://github.com/NETipar/laravel-chunky/issues",
+        "source": "https://github.com/NETipar/laravel-chunky",
+        "docs": "https://github.com/NETipar/laravel-chunky#readme",
+        "security": "https://github.com/NETipar/laravel-chunky/security/policy"
+    },
     "authors": [
         {
             "name": "NETipar",
-            "email": "dev@netipar.hu"
+            "email": "dev@netipar.hu",
+            "homepage": "https://netipar.hu"
         }
     ],
     "require": {

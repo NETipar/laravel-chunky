@@ -11,12 +11,24 @@ export interface EchoChannel {
 
 export interface UploadCompletedData {
     uploadId: string;
-    finalPath: string;
-    disk: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    finalPath?: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    disk?: string;
     fileName: string;
     fileSize: number;
     context: string | null;
     status: string;
+}
+
+export interface UploadFailedData {
+    uploadId: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    disk?: string;
+    fileName: string;
+    fileSize: number;
+    context: string | null;
+    reason: string;
 }
 
 export interface BatchCompletedData {
@@ -36,6 +48,7 @@ export function listenForUser(
     userId: string | number,
     callbacks: {
         onUploadComplete?: (data: UploadCompletedData) => void;
+        onUploadFailed?: (data: UploadFailedData) => void;
         onBatchComplete?: (data: BatchCompletedData) => void;
         onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
         onSubscribed?: () => void;
@@ -47,6 +60,10 @@ export function listenForUser(
 
     if (callbacks.onUploadComplete) {
         channel.listen('.UploadCompleted', callbacks.onUploadComplete);
+    }
+
+    if (callbacks.onUploadFailed) {
+        channel.listen('.UploadFailed', callbacks.onUploadFailed);
     }
 
     if (callbacks.onBatchComplete) {
@@ -67,6 +84,7 @@ export function listenForUser(
 
     return () => {
         channel.stopListening('.UploadCompleted');
+        channel.stopListening('.UploadFailed');
         channel.stopListening('.BatchCompleted');
         channel.stopListening('.BatchPartiallyCompleted');
     };
@@ -83,6 +101,41 @@ export function listenForUploadComplete(
 
     return () => {
         channel.stopListening('.UploadCompleted');
+    };
+}
+
+export function listenForUploadEvents(
+    echo: EchoInstance,
+    uploadId: string,
+    callbacks: {
+        onComplete?: (data: UploadCompletedData) => void;
+        onFailed?: (data: UploadFailedData) => void;
+        onSubscribed?: () => void;
+        onSubscribeError?: (err: unknown) => void;
+    },
+    channelPrefix = 'chunky',
+): () => void {
+    const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
+
+    if (callbacks.onComplete) {
+        channel.listen('.UploadCompleted', callbacks.onComplete);
+    }
+
+    if (callbacks.onFailed) {
+        channel.listen('.UploadFailed', callbacks.onFailed);
+    }
+
+    if (callbacks.onSubscribed && typeof channel.subscribed === 'function') {
+        channel.subscribed(callbacks.onSubscribed);
+    }
+
+    if (callbacks.onSubscribeError && typeof channel.error === 'function') {
+        channel.error(callbacks.onSubscribeError);
+    }
+
+    return () => {
+        channel.stopListening('.UploadCompleted');
+        channel.stopListening('.UploadFailed');
     };
 }
 

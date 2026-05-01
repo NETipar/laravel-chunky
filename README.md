@@ -48,6 +48,61 @@ function onFileChange(event) {
 - PHP 8.2+
 - Laravel 11, 12 or 13
 
+## 5-Minute Quickstart
+
+```bash
+# 1. Install backend
+composer require netipar/laravel-chunky
+php artisan vendor:publish --tag=chunky-config
+php artisan migrate
+
+# 2. Install frontend (Vue 3 example)
+npm install @netipar/chunky-vue3
+```
+
+```vue
+<!-- 3. Drop in the composable -->
+<script setup>
+import { useChunkUpload } from '@netipar/chunky-vue3';
+
+const { upload, progress, isUploading, isComplete, error } = useChunkUpload();
+
+function onFileChange(event) {
+    const file = event.target.files[0];
+    if (file) upload(file);
+}
+</script>
+
+<template>
+    <input type="file" @change="onFileChange" :disabled="isUploading" />
+    <progress v-if="isUploading" :value="progress" max="100" />
+    <p v-if="isComplete">Done!</p>
+    <p v-if="error">Error: {{ error }}</p>
+</template>
+```
+
+```bash
+# 4. Test it
+php artisan serve
+# Open the page, upload a 10MB file. The chunks land in
+# storage/app/chunky/temp/{uploadId}/ during the transfer; once
+# complete, the AssembleFileJob writes the final file to
+# storage/app/chunky/uploads/{uploadId}/{fileName}.
+```
+
+## Production Deployment Checklist
+
+- [ ] **Auth middleware** on `chunky.routes.middleware` (e.g. `['api', 'auth:sanctum']`)
+- [ ] **Queue worker** running for `AssembleFileJob` (don't run on `sync`)
+- [ ] **Cache driver** that supports `Cache::lock()` if using `chunky.lock_driver = 'cache'` (Redis / Memcached / DB / DynamoDB; **not** `array` or `file`)
+- [ ] **`CHUNKY_BROADCASTING=true`** if real-time UI updates are needed (requires Echo + a WebSocket server)
+- [ ] **`chunky.staging_directory`** set to a path with enough free space if accepting uploads larger than `/tmp` (cloud-disk targets buffer the full file locally before upload)
+- [ ] **`chunky.metadata.max_keys`** and **`chunky.max_files_per_batch`** tuned for your DOS profile
+- [ ] **`chunky.metrics.*`** wired to Datadog / Prometheus / your observability stack
+- [ ] **`chunky:cleanup`** scheduled daily (auto-scheduled if `auto_cleanup = true`)
+- [ ] **Custom `Authorizer`** bound if the default ownership check (auth user_id == upload user_id) doesn't fit your access model
+- [ ] **`routes/channels.php`** auto-registered (default) or hand-written if you set `chunky.broadcasting.register_channels = false`
+
 ## Installation
 
 ### Backend
@@ -141,16 +196,30 @@ const uploader = new ChunkUploader({ context: 'docs' }, scope);
 
 ### API Endpoints
 
-The package registers six routes (configurable prefix/middleware):
+The package registers seven routes (configurable prefix/middleware):
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | `POST` | `/api/chunky/upload` | Initiate upload |
 | `POST` | `/api/chunky/upload/{uploadId}/chunks` | Upload a chunk |
 | `GET` | `/api/chunky/upload/{uploadId}` | Get upload status |
+| `DELETE` | `/api/chunky/upload/{uploadId}` | Cancel upload |
 | `POST` | `/api/chunky/batch` | Initiate batch |
 | `POST` | `/api/chunky/batch/{batchId}/upload` | Add file to batch |
 | `GET` | `/api/chunky/batch/{batchId}` | Get batch status |
+
+#### HTTP status codes
+
+| Code | When |
+|------|------|
+| `201 Created` | Upload or batch initiated |
+| `200 OK` | Chunk accepted, status fetched |
+| `204 No Content` | Cancel succeeded |
+| `404 Not Found` | Upload/batch doesn't exist — or the caller isn't its owner (intentional, prevents probe attacks) |
+| `409 Conflict` | Late chunk against a cancelled / completed / failed / assembling upload |
+| `410 Gone` | Upload has expired |
+| `422 Unprocessable Entity` | Validation error (missing field, invalid file_name, batch in terminal state, etc.) |
+| `503 Service Unavailable` | Upload temporarily contended on the lock; client may safely retry (idempotent) |
 
 ### Vue 3
 
@@ -273,7 +342,12 @@ Listen for the upload completion in your Livewire parent component:
 #[On('chunky-upload-completed')]
 public function handleUpload(array $data): void
 {
-    // $data['uploadId'], $data['fileName'], $data['finalPath'], $data['disk']
+    // Default payload: $data['uploadId'], $data['fileName'], $data['fileSize']
+    //
+    // Set `chunky.broadcasting.expose_internal_paths = true` in
+    // config/chunky.php to additionally receive $data['finalPath'] and
+    // $data['disk']. By default they're stripped to avoid leaking
+    // server-internal paths to the browser.
 }
 ```
 
@@ -418,7 +492,33 @@ Every upload creates a batch — even a single file becomes a batch of 1. This e
 
 **Failure policy**: Lenient -- if a file fails, other files continue. The batch ends with `PartiallyCompleted` status.
 
-## Authentication
+### Sequential Batches with `enqueue()`
+
+`upload()` throws if a batch is already in progress on the same `BatchUploader` instance. For UIs that accept files faster than they can upload (multi-paste, drag-while-uploading), use `enqueue()` instead:
+
+```typescript
+import { BatchUploader } from '@netipar/chunky-core';
+
+const uploader = new BatchUploader({ maxConcurrentFiles: 2 });
+
+// First call: behaves like upload()
+await uploader.enqueue([file1]);
+
+// While the first batch is still running, queue more:
+const second = uploader.enqueue([file2, file3]);
+const third = uploader.enqueue([file4]);
+
+// Each enqueue() returns its own promise. The queued batches run
+// strictly serially (one at a time), so you get a consistent
+// progress signal across all of them.
+await Promise.all([second, third]);
+```
+
+If you `cancel()` or `destroy()` the uploader before a queued batch starts, its promise rejects with a clear error message. The Vue 3 / React / Alpine wrappers all expose `enqueue` as a sibling of `upload`.
+
+## Authentication & Authorization
+
+### Authentication
 
 By default, upload endpoints use only the `api` middleware. To protect them with authentication, update `routes.middleware` in `config/chunky.php`:
 
@@ -429,7 +529,63 @@ By default, upload endpoints use only the `api` middleware. To protect them with
 ],
 ```
 
-This applies to all three endpoints (initiate, upload chunk, status). No custom request or controller override is needed.
+This applies to all routes (initiate, upload chunk, cancel, status, batch). No custom request or controller override is needed.
+
+### Authorization (per-upload, per-batch)
+
+When auth is active, the package automatically enforces ownership: an authenticated caller can only access uploads / batches they created (the `user_id` captured at initiation time). Non-owners see a `404` (not `403`) so upload IDs can't be probed.
+
+The check is delegated to a swappable `Authorizer` interface:
+
+```php
+namespace NETipar\Chunky\Authorization;
+
+interface Authorizer
+{
+    public function canAccessUpload(?Authenticatable $user, UploadMetadata $upload): bool;
+    public function canAccessBatch(?Authenticatable $user, BatchMetadata $batch): bool;
+}
+```
+
+The default `DefaultAuthorizer` does plain ownership: `auth()->id() === upload->userId`, with anonymous uploads (no `user_id`) accessible to everyone (backward compat).
+
+#### Custom Authorizer (admin overrides, team access, …)
+
+Bind your own implementation in `AppServiceProvider::register()`:
+
+```php
+use NETipar\Chunky\Authorization\Authorizer;
+use NETipar\Chunky\Authorization\DefaultAuthorizer;
+
+$this->app->singleton(Authorizer::class, function ($app) {
+    return new class extends DefaultAuthorizer
+    {
+        public function canAccessUpload(?Authenticatable $user, UploadMetadata $upload): bool
+        {
+            // Admins access everything
+            if ($user?->is_admin) {
+                return true;
+            }
+
+            // Teammates share access
+            if ($upload->userId !== null) {
+                $owner = User::find($upload->userId);
+                if ($owner && $user?->team_id === $owner->team_id) {
+                    return true;
+                }
+            }
+
+            return parent::canAccessUpload($user, $upload);
+        }
+    };
+});
+```
+
+The same `Authorizer` is used by the broadcast channel auth callbacks (`routes/channels.php`, auto-registered when `broadcasting.enabled = true`) — HTTP and WebSocket access stay in sync.
+
+### `user_id` is portable
+
+The `chunked_uploads.user_id` and `chunky_batches.user_id` columns are `string` type since v0.14, so any user-id shape works out of the box: auto-increment integers, UUIDs, ULIDs, or arbitrary strings. The package never does arithmetic on `user_id`, only string equality comparisons.
 
 ## Quick Context Setup
 
@@ -584,16 +740,17 @@ class ProcessUploadedFile
 
 ### Available Events
 
-| Event | Payload | When |
-|-------|---------|------|
-| `UploadInitiated` | uploadId, fileName, fileSize, totalChunks | Upload initialized |
-| `ChunkUploaded` | uploadId, chunkIndex, totalChunks, progress% | After each successful chunk |
-| `ChunkUploadFailed` | uploadId, chunkIndex, exception | On chunk error |
-| `FileAssembled` | uploadId, finalPath, disk, fileName, fileSize | After file assembly |
-| `UploadCompleted` | upload (UploadMetadata), uploadId, finalPath, disk, metadata | Full upload complete |
-| `BatchInitiated` | batchId, totalFiles | Batch created |
-| `BatchCompleted` | batchId, totalFiles | All batch files completed |
-| `BatchPartiallyCompleted` | batchId, completedFiles, failedFiles, totalFiles | Batch done with failures |
+| Event | Payload | When | Broadcasts? |
+|-------|---------|------|-------------|
+| `UploadInitiated` | uploadId, fileName, fileSize, totalChunks | Upload initialized | — |
+| `ChunkUploaded` | uploadId, chunkIndex, totalChunks, progress% | After each successful chunk | — |
+| `ChunkUploadFailed` | uploadId, chunkIndex, exception | On chunk error | — |
+| `FileAssembled` | uploadId, finalPath, disk, fileName, fileSize | After file assembly | — |
+| `UploadCompleted` | upload (UploadMetadata) | Full upload complete | ✅ |
+| `UploadFailed` | upload (UploadMetadata), reason | Save callback failed or assembly job exhausted retries | ✅ |
+| `BatchInitiated` | batchId, totalFiles | Batch created | — |
+| `BatchCompleted` | batchId, totalFiles | All batch files completed | ✅ |
+| `BatchPartiallyCompleted` | batchId, completedFiles, failedFiles, totalFiles | Batch done with failures | ✅ |
 
 ## Broadcasting (Laravel Echo)
 
@@ -603,7 +760,9 @@ Get real-time notifications when uploads or batches complete. Broadcasting is **
 CHUNKY_BROADCASTING=true
 ```
 
-Three events are broadcastable: `UploadCompleted`, `BatchCompleted`, `BatchPartiallyCompleted`. They use private channels and require channel authorization in your `routes/channels.php`:
+Four events are broadcastable: `UploadCompleted`, `UploadFailed`, `BatchCompleted`, and `BatchPartiallyCompleted`. They use private channels — when `chunky.broadcasting.register_channels = true` (default), the package auto-registers `Broadcast::channel()` callbacks that delegate to the bound `Authorizer`, so the same ownership rules apply on HTTP and WebSocket.
+
+If you set `register_channels = false`, register them manually in your `routes/channels.php`:
 
 ```php
 use Illuminate\Support\Facades\Broadcast;
@@ -752,9 +911,14 @@ Key `.env` variables:
 CHUNKY_TRACKER=database
 CHUNKY_DISK=local
 CHUNKY_CHUNK_SIZE=1048576
+CHUNKY_BROADCASTING=false
+CHUNKY_LOCK_DRIVER=flock
+CHUNKY_STAGING_DIRECTORY=
 ```
 
 Full `config/chunky.php`:
+
+### Storage and lifecycle
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -763,18 +927,61 @@ Full `config/chunky.php`:
 | `chunk_size` | `1048576` (1MB) | Chunk size in bytes |
 | `temp_directory` | `chunky/temp` | Temp directory for chunks |
 | `final_directory` | `chunky/uploads` | Directory for assembled files |
+| `staging_directory` | `null` (= `sys_get_temp_dir()`) | Local filesystem directory used while assembling chunks. Set when /tmp can't fit the largest expected upload. |
 | `expiration` | `1440` | Upload expiration in minutes (24h) |
+| `assembly_stale_after_minutes` | `10` | An `Assembling` upload older than this is considered stale and may be re-claimed by a retrying AssembleFileJob. |
+
+### Validation
+
+| Key | Default | Description |
+|-----|---------|-------------|
 | `max_file_size` | `0` | Max file size in bytes (0 = unlimited) |
+| `max_files_per_batch` | `1000` | Max files allowed in a single batch (DOS protection) |
 | `allowed_mimes` | `[]` | Allowed MIME types (empty = all) |
+| `metadata.max_keys` | `50` | Max keys in user-supplied `metadata` array |
 | `contexts` | `[]` | Class-based context classes (auto-registered) |
+
+### Routes
+
+| Key | Default | Description |
+|-----|---------|-------------|
 | `routes.prefix` | `api/chunky` | Route prefix |
 | `routes.middleware` | `['api']` | Route middleware |
-| `verify_integrity` | `true` | SHA-256 checksum verification |
-| `auto_cleanup` | `true` | Auto-cleanup expired uploads |
-| `broadcasting.enabled` | `false` | Enable WebSocket broadcasting |
+
+### Integrity and locking
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `verify_integrity` | `true` | SHA-256 checksum verification on each chunk |
+| `auto_cleanup` | `true` | Auto-cleanup expired uploads via daily schedule |
+| `lock_driver` | `flock` | Locking primitive: `flock` (local-disk only) or `cache` (S3/multi-server, requires Cache::lock-capable cache driver) |
+| `lock_ttl_seconds` | `30` | TTL for held locks (force-release deadline) |
+| `lock_wait_seconds` | `5` | Block timeout when waiting for an existing lock |
+| `skip_local_disk_guard` | `false` | Bypass FilesystemTracker's boot-time check for local-path-capable disk (advanced) |
+
+### Idempotency
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `idempotency.enabled` | `true` | Cache chunk POST responses by `(uploadId, chunkIndex, key)` for retry replay |
+| `idempotency_ttl_seconds` | `300` | Cached idempotency entry TTL |
+
+### Broadcasting
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `broadcasting.enabled` | `false` | Enable WebSocket broadcasting (Echo) |
 | `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
 | `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
 | `broadcasting.user_channel` | `true` | Broadcast on user channel too |
+| `broadcasting.register_channels` | `true` | Auto-register `Broadcast::channel()` callbacks via the bound Authorizer |
+| `broadcasting.expose_internal_paths` | `false` | Include `disk` and `finalPath` in broadcast payloads (off by default; opt in if a consumer needs them) |
+
+### Observability
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `metrics.<event>` | `null` | Optional handler (class string or closure) for `chunk_uploaded`, `chunk_upload_failed`, `assembly_started`, `assembly_completed`, `assembly_failed`. Class strings are `config:cache`-compatible and resolved through the container. |
 
 ## Tracking Drivers
 

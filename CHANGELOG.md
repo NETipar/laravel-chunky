@@ -2,6 +2,40 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.15.0 - 2026-05-01
+
+This release closes the **documentation and developer-experience gap** that v0.10–v0.14 accumulated. No source-code changes to the upload pipeline; the focus is on bringing the README up to date with the v0.12+ feature set, shipping the standard governance documents, exposing the long-undocumented `UploadFailed` event end-to-end, and tightening the package's public metadata for Packagist / npm discoverability.
+
+### Added (Documentation)
+- **5-Minute Quickstart** + **Production Deployment Checklist** sections at the top of the README.
+- **Comprehensive config table** covering all 30+ options across Storage / Validation / Routes / Locking / Idempotency / Broadcasting / Observability sections. The previous table was at v0.7 vintage and missed every config option introduced in v0.12+/v0.13+.
+- **Authorization section** with the `Authorizer` interface contract, the `DefaultAuthorizer` semantics (anonymous vs. owned uploads), and a complete custom-Authorizer example for team-based access. Replaces the bare-bones "Authentication" subsection.
+- **Sequential Batches with `enqueue()`** subsection — the v0.12.0 marquee feature was previously only documented in the CHANGELOG and JSDoc.
+- **HTTP status code reference** for all 7 routes (404 / 409 / 410 / 422 / 503 semantics).
+- **`user_id` portability** note explaining the v0.14.0 string-column change.
+
+### Added (Repository governance)
+- **`SECURITY.md`** with the vulnerability disclosure policy, supported version table, and a hardening surface checklist. Both GitHub Private Vulnerability Reporting and `dev@netipar.hu` accepted as channels.
+- **`CONTRIBUTING.md`** with the dev environment setup, the local check suite, code style rules, PR process, and a description of the release flow.
+- **`UPGRADE.md`** consolidating the breaking-change migration notes from `v0.12 → v0.13 → v0.14`. The CHANGELOG remains authoritative for the per-release log; UPGRADE is the actionable migration playbook.
+- **`.github/PULL_REQUEST_TEMPLATE.md`** and **`.github/ISSUE_TEMPLATE/{bug_report,feature_request}.yml`** with structured forms (laravel/php version, frontend, tracker driver, disk, reproduction, expected vs actual). The YAML form spec ensures empty issues can't slip through.
+
+### Added (Frontend API)
+- **`UploadFailed` broadcast event end-to-end exposure.** New `UploadFailedData` type. New `listenForUploadEvents(echo, uploadId, { onComplete, onFailed })` core helper. `listenForUser` now accepts an `onUploadFailed` callback. All four wrappers (core, vue3, react, alpine) re-export the type. Closes a documentation gap that existed since v0.9.2 — the backend has been broadcasting `UploadFailed` for 6 minor versions, but no frontend helper made it visible.
+- **`UploadCompletedData.finalPath` and `disk` typed as optional** (`?: string`) since v0.13.0's `expose_internal_paths` flag defaults to false. Frontends that read these fields now get a TypeScript warning if they don't handle the absence.
+
+### Changed (Metadata)
+- **`composer.json`** keywords expanded from 4 to 15 (`laravel`, `chunk`, `upload`, `file`, `file-upload`, `resumable`, `large-files`, `batch-upload`, `s3`, `echo`, `broadcasting`, `vue`, `react`, `alpine`, `livewire`). New `homepage`, `support` (issues / source / docs / security URLs), and richer author metadata. Doubles Packagist search visibility.
+- **`Chunky` Facade docblock** now lists `handler()` and `tracker()` — both annotated `@internal` — so static analysers and IDEs no longer report them as undefined while still discouraging public use.
+- **README Livewire payload example** updated to the v0.13.0 default payload (`uploadId`, `fileName`, `fileSize` only). Includes the opt-in note for `expose_internal_paths`.
+- **`@netipar/chunky-vue3` peer dependencies** now explicitly list `dropzone: ^6.0` (was missing despite being declared optional in `peerDependenciesMeta`). Consumers who use `ChunkDropzone` get a proper resolution; everyone else still skips it.
+
+### Fixed
+- **README API endpoints table** went from 6 to 7 rows — the `DELETE /upload/{uploadId}` cancel route (added in v0.10.0) was previously undocumented.
+
+### npm packages
+- All packages bumped to `0.15.0` (core, vue3, react, alpine).
+
 ## v0.14.0 - 2026-05-01
 
 This release establishes the **Static Analysis Baseline** for the package: PHPStan/Larastan integration, frontend test infrastructure, full PHP `strict_types`, and a CI matrix that finally covers Laravel 13. It also makes the `user_id` column **portable across int / UUID / ULID** user-id schemes — closing a previously hidden assumption that user IDs are always integers.

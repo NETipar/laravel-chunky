@@ -9,12 +9,23 @@ export interface EchoChannel {
 }
 export interface UploadCompletedData {
     uploadId: string;
-    finalPath: string;
-    disk: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    finalPath?: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    disk?: string;
     fileName: string;
     fileSize: number;
     context: string | null;
     status: string;
+}
+export interface UploadFailedData {
+    uploadId: string;
+    /** Only present when chunky.broadcasting.expose_internal_paths is true. */
+    disk?: string;
+    fileName: string;
+    fileSize: number;
+    context: string | null;
+    reason: string;
 }
 export interface BatchCompletedData {
     batchId: string;
@@ -28,12 +39,19 @@ export interface BatchPartiallyCompletedData {
 }
 export declare function listenForUser(echo: EchoInstance, userId: string | number, callbacks: {
     onUploadComplete?: (data: UploadCompletedData) => void;
+    onUploadFailed?: (data: UploadFailedData) => void;
     onBatchComplete?: (data: BatchCompletedData) => void;
     onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
     onSubscribed?: () => void;
     onSubscribeError?: (err: unknown) => void;
 }, channelPrefix?: string): () => void;
 export declare function listenForUploadComplete(echo: EchoInstance, uploadId: string, callback: (data: UploadCompletedData) => void, channelPrefix?: string): () => void;
+export declare function listenForUploadEvents(echo: EchoInstance, uploadId: string, callbacks: {
+    onComplete?: (data: UploadCompletedData) => void;
+    onFailed?: (data: UploadFailedData) => void;
+    onSubscribed?: () => void;
+    onSubscribeError?: (err: unknown) => void;
+}, channelPrefix?: string): () => void;
 export declare function listenForBatchComplete(echo: EchoInstance, batchId: string, callbacks: {
     onComplete?: (data: BatchCompletedData) => void;
     onPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;

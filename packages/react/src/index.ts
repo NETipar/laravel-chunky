@@ -29,6 +29,7 @@ export type {
     EchoInstance,
     EchoChannel,
     UploadCompletedData,
+    UploadFailedData,
     BatchCompletedData,
     BatchPartiallyCompletedData,
     CompletionSource,

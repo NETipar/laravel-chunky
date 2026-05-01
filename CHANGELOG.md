@@ -2,6 +2,34 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.11.0 - 2026-05-01
+
+This release smooths out batch progress reporting and ships a new `CompletionWatcher` API that lets the frontend wait for batch completion via Echo broadcasts with a polling fallback — the same primitive `useBatchCompletion` is built on. No PHP changes; this is a frontend-only release.
+
+### Fixed
+- **Batch progress no longer jitters between files.** `BatchUploader` used to assign `this.progress` a per-step value (`(filesCompleted / total) * 100`) on every `fileComplete`, which clobbered the smooth, chunk-driven progress that the worker loop had been interpolating into it. The result was a UI bar that crept up smoothly during a file, then snapped to a discrete step value at the boundary, then crept again. Removes the step assignment so `progress` advances continuously across the whole batch as chunks finish, regardless of file count.
+- **`CompletionWatcher` keeps polling on transient errors.** The watcher's `onError` callback used to fire with a single `(error)` argument and the consumer had no way to distinguish a one-off network blip from a fatal subscription failure. Signature is now `(error, isFatal)` — the watcher itself only flags `isFatal=true` when the Echo subscription gives up; transient HTTP failures during polling no longer cancel the watch. `useBatchCompletion` mirrors this and only flips `isWaiting` to `false` on the fatal branch, so the composable stays in the "waiting" state through retryable errors.
+
+### Added
+- **`CompletionWatcher` and `watchBatchCompletion()`** in `@netipar/chunky-core`. A broadcast-or-poll primitive: subscribes to the batch's private channel via Echo and resolves on `BatchCompleted` / `BatchPartiallyCompleted`, with a status-endpoint poll as a fallback when Echo is unavailable or slow to subscribe. Surfaces lifecycle through `onComplete`, `onPartiallyCompleted`, `onError(error, isFatal)`, plus the `cancel()` returned from `watchBatchCompletion`. Useful when the upload finishes on one tab/process and the UI that needs to react to it lives somewhere else.
+- **`useBatchCompletion` Vue 3 composable** in `@netipar/chunky-vue3`. Wraps `CompletionWatcher` with reactive `isWaiting`, `isComplete`, `result`, and `error` refs and an auto-cancel on unmount. Mirrors the new fatal/transient error semantics — the composable stays in the waiting state through transient failures.
+- **`fileProgress` event on `BatchUploader`** (`{ batchId, uploadId, file, progress, fileIndex }`) emitted on every chunk progress tick, so consumers can drive a per-file progress bar without subscribing to the active uploader. `useBatchUpload` exposes the matching `onFileProgress` callback.
+- **Continuous batch progress.** `BatchUploader.progress` now interpolates across the whole batch (file boundary smoothing baked into the chunk-driven progress emission) — see the matching Fixed entry above.
+- **Echo subscription lifecycle hooks.** `listenForUser` and `listenForBatchComplete` accept optional `onSubscribed` / `onSubscribeError` callbacks that route to the underlying channel's `subscribed()` / `error()` hooks when available. `EchoChannel`'s `subscribed?` and `error?` hooks are now part of the type, with `error` callback typed as `(err: unknown)` instead of `any`.
+
+### Changed
+- **`FileProgressEvent.uploadId` is now `string`** (was `string | null`). The id is always set by the time a `fileProgress` event fires.
+- **`EchoChannel.error?` callback parameter is `unknown`** (was `any`). Preserves the runtime contract while removing the implicit-any escape hatch for consumers.
+
+### Refactored
+- **Shared `http.ts` util** in `@netipar/chunky-core` consolidates CSRF token discovery and request-header construction. Three call sites (`BatchUploader`, `ChunkUploader`, `CompletionWatcher`) now share one implementation instead of each rolling their own.
+
+### npm packages
+- All packages bumped to `0.11.0` (core, vue3, react, alpine). React and Alpine carry no source changes; they re-publish for version-sync consistency. Sister packages continue to require `@netipar/chunky-core` via `workspace:^`, which resolves to `^0.11.0` on publish.
+
+### Migration notes (none required)
+- The `CompletionWatcher.onError` signature change `(error)` → `(error, isFatal)` is on a brand-new, previously-unpublished API; no existing consumer is affected. The `FileProgressEvent.uploadId` and `EchoChannel.error?` type tightenings are non-breaking on the JS runtime — they only fail TypeScript builds that were relying on the looser types, and in both cases the looser types were unsound in practice.
+
 ## v0.10.0 - 2026-05-01
 
 This release fixes the long-standing "the file uploaded but the UI shows it failed" symptom on large uploads, plus a related cluster of race conditions and a couple of long-overdue ergonomics gaps. There are intentional contract changes — see **Breaking changes** at the bottom.

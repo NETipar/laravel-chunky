@@ -1,0 +1,6 @@
+# Default owner for everything
+*       @hegedustibor
+
+# Release engineering
+/.github/workflows/  @hegedustibor
+/CHANGELOG.md        @hegedustibor

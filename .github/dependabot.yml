@@ -1,0 +1,90 @@
+version: 2
+updates:
+  # Composer (PHP)
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Budapest"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "php"
+    commit-message:
+      prefix: "composer"
+    groups:
+      laravel:
+        patterns:
+          - "illuminate/*"
+          - "laravel/*"
+      dev-dependencies:
+        dependency-type: "development"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+
+  # pnpm workspace - root devDependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "npm"
+    groups:
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "happy-dom"
+
+  # Per-package npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/packages/core"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "package:core"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/vue3"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "package:vue3"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/react"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "package:react"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/alpine"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "package:alpine"

@@ -1,6 +1,35 @@
+# IDE / Editor
 /.idea
+/.vscode
+/.fleet
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PHP
 /vendor
-node_modules
+composer.lock
 .phpunit.result.cache
 .phpunit.cache
-composer.lock
+.phpstan.cache
+/coverage
+*.cobertura.xml
+clover.xml
+coverage.xml
+
+# Node / pnpm
+node_modules
+.pnpm-store
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env (defensive — should never be in a package repo)
+.env
+.env.local
+.env.*.local

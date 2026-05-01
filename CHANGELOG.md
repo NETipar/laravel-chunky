@@ -2,6 +2,29 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While in `0.x`, minor releases (`0.x.0`) may contain breaking changes; patch releases (`0.x.y`) are bug-fix only. See [UPGRADE.md](UPGRADE.md) for migration notes.
+
+## v0.17.0 - 2026-05-01
+
+Operational hardening release: governance metadata, CI policy upgrades, reproducible publish flow with npm provenance, and Dependabot. No source-code changes — pure release engineering.
+
+### Added
+- **`.editorconfig`** for cross-editor whitespace consistency (PHP files use 4-space indent, frontend files use 2-space, Markdown preserves trailing whitespace).
+- **`.github/dependabot.yml`** with weekly schedules for Composer, GitHub Actions, root pnpm devDependencies, and each of the 4 npm packages. Related deps grouped (e.g. all `illuminate/*`, all `@types/*`, all `vitest`/`@vitest/*`/`happy-dom`) so the Dependabot inbox doesn't drown the maintainer.
+- **`.github/CODEOWNERS`** so PRs touching workflows or CHANGELOG.md are automatically routed for review.
+- **npm publish provenance.** The `npm-publish.yml` workflow now sets `NPM_CONFIG_PROVENANCE: true` and `permissions: id-token: write`, so published packages carry an attestation linking them back to this exact GitHub Actions run. Adds a "Verified" badge on the npmjs.com package pages.
+- **Version-sync verification step** in `npm-publish.yml`: refuses to publish if the 4 npm `package.json` versions disagree with the release tag.
+- **Pre-publish typecheck + tests** in `npm-publish.yml`. The build script previously only ran the build itself; now `pnpm typecheck` and `pnpm test` are gating steps so a typo never reaches npm.
+- **`workflow_dispatch` trigger** on `npm-publish.yml` with a `tag` input — lets a maintainer re-publish a previously failed release without creating a duplicate GitHub Release.
+- **CHANGELOG header** now references Keep a Changelog and SemVer with explicit `0.x` policy guidance.
+
+### Changed
+- **`phpunit.xml` hardened**: explicit `cacheDirectory`, `executionOrder="random"` (catches order-dependent tests), `failOnWarning="true"` and `failOnRisky="true"` (catches PHP deprecations and "tests that don't actually test anything"), strict output assertions, an explicit `<coverage>` block with Clover/HTML/text reporters, and a `<php>` env block setting `APP_ENV=testing`, `CACHE_DRIVER=array`, `QUEUE_CONNECTION=sync`, etc.
+- **`.gitignore` expanded** to cover macOS `.DS_Store`, VSCode/Fleet IDE folders, PHPStan/PHPUnit caches, npm/pnpm logs, coverage outputs, and `.env*` (defensive — should never be in a package repo, but the entry is cheap).
+
+### npm packages
+- All packages bumped to `0.17.0` (no source changes — re-publish for version-sync consistency).
+
 ## v0.16.0 - 2026-05-01
 
 Polish release: localisable HTTP error messages, runtime config validation, fewer magic strings, and a 503 path for Cache-lock contention. No new public features; everything here is hardening or readability.

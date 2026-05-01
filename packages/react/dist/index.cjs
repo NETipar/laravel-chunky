@@ -73,6 +73,7 @@ function useChunkUpload(options = {}) {
   const resume = (0, import_react.useCallback)(() => uploaderRef.current.resume(), []);
   const cancel = (0, import_react.useCallback)(() => uploaderRef.current.cancel(), []);
   const retry = (0, import_react.useCallback)(() => uploaderRef.current.retry(), []);
+  const destroy = (0, import_react.useCallback)(() => uploaderRef.current.destroy(), []);
   const onProgress = (0, import_react.useCallback)(
     (cb) => uploaderRef.current.on("progress", cb),
     []
@@ -104,6 +105,7 @@ function useChunkUpload(options = {}) {
     resume,
     cancel,
     retry,
+    destroy,
     onProgress,
     onChunkUploaded,
     onComplete,
@@ -156,6 +158,7 @@ function useBatchUpload(options = {}) {
   const cancel = (0, import_react2.useCallback)(() => uploaderRef.current.cancel(), []);
   const pause = (0, import_react2.useCallback)(() => uploaderRef.current.pause(), []);
   const resume = (0, import_react2.useCallback)(() => uploaderRef.current.resume(), []);
+  const destroy = (0, import_react2.useCallback)(() => uploaderRef.current.destroy(), []);
   const onProgress = (0, import_react2.useCallback)(
     (cb) => uploaderRef.current.on("progress", cb),
     []
@@ -195,6 +198,7 @@ function useBatchUpload(options = {}) {
     cancel,
     pause,
     resume,
+    destroy,
     onProgress,
     onFileProgress,
     onFileComplete,

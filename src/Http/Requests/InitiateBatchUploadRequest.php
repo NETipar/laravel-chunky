@@ -5,7 +5,6 @@ namespace NETipar\Chunky\Http\Requests;
 use Illuminate\Validation\ValidationException;
 use NETipar\Chunky\Authorization\AuthorizesChunkyRequests;
 use NETipar\Chunky\ChunkyManager;
-use NETipar\Chunky\Enums\BatchStatus;
 
 class InitiateBatchUploadRequest extends InitiateUploadRequest
 {
@@ -27,6 +26,8 @@ class InitiateBatchUploadRequest extends InitiateUploadRequest
         // actual save callback that will run (validation bypass).
         $batchContext = $this->resolveBatchContext();
 
+        $maxMetadataKeys = (int) config('chunky.metadata.max_keys', 50);
+
         $rules = [
             'file_name' => [
                 'required',
@@ -37,7 +38,7 @@ class InitiateBatchUploadRequest extends InitiateUploadRequest
             ],
             'file_size' => ['required', 'integer', 'min:1'],
             'mime_type' => ['nullable', 'string', 'max:255'],
-            'metadata' => ['nullable', 'array'],
+            'metadata' => ['nullable', 'array', "max:{$maxMetadataKeys}"],
             'context' => ['nullable', 'string', 'max:100'],
         ];
 
@@ -78,11 +79,7 @@ class InitiateBatchUploadRequest extends InitiateUploadRequest
         // A finalised batch refuses additional uploads at the manager layer
         // (see validateBatchExists). Surface that as a validation error here
         // so the caller gets a clean 422 instead of a 500.
-        if (in_array(
-            $batch->status,
-            [BatchStatus::Completed, BatchStatus::PartiallyCompleted, BatchStatus::Expired],
-            true,
-        )) {
+        if ($batch->status->isTerminal()) {
             throw ValidationException::withMessages([
                 'batch' => ["Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value})."],
             ]);

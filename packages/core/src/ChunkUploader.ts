@@ -211,10 +211,16 @@ export class ChunkUploader {
 
         const url = this.endpoints.upload.replace('{uploadId}', id);
 
+        // Stable idempotency key per (uploadId, chunkIndex). When the
+        // network retries this exact chunk because the response was lost,
+        // the server replays the cached result instead of double-firing
+        // ChunkUploaded events.
+        const idempotencyKey = `${id}:${chunkIndex}`;
+
         try {
             const result = await this.fetchJson<ChunkUploadResponse>(url, {
                 method: 'POST',
-                headers: this.getHeaders(),
+                headers: { ...this.getHeaders(), 'Idempotency-Key': idempotencyKey },
                 body: formData,
             });
 
@@ -260,6 +266,12 @@ export class ChunkUploader {
     private async uploadChunks(file: File, id: string, chunkSize: number, total: number): Promise<void> {
         const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
 
+        // Use a Set for the "still pending" view so removing a finished
+        // chunk index is O(1). The previous Array.filter() rebuilt the
+        // whole array on every chunk, giving O(N²) work for large files
+        // (e.g. 10000 chunks → 50M ops just maintaining the list).
+        const pending = new Set<number>(this.pendingChunks);
+
         let index = 0;
         let completed = false;
 
@@ -276,7 +288,7 @@ export class ChunkUploader {
 
                 const result = await this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, this.maxRetries);
 
-                this.pendingChunks = this.pendingChunks.filter((i) => i !== chunkIndex);
+                pending.delete(chunkIndex);
 
                 if (result.is_complete) {
                     completed = true;
@@ -286,7 +298,14 @@ export class ChunkUploader {
         };
 
         const workers = Array.from({ length: Math.min(this.maxConcurrent, chunks.length) }, () => next());
-        await Promise.all(workers);
+
+        try {
+            await Promise.all(workers);
+        } finally {
+            // Sync the public pendingChunks back from the Set so resume()
+            // sees the right list of remaining indices.
+            this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+        }
     }
 
     private async fetchStatus(id: string): Promise<StatusResponse> {
@@ -354,7 +373,19 @@ export class ChunkUploader {
 
             this.emitStateChange();
 
-            const chunkSize = this.chunkSizeOverride ?? this.serverChunkSize ?? 1024 * 1024;
+            const chunkSize = this.chunkSizeOverride ?? this.serverChunkSize;
+
+            if (!chunkSize || chunkSize <= 0) {
+                // Without a server-supplied chunk size we'd be guessing how
+                // to slice the file — and any guess that disagrees with the
+                // backend's chunk_size produces silently corrupted output
+                // (the last chunk would be the wrong length). Refuse to
+                // proceed instead of falling back to 1MB.
+                throw new Error(
+                    'Server did not return a chunk_size and no chunkSize override was provided. ' +
+                        'Cannot proceed without an authoritative chunk size.',
+                );
+            }
 
             await this.uploadChunks(file, this.uploadId!, chunkSize, this.totalChunks);
 
@@ -450,6 +481,10 @@ export class ChunkUploader {
     private async cancelOnServer(id: string): Promise<void> {
         const url = this.endpoints.cancel.replace('{uploadId}', id);
 
+        // Use buildHeaders() (via getHeaders) so the DELETE carries the
+        // X-XSRF-TOKEN header on Laravel apps with stateful sessions.
+        // Without it the DELETE returns 419 and the temp chunks linger
+        // until the expiration sweep.
         await fetch(url, {
             method: 'DELETE',
             credentials: this.withCredentials ? 'include' : 'same-origin',

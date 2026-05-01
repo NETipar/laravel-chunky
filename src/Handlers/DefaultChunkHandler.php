@@ -43,7 +43,15 @@ class DefaultChunkHandler implements ChunkHandler
         $finalPath = config('chunky.final_directory')."/{$uploadId}/{$safeFileName}";
         $disk = $this->disk();
 
-        $tempFile = tempnam(sys_get_temp_dir(), 'chunky-');
+        $stagingDir = $this->resolveStagingDirectory();
+        $tempFile = tempnam($stagingDir, 'chunky-');
+
+        if ($tempFile === false) {
+            throw new \RuntimeException(
+                "Failed to create staging temp file in '{$stagingDir}'. "
+                .'Ensure the directory exists and is writable.',
+            );
+        }
         $output = fopen($tempFile, 'wb');
 
         try {
@@ -99,5 +107,22 @@ class DefaultChunkHandler implements ChunkHandler
     private function disk(): Filesystem
     {
         return Storage::disk(config('chunky.disk'));
+    }
+
+    private function resolveStagingDirectory(): string
+    {
+        $configured = config('chunky.staging_directory');
+
+        if (! $configured) {
+            return sys_get_temp_dir();
+        }
+
+        if (! is_dir($configured) && ! @mkdir($configured, 0755, true) && ! is_dir($configured)) {
+            throw new \RuntimeException(
+                "Configured chunky.staging_directory '{$configured}' does not exist and could not be created.",
+            );
+        }
+
+        return $configured;
     }
 }

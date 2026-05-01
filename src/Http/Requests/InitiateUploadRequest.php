@@ -22,6 +22,8 @@ class InitiateUploadRequest extends FormRequest
         // Windows reserved chars) and the `.` / `..` directory references.
         // The handler additionally applies basename() as a defence-in-depth
         // measure when assembling the final path.
+        $maxMetadataKeys = (int) config('chunky.metadata.max_keys', 50);
+
         $rules = [
             'file_name' => [
                 'required',
@@ -32,7 +34,7 @@ class InitiateUploadRequest extends FormRequest
             ],
             'file_size' => ['required', 'integer', 'min:1'],
             'mime_type' => ['nullable', 'string', 'max:255'],
-            'metadata' => ['nullable', 'array'],
+            'metadata' => ['nullable', 'array', "max:{$maxMetadataKeys}"],
             'context' => ['nullable', 'string', 'max:100'],
         ];
 

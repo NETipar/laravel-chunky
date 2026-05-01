@@ -26,6 +26,13 @@ export interface BatchUploadReturn {
     cancel: () => void;
     pause: () => void;
     resume: () => void;
+    /**
+     * Tear down the uploader manually. The hook's useEffect cleanup
+     * already does this on unmount, but having it on the return value
+     * lets components that hold the uploader in a ref or context cancel
+     * it deterministically (e.g. before navigating away).
+     */
+    destroy: () => void;
 
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;
     onFileProgress: (callback: (event: FileProgressEvent) => void) => Unsubscribe;
@@ -84,6 +91,7 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
     const cancel = useCallback(() => uploaderRef.current!.cancel(), []);
     const pause = useCallback(() => uploaderRef.current!.pause(), []);
     const resume = useCallback(() => uploaderRef.current!.resume(), []);
+    const destroy = useCallback(() => uploaderRef.current!.destroy(), []);
 
     const onProgress = useCallback(
         (cb: (event: BatchProgressEvent) => void) => uploaderRef.current!.on('progress', cb),
@@ -131,6 +139,7 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         cancel,
         pause,
         resume,
+        destroy,
 
         onProgress,
         onFileProgress,

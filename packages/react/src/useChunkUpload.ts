@@ -25,6 +25,7 @@ export interface ChunkUploadReturn {
     resume: () => boolean;
     cancel: () => void;
     retry: () => boolean;
+    destroy: () => void;
 
     onProgress: (callback: (event: ProgressEvent) => void) => Unsubscribe;
     onChunkUploaded: (callback: (chunk: ChunkInfo) => void) => Unsubscribe;
@@ -77,6 +78,7 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
     const resume = useCallback(() => uploaderRef.current!.resume(), []);
     const cancel = useCallback(() => uploaderRef.current!.cancel(), []);
     const retry = useCallback(() => uploaderRef.current!.retry(), []);
+    const destroy = useCallback(() => uploaderRef.current!.destroy(), []);
 
     const onProgress = useCallback(
         (cb: (event: ProgressEvent) => void) => uploaderRef.current!.on('progress', cb),
@@ -114,6 +116,7 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
         resume,
         cancel,
         retry,
+        destroy,
 
         onProgress,
         onChunkUploaded,

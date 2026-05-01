@@ -12,7 +12,16 @@ export interface UseBatchCompletionOptions {
     channelPrefix?: string;
     pollStartDelayMs?: number;
     pollIntervalMs?: number;
+    pollMaxIntervalMs?: number;
+    pollBackoffFactor?: number;
     timeoutMs?: number;
+    /**
+     * Wait this many milliseconds after the last `batchId` change before
+     * starting the watcher. Protects against rapid null↔id flapping (e.g.
+     * route param churn) which would otherwise teardown/setup an Echo
+     * subscription on every tick. Default: 50ms.
+     */
+    debounceMs?: number;
     headers?: Record<string, string>;
     withCredentials?: boolean;
     onComplete?: (result: BatchCompletionResult) => void;
@@ -39,8 +48,13 @@ export function useBatchCompletion(
     const result = ref<BatchCompletionResult | null>(null);
 
     let cleanup: (() => void) | null = null;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const stop = (): void => {
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+            debounceTimer = null;
+        }
         cleanup?.();
         cleanup = null;
         isWaiting.value = false;
@@ -62,6 +76,45 @@ export function useBatchCompletion(
         }
     };
 
+    const debounceMs = options.debounceMs ?? 50;
+
+    const startWatcher = (id: string): void => {
+        result.value = null;
+        receivedVia.value = null;
+        isWaiting.value = true;
+
+        cleanup = watchBatchCompletion({
+            batchId: id,
+            statusEndpoint: options.statusEndpoint,
+            echo: options.echo,
+            channelPrefix: options.channelPrefix,
+            pollStartDelayMs: options.pollStartDelayMs,
+            pollIntervalMs: options.pollIntervalMs,
+            pollMaxIntervalMs: options.pollMaxIntervalMs,
+            pollBackoffFactor: options.pollBackoffFactor,
+            timeoutMs: options.timeoutMs,
+            headers: options.headers,
+            withCredentials: options.withCredentials,
+            onSubscribed: options.onSubscribed,
+            onSubscribeError: options.onSubscribeError,
+            onComplete: (data) => handleResult('complete', data),
+            onPartiallyCompleted: (data) => handleResult('partial', data),
+            onTimeout: () => {
+                isWaiting.value = false;
+                cleanup = null;
+                options.onTimeout?.();
+            },
+            onError: (err, isFatal) => {
+                if (isFatal) {
+                    isWaiting.value = false;
+                    cleanup = null;
+                }
+
+                options.onError?.(err, isFatal);
+            },
+        });
+    };
+
     watch(
         batchId,
         (id) => {
@@ -71,38 +124,15 @@ export function useBatchCompletion(
                 return;
             }
 
-            result.value = null;
-            receivedVia.value = null;
-            isWaiting.value = true;
+            if (debounceMs <= 0) {
+                startWatcher(id);
+                return;
+            }
 
-            cleanup = watchBatchCompletion({
-                batchId: id,
-                statusEndpoint: options.statusEndpoint,
-                echo: options.echo,
-                channelPrefix: options.channelPrefix,
-                pollStartDelayMs: options.pollStartDelayMs,
-                pollIntervalMs: options.pollIntervalMs,
-                timeoutMs: options.timeoutMs,
-                headers: options.headers,
-                withCredentials: options.withCredentials,
-                onSubscribed: options.onSubscribed,
-                onSubscribeError: options.onSubscribeError,
-                onComplete: (data) => handleResult('complete', data),
-                onPartiallyCompleted: (data) => handleResult('partial', data),
-                onTimeout: () => {
-                    isWaiting.value = false;
-                    cleanup = null;
-                    options.onTimeout?.();
-                },
-                onError: (err, isFatal) => {
-                    if (isFatal) {
-                        isWaiting.value = false;
-                        cleanup = null;
-                    }
-
-                    options.onError?.(err, isFatal);
-                },
-            });
+            debounceTimer = setTimeout(() => {
+                debounceTimer = null;
+                startWatcher(id);
+            }, debounceMs);
         },
         { immediate: true },
     );

@@ -53,14 +53,19 @@ class UploadFailed implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        return [
+        $payload = [
             'uploadId' => $this->uploadId,
-            'disk' => $this->disk,
             'fileName' => $this->upload->fileName,
             'fileSize' => $this->upload->fileSize,
             'context' => $this->upload->context,
             'reason' => $this->reason,
         ];
+
+        if (config('chunky.broadcasting.expose_internal_paths', false)) {
+            $payload['disk'] = $this->disk;
+        }
+
+        return $payload;
     }
 
     public function broadcastQueue(): ?string

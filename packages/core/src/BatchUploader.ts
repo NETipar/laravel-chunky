@@ -399,13 +399,18 @@ export class BatchUploader {
             return 0;
         }
 
-        const inProgressContribution = this.uploaders.reduce((acc, uploader) => {
-            if (uploader.isUploading && !uploader.isComplete) {
-                return acc + uploader.progress / 100;
-            }
+        // Walk only the uploaders that are currently in flight. For a
+        // 1000-file batch with a maxConcurrentFiles of 2, this scans 2
+        // entries per progress event instead of 1000 — keeps the
+        // event-emit hot path O(maxConcurrentFiles) regardless of batch
+        // size.
+        let inProgressContribution = 0;
 
-            return acc;
-        }, 0);
+        for (const uploader of this.uploaders) {
+            if (uploader.isUploading && !uploader.isComplete) {
+                inProgressContribution += uploader.progress / 100;
+            }
+        }
 
         const finishedFiles = this.completedFiles + this.failedFiles;
         const total = finishedFiles + inProgressContribution;

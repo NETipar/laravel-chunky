@@ -16,6 +16,18 @@ return [
     // Final directory for assembled files
     'final_directory' => 'chunky/uploads',
 
+    // Local filesystem directory used while assembling chunks into the
+    // final file. The DefaultChunkHandler streams chunks through a temp
+    // file here BEFORE writing the result to the final disk; for cloud
+    // disks (S3, GCS) this means the assembly transiently consumes
+    // local-disk space equal to the full upload size.
+    //
+    // Default null = use sys_get_temp_dir(). Set to a path on a volume
+    // with enough free space when accepting uploads larger than your
+    // /tmp partition (e.g. mount a dedicated EBS volume and point this
+    // at /var/chunky-staging).
+    'staging_directory' => env('CHUNKY_STAGING_DIRECTORY'),
+
     // Chunk expiration in minutes
     'expiration' => 1440,
 
@@ -31,6 +43,57 @@ return [
     // own external locking mechanism for the tracker mutation paths.
     'skip_local_disk_guard' => false,
 
+    // Locking driver for tracker mutations and batch counter updates:
+    //  - 'flock'  (default): file locks against the local disk; works
+    //             out of the box on local-disk setups, free of charge.
+    //  - 'cache': Laravel cache-backed locks (Cache::lock()); works
+    //             with cloud disks (S3, GCS, multi-server). Requires a
+    //             cache driver that supports atomic locks (Redis,
+    //             Memcached, DB, DynamoDB).
+    'lock_driver' => env('CHUNKY_LOCK_DRIVER', 'flock'),
+
+    // How long a held lock survives before the runtime forcibly releases
+    // it. Should be longer than the slowest critical section (chunk write +
+    // metadata update on slow storage).
+    'lock_ttl_seconds' => 30,
+
+    // How long to wait for an existing lock holder to release before
+    // giving up. The runtime throws Illuminate\Contracts\Cache\LockTimeoutException
+    // if exceeded — surfaces as 500 to the caller, who can retry.
+    'lock_wait_seconds' => 5,
+
+    // Idempotency for chunk POSTs. When enabled, a chunk POST is cached
+    // by (uploadId, chunkIndex, Idempotency-Key OR checksum) and
+    // subsequent retries within `idempotency_ttl_seconds` replay the
+    // cached response. Prevents duplicate ChunkUploaded events and
+    // duplicate AssembleFileJob dispatches when the network retries a
+    // request the server actually accepted.
+    'idempotency' => [
+        'enabled' => true,
+    ],
+    'idempotency_ttl_seconds' => 300,
+
+    // Observability hooks. Each entry is an optional callable that
+    // receives an associative payload at the named lifecycle event. Use
+    // these to bridge to Datadog / Prometheus / StatsD / your own
+    // logging without forking the package. Exceptions thrown by the
+    // callbacks are swallowed so a metrics bug cannot break uploads.
+    //
+    // Example:
+    //   'metrics' => [
+    //       'chunk_uploaded' => fn (array $p) =>
+    //           Datadog::histogram('chunky.chunk_upload_ms', $p['duration_ms']),
+    //       'assembly_completed' => fn (array $p) =>
+    //           Datadog::histogram('chunky.assembly_ms', $p['duration_ms']),
+    //   ],
+    'metrics' => [
+        'chunk_uploaded' => null,
+        'chunk_upload_failed' => null,
+        'assembly_started' => null,
+        'assembly_completed' => null,
+        'assembly_failed' => null,
+    ],
+
     // Max file size in bytes - 0 = unlimited
     'max_file_size' => 0,
 
@@ -41,6 +104,14 @@ return [
 
     // Allowed MIME types - empty = all
     'allowed_mimes' => [],
+
+    // Caps on the user-supplied `metadata` array. Each upload's metadata
+    // is persisted in the tracker AND echoed in the broadcast event
+    // payload, so an unbounded array can balloon DB rows and broadcast
+    // messages.
+    'metadata' => [
+        'max_keys' => 50,
+    ],
 
     // Class-based upload contexts (auto-registered on boot)
     // 'contexts' => [
@@ -77,5 +148,12 @@ return [
         // register the channel auth callbacks yourself (e.g. in your app's
         // routes/channels.php).
         'register_channels' => true,
+
+        // Set to true to include server-internal fields (the storage
+        // `disk` name and the absolute `finalPath` on disk) in the
+        // UploadCompleted/UploadFailed broadcast payloads. Most apps
+        // don't need this on the wire — keep it false unless a consumer
+        // genuinely depends on it.
+        'expose_internal_paths' => false,
     ],
 ];

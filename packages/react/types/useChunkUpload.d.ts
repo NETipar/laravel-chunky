@@ -14,6 +14,7 @@ export interface ChunkUploadReturn {
     resume: () => boolean;
     cancel: () => void;
     retry: () => boolean;
+    destroy: () => void;
     onProgress: (callback: (event: ProgressEvent) => void) => Unsubscribe;
     onChunkUploaded: (callback: (chunk: ChunkInfo) => void) => Unsubscribe;
     onComplete: (callback: (result: UploadResult) => void) => Unsubscribe;

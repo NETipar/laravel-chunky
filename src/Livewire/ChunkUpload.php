@@ -4,6 +4,7 @@ namespace NETipar\Chunky\Livewire;
 
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
+use NETipar\Chunky\Authorization\Authorizer;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Enums\UploadStatus;
 
@@ -46,17 +47,37 @@ class ChunkUpload extends Component
             return ['success' => false, 'error' => $this->error];
         }
 
+        // Ownership check: the public uploadId property is round-tripped
+        // through the wire payload, so a malicious client could swap it
+        // mid-session. Defer to the bound Authorizer for the same rules
+        // the HTTP and broadcast layers use.
+        if (! app(Authorizer::class)->canAccessUpload(auth()->user(), $uploadMetadata)) {
+            $this->error = 'Upload not yet completed.';
+            $this->uploadId = null;
+
+            return ['success' => false, 'error' => $this->error];
+        }
+
         $this->isComplete = true;
         $this->fileName = $uploadMetadata->fileName;
         $this->fileSize = $uploadMetadata->fileSize;
 
-        $this->dispatch('chunky-upload-completed', [
+        // Mirror the broadcast payload sanitisation: by default we don't
+        // emit the storage disk or the absolute final_path to the
+        // browser. Set chunky.broadcasting.expose_internal_paths = true
+        // to opt back in.
+        $payload = [
             'uploadId' => $this->uploadId,
             'fileName' => $uploadMetadata->fileName,
             'fileSize' => $uploadMetadata->fileSize,
-            'finalPath' => $uploadMetadata->finalPath,
-            'disk' => $uploadMetadata->disk,
-        ]);
+        ];
+
+        if (config('chunky.broadcasting.expose_internal_paths', false)) {
+            $payload['finalPath'] = $uploadMetadata->finalPath;
+            $payload['disk'] = $uploadMetadata->disk;
+        }
+
+        $this->dispatch('chunky-upload-completed', $payload);
 
         return ['success' => true, 'uploadId' => $this->uploadId];
     }

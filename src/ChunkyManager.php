@@ -3,6 +3,7 @@
 namespace NETipar\Chunky;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use NETipar\Chunky\Contracts\ChunkHandler;
@@ -22,6 +23,7 @@ use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Models\ChunkyBatch;
 use NETipar\Chunky\Support\ChunkCalculator;
+use NETipar\Chunky\Support\Metrics;
 
 class ChunkyManager
 {
@@ -79,7 +81,19 @@ class ChunkyManager
             rules: $rules,
             save: function (UploadMetadata $metadata) use ($directory) {
                 $disk = Storage::disk($metadata->disk);
-                $destination = rtrim($directory, '/')."/{$metadata->fileName}";
+                // Defence-in-depth: even though InitiateUploadRequest's
+                // file_name regex blocks path-traversal characters and the
+                // assembler applies basename(), guard the destination here
+                // too in case a custom request layer slips one through.
+                $safeName = basename($metadata->fileName);
+
+                if ($safeName === '' || $safeName === '.' || $safeName === '..') {
+                    throw new ChunkyException(
+                        "Refusing to move upload {$metadata->uploadId}: invalid file name."
+                    );
+                }
+
+                $destination = rtrim($directory, '/')."/{$safeName}";
 
                 $disk->move($metadata->finalPath, $destination);
             },
@@ -94,6 +108,10 @@ class ChunkyManager
      */
     public function context(string $name, ?\Closure $rules = null, ?\Closure $save = null): void
     {
+        if (trim($name) === '') {
+            throw new ChunkyException('Context name must be a non-empty string.');
+        }
+
         $this->contexts[$name] = [
             'rules' => $rules,
             'save' => $save,
@@ -169,11 +187,20 @@ class ChunkyManager
         // a cancelled/completed upload.
         $this->assertCanAcceptChunk($uploadId);
 
+        $startedAt = hrtime(true);
+
         try {
             $this->handler->store($uploadId, $chunkIndex, $chunk);
             $metadata = $this->tracker->markChunkUploaded($uploadId, $chunkIndex);
 
             ChunkUploaded::dispatch($uploadId, $chunkIndex, $metadata->totalChunks);
+
+            Metrics::emit('chunk_uploaded', [
+                'upload_id' => $uploadId,
+                'chunk_index' => $chunkIndex,
+                'duration_ms' => (hrtime(true) - $startedAt) / 1_000_000,
+                'size_bytes' => $chunk->getSize() ?: 0,
+            ]);
 
             return new ChunkUploadResult(
                 isComplete: count($metadata->uploadedChunks) >= $metadata->totalChunks,
@@ -181,6 +208,14 @@ class ChunkyManager
             );
         } catch (\Throwable $e) {
             ChunkUploadFailed::dispatch($uploadId, $chunkIndex, $e);
+
+            Metrics::emit('chunk_upload_failed', [
+                'upload_id' => $uploadId,
+                'chunk_index' => $chunkIndex,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
             throw $e;
         }
     }
@@ -459,6 +494,15 @@ class ChunkyManager
 
     private function withBatchLock(string $batchId, \Closure $callback): void
     {
+        if (config('chunky.lock_driver', 'flock') === 'cache') {
+            $ttl = (int) config('chunky.lock_ttl_seconds', 30);
+            $waitFor = (int) config('chunky.lock_wait_seconds', 5);
+
+            Cache::lock("chunky:batch:{$batchId}", $ttl)->block($waitFor, $callback);
+
+            return;
+        }
+
         $disk = Storage::disk(config('chunky.disk'));
         $relativePath = config('chunky.temp_directory')."/batches/{$batchId}/batch.json";
 
@@ -515,12 +559,6 @@ class ChunkyManager
 
     private function validateBatchExists(string $batchId): void
     {
-        $terminalStatuses = [
-            BatchStatus::Completed,
-            BatchStatus::PartiallyCompleted,
-            BatchStatus::Expired,
-        ];
-
         if (config('chunky.tracker') === 'database') {
             $batch = ChunkyBatch::where('batch_id', $batchId)->first();
 
@@ -533,7 +571,7 @@ class ChunkyManager
                 throw new ChunkyException("Batch {$batchId} has expired.");
             }
 
-            if (in_array($batch->status, $terminalStatuses, true)) {
+            if ($batch->status->isTerminal()) {
                 throw new ChunkyException(
                     "Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value}).",
                 );
@@ -555,9 +593,9 @@ class ChunkyManager
         }
 
         $statusValue = $batchData['status'] ?? null;
-        $terminalValues = array_map(fn (BatchStatus $s) => $s->value, $terminalStatuses);
+        $status = $statusValue ? BatchStatus::tryFrom($statusValue) : null;
 
-        if (in_array($statusValue, $terminalValues, true)) {
+        if ($status !== null && $status->isTerminal()) {
             throw new ChunkyException(
                 "Batch {$batchId} is no longer accepting uploads (status: {$statusValue}).",
             );

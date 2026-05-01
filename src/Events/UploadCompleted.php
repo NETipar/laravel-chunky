@@ -55,15 +55,24 @@ class UploadCompleted implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        return [
+        // Internal-by-default: disk and finalPath are server-side details
+        // (a path inside config('chunky.disk')'s root). Most consumers
+        // only need the upload id and human-readable file metadata. Set
+        // chunky.broadcasting.expose_internal_paths = true to opt in.
+        $payload = [
             'uploadId' => $this->uploadId,
-            'finalPath' => $this->finalPath,
-            'disk' => $this->disk,
             'fileName' => $this->upload->fileName,
             'fileSize' => $this->upload->fileSize,
             'context' => $this->upload->context,
             'status' => $this->upload->status->value,
         ];
+
+        if (config('chunky.broadcasting.expose_internal_paths', false)) {
+            $payload['finalPath'] = $this->finalPath;
+            $payload['disk'] = $this->disk;
+        }
+
+        return $payload;
     }
 
     public function broadcastQueue(): ?string

@@ -14,6 +14,7 @@ use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
 use NETipar\Chunky\Events\UploadFailed;
+use NETipar\Chunky\Support\Metrics;
 
 class AssembleFileJob implements ShouldQueue
 {
@@ -44,7 +45,7 @@ class AssembleFileJob implements ShouldQueue
         // Skip the work entirely if the upload already reached a terminal
         // state — covers the case where the worker died after updateStatus()
         // but before dispatching follow-up events, and the queue retries us.
-        if (in_array($metadata->status, [UploadStatus::Completed, UploadStatus::Failed, UploadStatus::Cancelled, UploadStatus::Expired], true)) {
+        if ($metadata->status->isTerminal()) {
             return;
         }
 
@@ -52,11 +53,25 @@ class AssembleFileJob implements ShouldQueue
             return;
         }
 
+        Metrics::emit('assembly_started', [
+            'upload_id' => $this->uploadId,
+            'file_size' => $metadata->fileSize,
+            'total_chunks' => $metadata->totalChunks,
+        ]);
+
+        $startedAt = hrtime(true);
+
         $finalPath = $handler->assemble(
             $this->uploadId,
             $metadata->fileName,
             $metadata->totalChunks,
         );
+
+        Metrics::emit('assembly_completed', [
+            'upload_id' => $this->uploadId,
+            'file_size' => $metadata->fileSize,
+            'duration_ms' => (hrtime(true) - $startedAt) / 1_000_000,
+        ]);
 
         FileAssembled::dispatch(
             $this->uploadId,
@@ -111,11 +126,7 @@ class AssembleFileJob implements ShouldQueue
         // a queue retry of an already-successful handle() (see the in-handle
         // crash window) from confusing the frontend with a UploadFailed
         // event after a UploadCompleted has already gone out.
-        if ($metadata !== null && in_array(
-            $metadata->status,
-            [UploadStatus::Completed, UploadStatus::Failed, UploadStatus::Cancelled, UploadStatus::Expired],
-            true,
-        )) {
+        if ($metadata !== null && $metadata->status->isTerminal()) {
             return;
         }
 
@@ -129,5 +140,12 @@ class AssembleFileJob implements ShouldQueue
             $manager = app(ChunkyManager::class);
             $manager->markBatchUploadFailed($metadata->batchId);
         }
+
+        Metrics::emit('assembly_failed', [
+            'upload_id' => $this->uploadId,
+            'batch_id' => $metadata?->batchId,
+            'exception' => $e::class,
+            'message' => $e->getMessage(),
+        ]);
     }
 }

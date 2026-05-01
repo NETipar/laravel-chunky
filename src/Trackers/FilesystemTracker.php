@@ -4,6 +4,7 @@ namespace NETipar\Chunky\Trackers;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\UploadMetadata;
@@ -15,13 +16,23 @@ class FilesystemTracker implements UploadTracker
 {
     public function __construct()
     {
-        // The mutation paths in this tracker rely on flock() against a real
-        // local file path. On non-local Flysystem drivers (S3, GCS, etc.)
-        // `disk()->path()` throws and we silently fall back to running the
-        // critical sections lock-free — every chunk-write/claim/status flip
-        // becomes a lost-update race. Refuse to boot in that combination
-        // instead of inviting silent data loss.
-        if (! (bool) config('chunky.skip_local_disk_guard', false)) {
+        // The mutation paths in this tracker need atomic critical sections.
+        // Two locking strategies are supported:
+        //
+        //  1. flock() against a real local file path. The default — works
+        //     out of the box on local-disk setups, no extra infrastructure.
+        //
+        //  2. Cache::lock() against the configured cache driver (Redis,
+        //     Memcached, DB). Required for cloud disks (S3/GCS) where
+        //     `disk()->path()` throws and flock() is impossible. Opt in via
+        //     chunky.lock_driver = 'cache'.
+        //
+        // If neither is available we'd silently run the critical sections
+        // lock-free, turning every chunk-write/claim/status flip into a
+        // lost-update race. Detect the combination and refuse to boot.
+        $driver = config('chunky.lock_driver', 'flock');
+
+        if ($driver === 'flock' && ! (bool) config('chunky.skip_local_disk_guard', false)) {
             $this->assertLocalDisk();
         }
     }
@@ -271,10 +282,9 @@ class FilesystemTracker implements UploadTracker
     }
 
     /**
-     * Run $callback under an exclusive flock() guard against the upload's
-     * metadata file. Falls back to running the callback unguarded when the
-     * underlying filesystem driver does not expose a real local path (for
-     * example S3 or any non-local Flysystem adapter).
+     * Run $callback under an exclusive lock scoped to this upload. The
+     * locking primitive is selected by chunky.lock_driver (`flock` or
+     * `cache`) — see assertLocalDisk() / __construct() for the rationale.
      *
      * @template T
      *
@@ -282,6 +292,21 @@ class FilesystemTracker implements UploadTracker
      * @return T
      */
     private function withLock(string $uploadId, callable $callback): mixed
+    {
+        if (config('chunky.lock_driver', 'flock') === 'cache') {
+            return $this->withCacheLock("chunky:upload:{$uploadId}", $callback);
+        }
+
+        return $this->withFileLock($uploadId, $callback);
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    private function withFileLock(string $uploadId, callable $callback): mixed
     {
         $disk = $this->disk();
 
@@ -317,5 +342,19 @@ class FilesystemTracker implements UploadTracker
         } finally {
             fclose($handle);
         }
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    private function withCacheLock(string $key, callable $callback): mixed
+    {
+        $ttl = (int) config('chunky.lock_ttl_seconds', 30);
+        $waitFor = (int) config('chunky.lock_wait_seconds', 5);
+
+        return Cache::lock($key, $ttl)->block($waitFor, $callback);
     }
 }

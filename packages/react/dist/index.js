@@ -40,6 +40,7 @@ function useChunkUpload(options = {}) {
   const resume = useCallback(() => uploaderRef.current.resume(), []);
   const cancel = useCallback(() => uploaderRef.current.cancel(), []);
   const retry = useCallback(() => uploaderRef.current.retry(), []);
+  const destroy = useCallback(() => uploaderRef.current.destroy(), []);
   const onProgress = useCallback(
     (cb) => uploaderRef.current.on("progress", cb),
     []
@@ -71,6 +72,7 @@ function useChunkUpload(options = {}) {
     resume,
     cancel,
     retry,
+    destroy,
     onProgress,
     onChunkUploaded,
     onComplete,
@@ -123,6 +125,7 @@ function useBatchUpload(options = {}) {
   const cancel = useCallback2(() => uploaderRef.current.cancel(), []);
   const pause = useCallback2(() => uploaderRef.current.pause(), []);
   const resume = useCallback2(() => uploaderRef.current.resume(), []);
+  const destroy = useCallback2(() => uploaderRef.current.destroy(), []);
   const onProgress = useCallback2(
     (cb) => uploaderRef.current.on("progress", cb),
     []
@@ -162,6 +165,7 @@ function useBatchUpload(options = {}) {
     cancel,
     pause,
     resume,
+    destroy,
     onProgress,
     onFileProgress,
     onFileComplete,

@@ -6,7 +6,16 @@ export interface UseBatchCompletionOptions {
     channelPrefix?: string;
     pollStartDelayMs?: number;
     pollIntervalMs?: number;
+    pollMaxIntervalMs?: number;
+    pollBackoffFactor?: number;
     timeoutMs?: number;
+    /**
+     * Wait this many milliseconds after the last `batchId` change before
+     * starting the watcher. Protects against rapid null↔id flapping (e.g.
+     * route param churn) which would otherwise teardown/setup an Echo
+     * subscription on every tick. Default: 50ms.
+     */
+    debounceMs?: number;
     headers?: Record<string, string>;
     withCredentials?: boolean;
     onComplete?: (result: BatchCompletionResult) => void;

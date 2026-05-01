@@ -188,7 +188,12 @@ function useBatchCompletion(batchId, options = {}) {
   const receivedVia = (0, import_vue4.ref)(null);
   const result = (0, import_vue4.ref)(null);
   let cleanup = null;
+  let debounceTimer = null;
   const stop = () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
     cleanup?.();
     cleanup = null;
     isWaiting.value = false;
@@ -204,6 +209,41 @@ function useBatchCompletion(batchId, options = {}) {
       options.onComplete?.(data);
     }
   };
+  const debounceMs = options.debounceMs ?? 50;
+  const startWatcher = (id) => {
+    result.value = null;
+    receivedVia.value = null;
+    isWaiting.value = true;
+    cleanup = (0, import_chunky_core4.watchBatchCompletion)({
+      batchId: id,
+      statusEndpoint: options.statusEndpoint,
+      echo: options.echo,
+      channelPrefix: options.channelPrefix,
+      pollStartDelayMs: options.pollStartDelayMs,
+      pollIntervalMs: options.pollIntervalMs,
+      pollMaxIntervalMs: options.pollMaxIntervalMs,
+      pollBackoffFactor: options.pollBackoffFactor,
+      timeoutMs: options.timeoutMs,
+      headers: options.headers,
+      withCredentials: options.withCredentials,
+      onSubscribed: options.onSubscribed,
+      onSubscribeError: options.onSubscribeError,
+      onComplete: (data) => handleResult("complete", data),
+      onPartiallyCompleted: (data) => handleResult("partial", data),
+      onTimeout: () => {
+        isWaiting.value = false;
+        cleanup = null;
+        options.onTimeout?.();
+      },
+      onError: (err, isFatal) => {
+        if (isFatal) {
+          isWaiting.value = false;
+          cleanup = null;
+        }
+        options.onError?.(err, isFatal);
+      }
+    });
+  };
   (0, import_vue4.watch)(
     batchId,
     (id) => {
@@ -211,36 +251,14 @@ function useBatchCompletion(batchId, options = {}) {
       if (!id) {
         return;
       }
-      result.value = null;
-      receivedVia.value = null;
-      isWaiting.value = true;
-      cleanup = (0, import_chunky_core4.watchBatchCompletion)({
-        batchId: id,
-        statusEndpoint: options.statusEndpoint,
-        echo: options.echo,
-        channelPrefix: options.channelPrefix,
-        pollStartDelayMs: options.pollStartDelayMs,
-        pollIntervalMs: options.pollIntervalMs,
-        timeoutMs: options.timeoutMs,
-        headers: options.headers,
-        withCredentials: options.withCredentials,
-        onSubscribed: options.onSubscribed,
-        onSubscribeError: options.onSubscribeError,
-        onComplete: (data) => handleResult("complete", data),
-        onPartiallyCompleted: (data) => handleResult("partial", data),
-        onTimeout: () => {
-          isWaiting.value = false;
-          cleanup = null;
-          options.onTimeout?.();
-        },
-        onError: (err, isFatal) => {
-          if (isFatal) {
-            isWaiting.value = false;
-            cleanup = null;
-          }
-          options.onError?.(err, isFatal);
-        }
-      });
+      if (debounceMs <= 0) {
+        startWatcher(id);
+        return;
+      }
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        startWatcher(id);
+      }, debounceMs);
     },
     { immediate: true }
   );

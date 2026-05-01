@@ -9,4 +9,17 @@ enum BatchStatus: string
     case Completed = 'completed';
     case PartiallyCompleted = 'partially_completed';
     case Expired = 'expired';
+
+    /**
+     * True when the batch has settled into a state from which it cannot
+     * accept further uploads. Used by validateBatchExists and the request
+     * layer to reject late initiateInBatch calls.
+     */
+    public function isTerminal(): bool
+    {
+        return match ($this) {
+            self::Completed, self::PartiallyCompleted, self::Expired => true,
+            self::Pending, self::Processing => false,
+        };
+    }
 }

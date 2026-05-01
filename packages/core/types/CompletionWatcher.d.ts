@@ -26,7 +26,17 @@ export interface CompletionWatcherOptions {
     channelPrefix?: string;
     pollStartDelayMs?: number;
     pollIntervalMs?: number;
+    pollMaxIntervalMs?: number;
+    pollBackoffFactor?: number;
     timeoutMs?: number;
+    /**
+     * When set, every poll response that shows progress (the number of
+     * processed files increased) extends the wall-clock timeout by this
+     * many milliseconds. Lets a long-but-progressing batch keep running
+     * past the static `timeoutMs` deadline without giving up.
+     * Default 0 = disabled (static deadline).
+     */
+    extendTimeoutOnProgressMs?: number;
     headers?: Record<string, string>;
     withCredentials?: boolean;
     onComplete?: (result: BatchCompletionResult) => void;

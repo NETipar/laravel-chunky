@@ -2,6 +2,43 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## Unreleased
+
+This release applies the remaining items from the v0.12.0 deep review (cross-cutting concerns + nits) plus a few new findings from the implementation pass. The headline change is **opt-in support for cloud disks** in the FilesystemTracker via Cache-backed locks, alongside built-in idempotency for chunk POSTs and a metrics-callback surface for observability integrations.
+
+### Added
+- **`chunky.lock_driver = 'cache'`** — Cache::lock-backed locking for `FilesystemTracker` mutations and the batch counter. Required when running against S3, GCS, or any non-local Flysystem disk; works with any Laravel cache driver that supports atomic locks (Redis, Memcached, DB, DynamoDB). Defaults to `flock` for backward compatibility. Tunable via `chunky.lock_ttl_seconds` (30) and `chunky.lock_wait_seconds` (5).
+- **Idempotent chunk POSTs.** The `POST /upload/{uploadId}/chunks` endpoint now caches its response by `(uploadId, chunkIndex, Idempotency-Key OR checksum)` for `chunky.idempotency_ttl_seconds` (default 300). A network retry of a chunk the server already accepted replays the cached payload byte-for-byte instead of double-firing `ChunkUploaded` events and double-dispatching `AssembleFileJob`. The frontend `ChunkUploader` automatically attaches an `Idempotency-Key` header (`{uploadId}:{chunkIndex}`).
+- **Observability hooks (`chunky.metrics`).** Five lifecycle events fire through `NETipar\Chunky\Support\Metrics::emit()`: `chunk_uploaded`, `chunk_upload_failed`, `assembly_started`, `assembly_completed`, `assembly_failed`. Wire any of them to Datadog / Prometheus / StatsD via a callable in config. Callback exceptions are swallowed so an observability bug cannot break the upload pipeline.
+- **`UploadStatus::isTerminal()` and `BatchStatus::isTerminal()`** helpers, replacing 5+ inline `in_array($status, [Completed, Failed, …])` lists across the codebase. Single source of truth for "is this state final?" semantics.
+- **`chunky.staging_directory`** config — local filesystem directory used while assembling chunks. Defaults to `sys_get_temp_dir()`. Set to a path on a volume with enough free space when accepting uploads larger than your `/tmp` partition (cloud-disk targets buffer the full file locally before upload).
+- **`chunky.metadata.max_keys`** config (default 50) — bounded user-supplied metadata, so a misbehaving client can't balloon DB rows or broadcast payloads with megabyte-sized metadata blobs.
+- **`chunky.broadcasting.expose_internal_paths`** — opt-in flag to include the storage `disk` and absolute `finalPath` in the `UploadCompleted`/`UploadFailed` broadcast payloads. Defaults to `false` so server-internal paths don't leak over WebSocket. The Livewire component honours the same flag.
+- **`CompletionWatcher` poll backoff and progress-aware timeout.** New options: `pollMaxIntervalMs` (default 30000), `pollBackoffFactor` (default 1.5), and `extendTimeoutOnProgressMs` (default 0 = static deadline). The poll cadence now grows over time so a long-running batch doesn't hammer the status endpoint at the initial cadence; with `extendTimeoutOnProgressMs > 0`, observed progress extends the wall-clock deadline.
+- **`useBatchCompletion` (Vue 3) `debounceMs`** option (default 50) — protects against `batchId` flapping on rapid route param changes, which would otherwise teardown/setup an Echo subscription on every tick.
+- **React `useChunkUpload` / `useBatchUpload` and Alpine wrappers expose `destroy()`** for explicit teardown. Brings parity with the Vue 3 wrappers shipped in v0.12.0.
+
+### Fixed
+- **`ChunkUploader.upload()` no longer falls back to a 1MB chunk size silently.** A missing `chunk_size` from the server (and no client override) now throws — guessing the slice size produces silently corrupted output if the guess disagrees with the backend.
+- **`ChunkUploader.uploadChunks()` is O(N) instead of O(N²) on the pending list.** A `Set` replaces the previous `Array.filter()` rebuild on every chunk completion. For a 10000-chunk file that's ~50M ops saved.
+- **`BatchUploader.aggregateProgress()`** uses a `for` loop instead of `Array.reduce` — same time complexity, less closure overhead per progress event.
+- **`CompletionWatcher` no longer hammers a 401/403/404 endpoint.** All three status codes are now treated as fatal alongside 404 (added in v0.12.0); previously 401/403 looped at 2-second intervals until the wall-clock timeout.
+- **`ChunkyContext::name()` empty string is rejected** at registration time rather than producing a silently broken `$contexts['']` entry.
+- **`simple()` save-callback** applies a defence-in-depth `basename()` to the destination, mirroring the assembler's path-traversal guard.
+- **`Livewire/ChunkUpload::completeUpload()`** now performs an Authorizer ownership check on the upload before broadcasting the completion event — closes the same IDOR surface that v0.12.0 closed for the HTTP layer.
+
+### Changed
+- **`UploadCompleted` and `UploadFailed` broadcast payloads** no longer include `disk` or `finalPath` by default. Set `chunky.broadcasting.expose_internal_paths = true` to opt back in if a consumer depends on these.
+- **`Models\ChunkedUpload::markChunkUploaded()`** dropped the unused `?string $checksum` parameter (already nullable; never persisted).
+- **Vue 3 wrapper `onBeforeUnmount`** lifecycle hooks are now `onScopeDispose` everywhere (already partially done in v0.12.0; the rest converted in this release).
+
+### npm packages
+- All packages bumped to `0.13.0` (core, vue3, react, alpine).
+
+### Migration notes
+- The new `chunky.broadcasting.expose_internal_paths` default of `false` is technically a wire-format change for `UploadCompleted` / `UploadFailed`. Frontends that read `event.finalPath` or `event.disk` from broadcast payloads need to either set the flag back to `true` in `config/chunky.php` or fetch those fields from `GET /api/chunky/upload/{uploadId}` server-side instead.
+- Switching to `chunky.lock_driver = 'cache'` requires a Laravel cache driver that supports `Cache::lock()`. `array` and `file` drivers do not — use Redis, Memcached, DB, or DynamoDB.
+
 ## v0.12.0 - 2026-05-01
 
 This release is a substantial hardening pass driven by an end-to-end review of the package: race conditions, security-sensitive paths, fault tolerance, and frontend ergonomics. Highlights below; more detail in the per-section entries.

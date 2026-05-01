@@ -235,10 +235,11 @@ var ChunkUploader = class {
       formData.append("checksum", checksum);
     }
     const url = this.endpoints.upload.replace("{uploadId}", id);
+    const idempotencyKey = `${id}:${chunkIndex}`;
     try {
       const result = await this.fetchJson(url, {
         method: "POST",
-        headers: this.getHeaders(),
+        headers: { ...this.getHeaders(), "Idempotency-Key": idempotencyKey },
         body: formData
       });
       this.uploadedChunks = result.uploaded_count;
@@ -272,6 +273,7 @@ var ChunkUploader = class {
   }
   async uploadChunks(file, id, chunkSize, total) {
     const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
+    const pending = new Set(this.pendingChunks);
     let index = 0;
     let completed = false;
     const next = async () => {
@@ -284,7 +286,7 @@ var ChunkUploader = class {
         const end = Math.min(start + chunkSize, file.size);
         const chunkBlob = file.slice(start, end);
         const result = await this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, this.maxRetries);
-        this.pendingChunks = this.pendingChunks.filter((i) => i !== chunkIndex);
+        pending.delete(chunkIndex);
         if (result.is_complete) {
           completed = true;
           return;
@@ -292,7 +294,11 @@ var ChunkUploader = class {
       }
     };
     const workers = Array.from({ length: Math.min(this.maxConcurrent, chunks.length) }, () => next());
-    await Promise.all(workers);
+    try {
+      await Promise.all(workers);
+    } finally {
+      this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+    }
   }
   async fetchStatus(id) {
     const url = this.endpoints.status.replace("{uploadId}", id);
@@ -344,7 +350,12 @@ var ChunkUploader = class {
         this.pendingChunks = Array.from({ length: initResult.total_chunks }, (_, i) => i);
       }
       this.emitStateChange();
-      const chunkSize = this.chunkSizeOverride ?? this.serverChunkSize ?? 1024 * 1024;
+      const chunkSize = this.chunkSizeOverride ?? this.serverChunkSize;
+      if (!chunkSize || chunkSize <= 0) {
+        throw new Error(
+          "Server did not return a chunk_size and no chunkSize override was provided. Cannot proceed without an authoritative chunk size."
+        );
+      }
       await this.uploadChunks(file, this.uploadId, chunkSize, this.totalChunks);
       if (!this.isPaused && !this.abortController.signal.aborted) {
         const result = {
@@ -735,12 +746,12 @@ var BatchUploader = class {
     if (this.totalFiles === 0) {
       return 0;
     }
-    const inProgressContribution = this.uploaders.reduce((acc, uploader) => {
+    let inProgressContribution = 0;
+    for (const uploader of this.uploaders) {
       if (uploader.isUploading && !uploader.isComplete) {
-        return acc + uploader.progress / 100;
+        inProgressContribution += uploader.progress / 100;
       }
-      return acc;
-    }, 0);
+    }
     const finishedFiles = this.completedFiles + this.failedFiles;
     const total = finishedFiles + inProgressContribution;
     return Math.min(100, total / this.totalFiles * 100);
@@ -873,6 +884,8 @@ function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunk
 var DEFAULT_STATUS_ENDPOINT = "/api/chunky/batch/{batchId}";
 var DEFAULT_POLL_START_DELAY_MS = 1500;
 var DEFAULT_POLL_INTERVAL_MS = 2e3;
+var DEFAULT_POLL_MAX_INTERVAL_MS = 3e4;
+var DEFAULT_POLL_BACKOFF_FACTOR = 1.5;
 var DEFAULT_TIMEOUT_MS = 5 * 60 * 1e3;
 function isTerminalStatus(status) {
   return status === "completed" || status === "partially_completed" || status === "expired";
@@ -895,7 +908,10 @@ function watchBatchCompletion(options) {
     channelPrefix,
     pollStartDelayMs = DEFAULT_POLL_START_DELAY_MS,
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    pollMaxIntervalMs = DEFAULT_POLL_MAX_INTERVAL_MS,
+    pollBackoffFactor = DEFAULT_POLL_BACKOFF_FACTOR,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    extendTimeoutOnProgressMs = 0,
     headers,
     withCredentials = true,
     onComplete,
@@ -913,6 +929,8 @@ function watchBatchCompletion(options) {
   let pollTimer = null;
   let timeoutTimer = null;
   let abortController = null;
+  let currentPollIntervalMs = pollIntervalMs;
+  let lastProcessedCount = -1;
   const cleanup = () => {
     echoCleanup?.();
     echoCleanup = null;
@@ -998,6 +1016,23 @@ function watchBatchCompletion(options) {
         resolvePolling(body);
         return;
       }
+      if (extendTimeoutOnProgressMs > 0) {
+        const processed = body.completed_files + body.failed_files;
+        if (processed > lastProcessedCount) {
+          lastProcessedCount = processed;
+          if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+            timeoutTimer = setTimeout(() => {
+              if (resolved) {
+                return;
+              }
+              resolved = true;
+              cleanup();
+              onTimeout?.();
+            }, extendTimeoutOnProgressMs);
+          }
+        }
+      }
     } catch (err) {
       if (err.name === "AbortError") {
         return;
@@ -1007,7 +1042,11 @@ function watchBatchCompletion(options) {
     if (resolved) {
       return;
     }
-    pollTimer = setTimeout(poll, pollIntervalMs);
+    pollTimer = setTimeout(poll, currentPollIntervalMs);
+    currentPollIntervalMs = Math.min(
+      pollMaxIntervalMs,
+      Math.round(currentPollIntervalMs * pollBackoffFactor)
+    );
   };
   const startPollNow = () => {
     if (pollStartTimer) {

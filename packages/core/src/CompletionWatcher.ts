@@ -42,7 +42,17 @@ export interface CompletionWatcherOptions {
     channelPrefix?: string;
     pollStartDelayMs?: number;
     pollIntervalMs?: number;
+    pollMaxIntervalMs?: number;
+    pollBackoffFactor?: number;
     timeoutMs?: number;
+    /**
+     * When set, every poll response that shows progress (the number of
+     * processed files increased) extends the wall-clock timeout by this
+     * many milliseconds. Lets a long-but-progressing batch keep running
+     * past the static `timeoutMs` deadline without giving up.
+     * Default 0 = disabled (static deadline).
+     */
+    extendTimeoutOnProgressMs?: number;
     headers?: Record<string, string>;
     withCredentials?: boolean;
     onComplete?: (result: BatchCompletionResult) => void;
@@ -56,6 +66,8 @@ export interface CompletionWatcherOptions {
 const DEFAULT_STATUS_ENDPOINT = '/api/chunky/batch/{batchId}';
 const DEFAULT_POLL_START_DELAY_MS = 1500;
 const DEFAULT_POLL_INTERVAL_MS = 2000;
+const DEFAULT_POLL_MAX_INTERVAL_MS = 30000;
+const DEFAULT_POLL_BACKOFF_FACTOR = 1.5;
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 function isTerminalStatus(status: CompletionStatus): boolean {
@@ -84,7 +96,10 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
         channelPrefix,
         pollStartDelayMs = DEFAULT_POLL_START_DELAY_MS,
         pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+        pollMaxIntervalMs = DEFAULT_POLL_MAX_INTERVAL_MS,
+        pollBackoffFactor = DEFAULT_POLL_BACKOFF_FACTOR,
         timeoutMs = DEFAULT_TIMEOUT_MS,
+        extendTimeoutOnProgressMs = 0,
         headers,
         withCredentials = true,
         onComplete,
@@ -104,6 +119,8 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
     let abortController: AbortController | null = null;
+    let currentPollIntervalMs = pollIntervalMs;
+    let lastProcessedCount = -1;
 
     const cleanup = (): void => {
         echoCleanup?.();
@@ -224,6 +241,30 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
                 resolvePolling(body);
                 return;
             }
+
+            // Extend the wall-clock timeout when we observe progress, so a
+            // long but still-progressing batch isn't killed by a static
+            // deadline. Only kicks in when explicitly opted into via
+            // extendTimeoutOnProgressMs.
+            if (extendTimeoutOnProgressMs > 0) {
+                const processed = body.completed_files + body.failed_files;
+
+                if (processed > lastProcessedCount) {
+                    lastProcessedCount = processed;
+
+                    if (timeoutTimer) {
+                        clearTimeout(timeoutTimer);
+                        timeoutTimer = setTimeout(() => {
+                            if (resolved) {
+                                return;
+                            }
+                            resolved = true;
+                            cleanup();
+                            onTimeout?.();
+                        }, extendTimeoutOnProgressMs);
+                    }
+                }
+            }
         } catch (err) {
             if ((err as Error).name === 'AbortError') {
                 return;
@@ -236,7 +277,15 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
             return;
         }
 
-        pollTimer = setTimeout(poll, pollIntervalMs);
+        // Exponential backoff between polls so a long-running batch
+        // doesn't hammer the status endpoint at the initial cadence
+        // forever. Cap at pollMaxIntervalMs.
+        pollTimer = setTimeout(poll, currentPollIntervalMs);
+
+        currentPollIntervalMs = Math.min(
+            pollMaxIntervalMs,
+            Math.round(currentPollIntervalMs * pollBackoffFactor),
+        );
     };
 
     const startPollNow = (): void => {

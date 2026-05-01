@@ -2,7 +2,13 @@ export { useChunkUpload } from './useChunkUpload';
 export { useBatchUpload } from './useBatchUpload';
 export { useUserEcho, useUploadEcho, useBatchEcho } from './useChunkyEcho';
 export { useBatchCompletion } from './useBatchCompletion';
-export { setDefaults, getDefaults, createDefaults, watchBatchCompletion } from '@netipar/chunky-core';
+export {
+    setDefaults,
+    getDefaults,
+    createDefaults,
+    watchBatchCompletion,
+    UploadHttpError,
+} from '@netipar/chunky-core';
 export type { DefaultsScope } from '@netipar/chunky-core';
 export type { ChunkUploadReturn } from './useChunkUpload';
 export type { BatchUploadReturn } from './useBatchUpload';
@@ -20,10 +26,13 @@ export type {
     BatchProgressEvent,
     FileProgressEvent,
     BatchResult,
+    BatchCancelEvent,
+    Unsubscribe,
     InitiateResponse,
     ChunkUploadResponse,
     StatusResponse,
     EchoInstance,
+    EchoChannel,
     UploadCompletedData,
     BatchCompletedData,
     BatchPartiallyCompletedData,

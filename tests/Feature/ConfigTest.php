@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Trackers\DatabaseTracker;

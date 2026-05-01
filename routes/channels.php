@@ -44,5 +44,6 @@ Broadcast::channel("{$prefix}.batches.{batchId}", function (Authenticatable $use
 Broadcast::channel("{$prefix}.user.{userId}", function (Authenticatable $user, int|string $userId) {
     $authId = $user->getAuthIdentifier();
 
-    return $authId !== null && (int) $authId === (int) $userId;
+    // String comparison covers int IDs, UUIDs, and ULIDs uniformly.
+    return $authId !== null && (string) $authId === (string) $userId;
 });

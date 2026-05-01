@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Facades\DB;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;

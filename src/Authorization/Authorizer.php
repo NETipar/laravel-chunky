@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Authorization;
 
 use Illuminate\Contracts\Auth\Authenticatable;

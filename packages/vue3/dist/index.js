@@ -239,8 +239,15 @@ function useBatchCompletion(batchId, options = {}) {
 }
 
 // src/index.ts
-import { setDefaults, getDefaults, createDefaults, watchBatchCompletion as watchBatchCompletion2 } from "@netipar/chunky-core";
+import {
+  setDefaults,
+  getDefaults,
+  createDefaults,
+  watchBatchCompletion as watchBatchCompletion2,
+  UploadHttpError
+} from "@netipar/chunky-core";
 export {
+  UploadHttpError,
   createDefaults,
   getDefaults,
   setDefaults,

@@ -22,7 +22,9 @@
     "require-dev": {
         "laravel/pint": "^1.18",
         "orchestra/testbench": "^9.0|^10.0|^11.0",
-        "pestphp/pest": "^3.0|^4.0"
+        "pestphp/pest": "^3.0|^4.0",
+        "mockery/mockery": "^1.6",
+        "larastan/larastan": "^2.9|^3.0"
     },
     "autoload": {
         "psr-4": {
@@ -47,7 +49,13 @@
     "scripts": {
         "test": "vendor/bin/pest",
         "test-coverage": "vendor/bin/pest --coverage",
-        "format": "vendor/bin/pint"
+        "format": "vendor/bin/pint",
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=2G",
+        "ci": [
+            "@format -- --test",
+            "@analyse",
+            "@test"
+        ]
     },
     "suggest": {
         "livewire/livewire": "Required for the Livewire chunk upload component (^3.0)"

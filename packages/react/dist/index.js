@@ -204,8 +204,15 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
 }
 
 // src/index.ts
-import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
+import {
+  setDefaults,
+  getDefaults,
+  createDefaults,
+  watchBatchCompletion,
+  UploadHttpError
+} from "@netipar/chunky-core";
 export {
+  UploadHttpError,
   createDefaults,
   getDefaults,
   setDefaults,
@@ -213,6 +220,7 @@ export {
   useBatchUpload,
   useChunkUpload,
   useUploadEcho,
-  useUserEcho
+  useUserEcho,
+  watchBatchCompletion
 };
 //# sourceMappingURL=index.js.map

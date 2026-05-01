@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 
@@ -96,7 +98,7 @@ it('strips disk, final_path and user_id from the public array payload', function
         disk: 's3',
         context: null,
         finalPath: 'chunky/uploads/pub-1/document.pdf',
-        userId: 42,
+        userId: '42',
     );
 
     $public = $metadata->toPublicArray();

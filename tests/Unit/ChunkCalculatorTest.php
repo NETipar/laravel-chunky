@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Support\ChunkCalculator;
 
 it('calculates total chunks correctly', function () {

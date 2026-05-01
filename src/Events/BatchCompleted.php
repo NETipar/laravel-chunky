@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Events;
 
 use Illuminate\Broadcasting\PrivateChannel;
@@ -14,7 +16,7 @@ class BatchCompleted implements ShouldBroadcast
     public function __construct(
         public readonly string $batchId,
         public readonly int $totalFiles,
-        public readonly ?int $userId = null,
+        public readonly ?string $userId = null,
     ) {}
 
     /**

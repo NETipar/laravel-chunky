@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Enums\BatchStatus;
 use NETipar\Chunky\Enums\UploadStatus;
 

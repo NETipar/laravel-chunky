@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Enums\UploadStatus;
 
 it('has expected cases', function () {

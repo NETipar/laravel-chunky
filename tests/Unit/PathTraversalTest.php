@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Data\UploadMetadata;

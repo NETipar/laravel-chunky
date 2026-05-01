@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Data;
 
 use NETipar\Chunky\Enums\BatchStatus;
@@ -13,7 +15,8 @@ class BatchMetadata
         public readonly int $failedFiles,
         public readonly BatchStatus $status,
         public readonly ?string $context = null,
-        public readonly ?int $userId = null,
+        // See UploadMetadata::$userId for the type rationale.
+        public readonly ?string $userId = null,
     ) {}
 
     public function pendingFiles(): int
@@ -87,7 +90,9 @@ class BatchMetadata
                 ? $data['status']
                 : BatchStatus::tryFrom($data['status'] ?? 'pending') ?? BatchStatus::Pending,
             context: $data['context'] ?? null,
-            userId: isset($data['user_id']) ? (int) $data['user_id'] : null,
+            userId: isset($data['user_id']) && $data['user_id'] !== ''
+                ? (string) $data['user_id']
+                : null,
         );
     }
 }

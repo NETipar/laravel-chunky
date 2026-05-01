@@ -9,6 +9,7 @@ import type {
     BatchUploadOptions,
     BatchUploaderEventMap,
     BatchUploaderState,
+    EventCallback,
     ProgressEvent,
     Unsubscribe,
     UploadError,
@@ -48,7 +49,7 @@ export class BatchUploader {
     private uploaders: ChunkUploader[] = [];
     private results: UploadResult[] = [];
     private abortController: AbortController | null = null;
-    private listeners = new Map<string, Set<Function>>();
+    private listeners = new Map<keyof BatchUploaderEventMap, Set<EventCallback>>();
     private lastComplete: BatchResult | null = null;
     private lastError: UploadError | null = null;
     private isPausedBatch = false;
@@ -76,7 +77,7 @@ export class BatchUploader {
             this.listeners.set(event, new Set());
         }
 
-        this.listeners.get(event)!.add(callback);
+        this.listeners.get(event)!.add(callback as EventCallback);
 
         if (event === 'complete' && this.lastComplete) {
             const sticky = this.lastComplete;
@@ -87,7 +88,7 @@ export class BatchUploader {
         }
 
         return () => {
-            this.listeners.get(event)?.delete(callback);
+            this.listeners.get(event)?.delete(callback as EventCallback);
         };
     }
 
@@ -99,7 +100,7 @@ export class BatchUploader {
             this.lastError = data as UploadError;
         }
 
-        this.listeners.get(event)?.forEach((cb) => cb(data));
+        this.listeners.get(event)?.forEach((cb) => (cb as EventCallback<BatchUploaderEventMap[K]>)(data));
     }
 
     private emitStateChange(): void {

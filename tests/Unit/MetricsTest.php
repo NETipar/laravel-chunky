@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Support\Metrics;
 use NETipar\Chunky\Tests\Fixtures\BrokenMetric;
 use NETipar\Chunky\Tests\Fixtures\FakeDatadogClient;

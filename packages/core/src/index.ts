@@ -32,6 +32,7 @@ export type {
     BatchResult,
     BatchUploaderState,
     BatchUploaderEventMap,
+    EventCallback,
 } from './types';
 export type {
     EchoInstance,

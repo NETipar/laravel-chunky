@@ -107,6 +107,13 @@ export type ChunkUploaderEventMap = {
 
 export type Unsubscribe = () => void;
 
+/**
+ * Internal event-listener storage type. Public `on()` overloads keep the
+ * caller strongly typed; the internal Set just needs to hold any callable
+ * for any event payload.
+ */
+export type EventCallback<T = unknown> = (data: T) => void;
+
 // Batch types
 
 export interface BatchUploadOptions extends ChunkUploadOptions {

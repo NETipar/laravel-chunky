@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Http\Requests;
 
 use Illuminate\Validation\ValidationException;

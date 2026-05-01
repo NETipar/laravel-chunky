@@ -20,6 +20,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
+  UploadHttpError: () => import_chunky_core4.UploadHttpError,
   createDefaults: () => import_chunky_core4.createDefaults,
   getDefaults: () => import_chunky_core4.getDefaults,
   setDefaults: () => import_chunky_core4.setDefaults,
@@ -27,7 +28,8 @@ __export(src_exports, {
   useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload,
   useUploadEcho: () => useUploadEcho,
-  useUserEcho: () => useUserEcho
+  useUserEcho: () => useUserEcho,
+  watchBatchCompletion: () => import_chunky_core4.watchBatchCompletion
 });
 module.exports = __toCommonJS(src_exports);
 

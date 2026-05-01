@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - src
+    level: 5
+    treatPhpDocTypesAsCertain: false
+    excludePaths:
+        - src/Console/stubs/*
+        # Livewire is an optional dependency (composer "suggest"); the
+        # Livewire component is only loaded when livewire/livewire is
+        # installed at runtime. Skipping the file here keeps the package
+        # PHPStan-clean without forcing a hard dependency.
+        - src/Livewire/*

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Handlers;
 
 use Illuminate\Contracts\Filesystem\Filesystem;

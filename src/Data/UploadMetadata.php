@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Data;
 
 use NETipar\Chunky\Enums\UploadStatus;
@@ -25,7 +27,9 @@ class UploadMetadata
         public readonly UploadStatus $status = UploadStatus::Pending,
         public readonly ?string $finalPath = null,
         public readonly ?string $batchId = null,
-        public readonly ?int $userId = null,
+        // string accommodates int IDs, UUIDs, ULIDs alike. The package never
+        // arithmetically operates on user IDs, only compares them.
+        public readonly ?string $userId = null,
     ) {}
 
     public function progress(): float
@@ -74,7 +78,9 @@ class UploadMetadata
                 : UploadStatus::tryFrom($data['status'] ?? 'pending') ?? UploadStatus::Pending,
             finalPath: $data['final_path'] ?? null,
             batchId: $data['batch_id'] ?? null,
-            userId: isset($data['user_id']) ? (int) $data['user_id'] : null,
+            userId: isset($data['user_id']) && $data['user_id'] !== ''
+                ? (string) $data['user_id']
+                : null,
         );
     }
 

@@ -6,10 +6,17 @@
         "build:vue3": "pnpm --filter @netipar/chunky-vue3 run build",
         "build:react": "pnpm --filter @netipar/chunky-react run build",
         "build:alpine": "pnpm --filter @netipar/chunky-alpine run build",
-        "publish:all": "pnpm run build && pnpm -r publish --no-git-checks"
+        "publish:all": "pnpm run build && pnpm -r publish --no-git-checks",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "typecheck": "pnpm -r exec tsc --noEmit"
     },
     "devDependencies": {
+        "@vitest/coverage-v8": "^4.1.5",
         "esbuild": "^0.21",
-        "typescript": "^5.4"
+        "happy-dom": "^20.9.0",
+        "typescript": "^5.4",
+        "vitest": "^4.1.5"
     }
 }

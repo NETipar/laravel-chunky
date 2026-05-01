@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\UploadCompleted;
@@ -18,7 +20,7 @@ function makeMetadata(): UploadMetadata
         context: 'documents',
         finalPath: 'chunky/uploads/u-1/doc.pdf',
         status: UploadStatus::Completed,
-        userId: 7,
+        userId: '7',
     );
 }
 

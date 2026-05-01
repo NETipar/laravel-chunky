@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Events;
 
 use Illuminate\Broadcasting\PrivateChannel;
@@ -16,7 +18,7 @@ class BatchPartiallyCompleted implements ShouldBroadcast
         public readonly int $completedFiles,
         public readonly int $failedFiles,
         public readonly int $totalFiles,
-        public readonly ?int $userId = null,
+        public readonly ?string $userId = null,
     ) {}
 
     /**

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -104,10 +106,12 @@ class ChunkyBatch extends Model
 
         $this->refresh();
 
+        $userId = $this->user_id !== null ? (string) $this->user_id : null;
+
         match ($status) {
-            BatchStatus::Completed => BatchCompleted::dispatch($this->batch_id, $this->total_files, $this->user_id),
+            BatchStatus::Completed => BatchCompleted::dispatch($this->batch_id, $this->total_files, $userId),
             BatchStatus::PartiallyCompleted => BatchPartiallyCompleted::dispatch(
-                $this->batch_id, $this->completed_files, $this->failed_files, $this->total_files, $this->user_id
+                $this->batch_id, $this->completed_files, $this->failed_files, $this->total_files, $userId
             ),
             default => null,
         };

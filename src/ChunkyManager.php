@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky;
 
 use Illuminate\Http\UploadedFile;
@@ -475,7 +477,9 @@ class ChunkyManager
                 'completed' => $completed,
                 'failed' => $failed,
                 'total' => $total,
-                'userId' => isset($data['user_id']) ? (int) $data['user_id'] : null,
+                'userId' => isset($data['user_id']) && $data['user_id'] !== ''
+                    ? (string) $data['user_id']
+                    : null,
             ];
         });
 
@@ -546,15 +550,16 @@ class ChunkyManager
         }
     }
 
-    private function resolveUserId(): ?int
+    private function resolveUserId(): ?string
     {
         if (! function_exists('auth')) {
             return null;
         }
 
+        /** @var int|string|null $id */
         $id = auth()->id();
 
-        return $id !== null ? (int) $id : null;
+        return $id !== null ? (string) $id : null;
     }
 
     private function validateBatchExists(string $batchId): void

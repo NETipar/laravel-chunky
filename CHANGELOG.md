@@ -2,10 +2,42 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
-## Unreleased
+## v0.14.0 - 2026-05-01
 
-### Added
-- **Class-based metrics handlers** in `chunky.metrics`. Each event entry now accepts a class string (`\App\Metrics\ChunkUploaded::class`) in addition to the v0.13.0 closure shape. Class-string handlers are resolved through the Laravel container, so the handler's constructor can typehint dependencies (`DatadogClient`, `Logger`, …), and the package calls `__invoke(array $payload)` — falling back to `handle(array $payload)` if the class is not invokable. The optional `NETipar\Chunky\Support\MetricsListener` interface gives static analysers a contract to lock onto. Closures still work for backward compatibility, but class strings are `config:cache`-compatible (closures are not — `config:cache` fails to serialise them) and unlock dependency injection and mockability in tests. `Metrics::emit()` swallows handler exceptions and dispatch errors uniformly so an observability misconfig cannot break the upload pipeline.
+This release establishes the **Static Analysis Baseline** for the package: PHPStan/Larastan integration, frontend test infrastructure, full PHP `strict_types`, and a CI matrix that finally covers Laravel 13. It also makes the `user_id` column **portable across int / UUID / ULID** user-id schemes — closing a previously hidden assumption that user IDs are always integers.
+
+### Added (Quality infrastructure)
+- **PHPStan / Larastan** integration with a level-5 baseline. New `phpstan.neon` config and `phpstan-baseline.neon` (45 pre-existing findings frozen). New `composer analyse` script and a `phpstan` CI job. The Livewire component is excluded from analysis since `livewire/livewire` is a `composer suggest`, not a hard dependency.
+- **Vitest frontend test runner** with `happy-dom`. Initial spec coverage: 16 tests across `http`, `ChunkUploader`, and `CompletionWatcher` — pinning down the v0.13.x cancel/idempotency/file-mismatch invariants against regressions.
+- **TypeScript `tsc --noEmit` typecheck** at the workspace root (`pnpm typecheck`). Catches cross-package type errors that the build's `tsc --emitDeclarationOnly` doesn't surface.
+- **CI matrix now covers Laravel 13.** Was previously missing despite the `composer.json` advertising `^11.0|^12.0|^13.0`. Matrix expanded to PHP 8.2/8.3/8.4 × Laravel 11/12/13 × Testbench 9/10/11 (with appropriate excludes; Laravel 13 excludes PHP 8.2). Added `phpstan`, `js-typecheck`, and `audit` (composer + pnpm) jobs.
+- **Coverage reporting** — one matrix cell (PHP 8.4 + Laravel 12) now runs `pest --coverage` and uploads to Codecov.
+- **`composer.json` `require-dev`** explicitly lists `mockery/mockery: ^1.6` (was only available transitively via Pest) and `larastan/larastan: ^2.9|^3.0`.
+- **`Metrics::emit()` accepts class-string handlers** (carry-over from the prior unreleased work, now formally part of v0.14.0). Resolved through the container with constructor DI, calling `__invoke()` or `handle()` — `config:cache`-compatible. New optional `NETipar\Chunky\Support\MetricsListener` interface.
+
+### Changed (Breaking)
+- **`user_id` columns are now `string` instead of `unsignedBigInteger`.** Both `chunked_uploads` and `chunky_batches` migrations changed. This makes the package work out-of-the-box with any user-id shape — auto-increment ints, UUIDs, ULIDs, or arbitrary strings. The `UploadMetadata::$userId`, `BatchMetadata::$userId`, `BatchCompleted::$userId`, `BatchPartiallyCompleted::$userId`, and `ChunkyManager::resolveUserId()` types are all `?string`. The `DefaultAuthorizer` and the `chunky.user.{userId}` channel auth callback compare with `(string)` casts. Existing installations need to run a migration to alter the column type — a published migration helper will land in v0.14.1 if there's demand.
+- **`declare(strict_types=1);`** added to every PHP file in `src/` and `tests/`. PHP no longer silently coerces `string → int` at type boundaries inside the package; callers passing the wrong type get a `TypeError` at the boundary instead of a silently-wrong cast deep in the call stack. No public API change for consumers using the typed Facade methods or DTOs — those signatures already required the right types.
+- **`ChunkUploader`/`BatchUploader` listener storage** moved from `Set<Function>` to a generic `EventCallback<T>` shape, exposed as a public type from `@netipar/chunky-core`. Removes the `Function` top-type leak that prevented strict TypeScript projects from passing typecheck.
+
+### Fixed
+- **Frontend type exports synced across React and Vue 3.** Both index files now re-export `BatchCancelEvent`, `Unsubscribe`, `UploadHttpError` (class), `EchoChannel`, `FileProgressEvent`, `watchBatchCompletion`, `BatchCompletionResult`, `CompletionWatcherOptions`, and friends. Previously some symbols only made it through the Vue 3 wrapper, forcing React consumers to import from `@netipar/chunky-core` directly.
+
+### npm packages
+- All packages bumped to `0.14.0` (core, vue3, react, alpine).
+
+### Migration notes
+- **`user_id` schema change**: existing installations need an `ALTER TABLE` to change the column type. Publish and edit the migration locally, or apply directly:
+  ```php
+  Schema::table('chunked_uploads', function (Blueprint $table) {
+      $table->string('user_id')->nullable()->change();
+  });
+  Schema::table('chunky_batches', function (Blueprint $table) {
+      $table->string('user_id')->nullable()->change();
+  });
+  ```
+  Existing integer values are preserved (stored as their string representation).
+- **`strict_types`**: callers that were relying on PHP's type-coercion at the package boundary (e.g. `$manager->initiate('file.bin', '1024')` with `file_size` as a string) now get a `TypeError`. Cast at the call site.
 
 ## v0.13.1 - 2026-05-01
 

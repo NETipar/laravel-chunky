@@ -7,6 +7,7 @@ import type {
     ChunkUploadResponse,
     ChunkUploaderEventMap,
     ChunkUploaderState,
+    EventCallback,
     InitiateResponse,
     ProgressEvent,
     StatusResponse,
@@ -61,7 +62,7 @@ export class ChunkUploader {
     private serverChunkSize: number | null = null;
     private lastFile: File | null = null;
     private lastMetadata?: Record<string, unknown>;
-    private listeners = new Map<string, Set<Function>>();
+    private listeners = new Map<keyof ChunkUploaderEventMap, Set<EventCallback>>();
     private lastComplete: UploadResult | null = null;
     private lastError: UploadError | null = null;
 
@@ -101,7 +102,7 @@ export class ChunkUploader {
             this.listeners.set(event, new Set());
         }
 
-        this.listeners.get(event)!.add(callback);
+        this.listeners.get(event)!.add(callback as EventCallback);
 
         if (event === 'complete' && this.lastComplete) {
             const sticky = this.lastComplete;
@@ -112,7 +113,7 @@ export class ChunkUploader {
         }
 
         return () => {
-            this.listeners.get(event)?.delete(callback);
+            this.listeners.get(event)?.delete(callback as EventCallback);
         };
     }
 
@@ -124,7 +125,7 @@ export class ChunkUploader {
             this.lastError = data as UploadError;
         }
 
-        this.listeners.get(event)?.forEach((cb) => cb(data));
+        this.listeners.get(event)?.forEach((cb) => (cb as EventCallback<ChunkUploaderEventMap[K]>)(data));
     }
 
     private emitStateChange(): void {

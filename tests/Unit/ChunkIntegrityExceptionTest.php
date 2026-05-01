@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use NETipar\Chunky\Exceptions\ChunkIntegrityException;
 use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;

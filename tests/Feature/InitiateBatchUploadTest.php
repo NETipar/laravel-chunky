@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Facades\Event;
 use NETipar\Chunky\ChunkyManager;
 use NETipar\Chunky\Enums\BatchStatus;

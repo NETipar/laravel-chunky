@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NETipar\Chunky\Authorization;
 
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -30,7 +32,7 @@ class DefaultAuthorizer implements Authorizer
         return $this->matchesOwner($user, $batch->userId);
     }
 
-    private function matchesOwner(?Authenticatable $user, ?int $ownerId): bool
+    private function matchesOwner(?Authenticatable $user, ?string $ownerId): bool
     {
         if ($ownerId === null) {
             return true;
@@ -42,6 +44,8 @@ class DefaultAuthorizer implements Authorizer
 
         $authId = $user->getAuthIdentifier();
 
-        return $authId !== null && (int) $authId === $ownerId;
+        // String comparison so any user-id shape (int, UUID, ULID) works
+        // out of the box without configuration.
+        return $authId !== null && (string) $authId === $ownerId;
     }
 }

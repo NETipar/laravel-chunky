@@ -116,16 +116,26 @@ var ChunkUploader = class {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, /* @__PURE__ */ new Set());
     }
-    this.listeners.get(event).add(callback);
+    const set = this.listeners.get(event);
+    const stored = callback;
+    set.add(stored);
     if (event === "complete" && this.lastComplete) {
       const sticky = this.lastComplete;
-      queueMicrotask(() => callback(sticky));
+      queueMicrotask(() => {
+        if (set.has(stored)) {
+          callback(sticky);
+        }
+      });
     } else if (event === "error" && this.lastError) {
       const sticky = this.lastError;
-      queueMicrotask(() => callback(sticky));
+      queueMicrotask(() => {
+        if (set.has(stored)) {
+          callback(sticky);
+        }
+      });
     }
     return () => {
-      this.listeners.get(event)?.delete(callback);
+      set.delete(stored);
     };
   }
   emit(event, data) {
@@ -387,6 +397,8 @@ var ChunkUploader = class {
     this.totalChunks = 0;
     this.currentFile = null;
     this.error = null;
+    this.lastFile = null;
+    this.lastMetadata = void 0;
     this.lastComplete = null;
     this.lastError = null;
     this.emitStateChange();
@@ -463,16 +475,26 @@ var BatchUploader = class {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, /* @__PURE__ */ new Set());
     }
-    this.listeners.get(event).add(callback);
+    const set = this.listeners.get(event);
+    const stored = callback;
+    set.add(stored);
     if (event === "complete" && this.lastComplete) {
       const sticky = this.lastComplete;
-      queueMicrotask(() => callback(sticky));
+      queueMicrotask(() => {
+        if (set.has(stored)) {
+          callback(sticky);
+        }
+      });
     } else if (event === "error" && this.lastError) {
       const sticky = this.lastError;
-      queueMicrotask(() => callback(sticky));
+      queueMicrotask(() => {
+        if (set.has(stored)) {
+          callback(sticky);
+        }
+      });
     }
     return () => {
-      this.listeners.get(event)?.delete(callback);
+      set.delete(stored);
     };
   }
   emit(event, data) {
@@ -705,7 +727,15 @@ var BatchUploader = class {
       });
       this.emitProgress(uploader);
     });
-    return uploader.upload(file, metadata);
+    try {
+      return await uploader.upload(file, metadata);
+    } finally {
+      const idx = this.uploaders.indexOf(uploader);
+      if (idx >= 0) {
+        this.uploaders.splice(idx, 1);
+      }
+      uploader.destroy();
+    }
   }
   aggregateProgress() {
     if (this.totalFiles === 0) {
@@ -1010,15 +1040,15 @@ function watchBatchCompletion(options) {
           lastProcessedCount = processed;
           if (timeoutTimer) {
             clearTimeout(timeoutTimer);
-            timeoutTimer = setTimeout(() => {
-              if (resolved) {
-                return;
-              }
-              resolved = true;
-              cleanup();
-              onTimeout?.();
-            }, extendTimeoutOnProgressMs);
           }
+          timeoutTimer = setTimeout(() => {
+            if (resolved) {
+              return;
+            }
+            resolved = true;
+            cleanup();
+            onTimeout?.();
+          }, extendTimeoutOnProgressMs);
         }
       }
     } catch (err) {

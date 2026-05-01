@@ -246,6 +246,12 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
             // long but still-progressing batch isn't killed by a static
             // deadline. Only kicks in when explicitly opted into via
             // extendTimeoutOnProgressMs.
+            //
+            // Always (re)create the timer when progress is seen, even if
+            // `timeoutMs` was 0 — otherwise opting into "extend on
+            // progress" with no static deadline silently never starts
+            // the safeguard. The semantic is "after the last progress
+            // tick, give the batch this many extra ms".
             if (extendTimeoutOnProgressMs > 0) {
                 const processed = body.completed_files + body.failed_files;
 
@@ -254,15 +260,16 @@ export function watchBatchCompletion(options: CompletionWatcherOptions): () => v
 
                     if (timeoutTimer) {
                         clearTimeout(timeoutTimer);
-                        timeoutTimer = setTimeout(() => {
-                            if (resolved) {
-                                return;
-                            }
-                            resolved = true;
-                            cleanup();
-                            onTimeout?.();
-                        }, extendTimeoutOnProgressMs);
                     }
+
+                    timeoutTimer = setTimeout(() => {
+                        if (resolved) {
+                            return;
+                        }
+                        resolved = true;
+                        cleanup();
+                        onTimeout?.();
+                    }, extendTimeoutOnProgressMs);
                 }
             }
         } catch (err) {

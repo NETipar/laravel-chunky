@@ -13,6 +13,7 @@ use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;
+use NETipar\Chunky\Support\CacheKeys;
 
 class FilesystemTracker implements UploadTracker
 {
@@ -296,7 +297,7 @@ class FilesystemTracker implements UploadTracker
     private function withLock(string $uploadId, callable $callback): mixed
     {
         if (config('chunky.lock_driver', 'flock') === 'cache') {
-            return $this->withCacheLock("chunky:upload:{$uploadId}", $callback);
+            return $this->withCacheLock(CacheKeys::uploadLock($uploadId), $callback);
         }
 
         return $this->withFileLock($uploadId, $callback);
@@ -314,26 +315,42 @@ class FilesystemTracker implements UploadTracker
 
         try {
             $fullPath = $disk->path($this->metadataPath($uploadId));
-        } catch (\Throwable) {
-            return $callback();
+        } catch (\Throwable $e) {
+            // Cloud disk: path() unavailable. Refuse to silently run the
+            // critical section unlocked — the caller must opt into
+            // chunky.lock_driver = 'cache' for cloud-disk setups.
+            throw new ChunkyException(
+                "FilesystemTracker cannot acquire flock for upload {$uploadId}: "
+                .'the configured disk does not expose a local path. '
+                .'Set chunky.lock_driver = "cache" to use cache-backed locks.',
+                previous: $e,
+            );
         }
 
         $directory = dirname($fullPath);
 
-        if (! is_dir($directory)) {
-            @mkdir($directory, 0755, true);
+        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            throw new ChunkyException(
+                "FilesystemTracker could not create lock directory at {$directory}.",
+            );
         }
 
         $lockPath = $fullPath.'.lock';
         $handle = @fopen($lockPath, 'c+');
 
         if ($handle === false) {
-            return $callback();
+            throw new ChunkyException(
+                "FilesystemTracker could not open lock file at {$lockPath}. "
+                .'Refusing to run critical section without lock — risk of race condition. '
+                .'Consider chunky.lock_driver = "cache".',
+            );
         }
 
         try {
             if (! flock($handle, LOCK_EX)) {
-                return $callback();
+                throw new ChunkyException(
+                    "FilesystemTracker failed to acquire flock on {$lockPath}.",
+                );
             }
 
             try {
@@ -357,6 +374,14 @@ class FilesystemTracker implements UploadTracker
         $ttl = (int) config('chunky.lock_ttl_seconds', 30);
         $waitFor = (int) config('chunky.lock_wait_seconds', 5);
 
-        return Cache::lock($key, $ttl)->block($waitFor, $callback);
+        $lock = Cache::lock($key, $ttl);
+
+        try {
+            $lock->block($waitFor);
+
+            return $callback();
+        } finally {
+            $lock->release();
+        }
     }
 }

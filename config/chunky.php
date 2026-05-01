@@ -73,6 +73,14 @@ return [
     ],
     'idempotency_ttl_seconds' => 300,
 
+    // Cache key configuration. The versioned prefix lets a major release
+    // invalidate cached payloads cleanly when their shape changes
+    // (idempotency replays, batch counters, lock keys). Bump the version
+    // segment in code when payload shape evolves.
+    'cache' => [
+        'prefix' => env('CHUNKY_CACHE_PREFIX', 'chunky:v1:'),
+    ],
+
     // Observability hooks. Each entry is an optional handler that
     // receives an associative payload at the named lifecycle event.
     // Use these to bridge to Datadog / Prometheus / StatsD / your own
@@ -107,6 +115,14 @@ return [
     // Max file size in bytes - 0 = unlimited
     'max_file_size' => 0,
 
+    // Hard cap on the number of chunks any single upload may require.
+    // Combined with `chunk_size` this protects against pathological
+    // initiate calls (file_size = 1TB, chunk_size = 1KB → 1 billion
+    // chunks → tracker row blowup, UI death by 0.0001%-step progress).
+    // Computed as ceil(file_size / chunk_size); if it exceeds this
+    // value the initiate request is rejected with a validation error.
+    'max_chunks_per_upload' => 100_000,
+
     // Max number of files allowed per batch (DOS protection — without it
     // a malicious caller could request a billion-file batch and exhaust
     // memory/storage during validation).
@@ -131,11 +147,24 @@ return [
     'contexts' => [],
 
     // Route config
-    // Add 'auth:sanctum' or your auth middleware to protect upload endpoints:
-    // 'middleware' => ['api', 'auth:sanctum'],
+    // Add 'auth:sanctum' or your auth middleware to protect upload endpoints.
+    // The `throttle:chunky` middleware is wired up by the service provider
+    // using the per-config rate limits below; remove it from `middleware`
+    // if you want to handle rate limiting elsewhere.
     'routes' => [
         'prefix' => 'api/chunky',
-        'middleware' => ['api'],
+        'middleware' => ['api', 'throttle:chunky'],
+    ],
+
+    // Default rate limits for chunky endpoints. Applied as a single
+    // RateLimiter named "chunky", keyed by user id (when authenticated)
+    // or IP (anonymous). Tune based on your expected concurrent
+    // uploads — a 1GB file at 4MB chunk_size needs ~250 chunk POSTs,
+    // so 60/min is the floor for serial uploads. Set `attempts` to 0
+    // to disable rate limiting entirely.
+    'throttle' => [
+        'attempts' => 120,
+        'decay_minutes' => 1,
     ],
 
     // Chunk integrity verification (checksum)

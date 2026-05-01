@@ -13,6 +13,7 @@ use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;
 use NETipar\Chunky\Http\Requests\UploadChunkRequest;
 use NETipar\Chunky\Jobs\AssembleFileJob;
+use NETipar\Chunky\Support\CacheKeys;
 use Symfony\Component\HttpFoundation\Response;
 
 class UploadChunkController extends Controller
@@ -85,7 +86,7 @@ class UploadChunkController extends Controller
         $clientKey = $request->header('Idempotency-Key');
 
         if ($clientKey) {
-            return "chunky:idem:{$uploadId}:{$chunkIndex}:".sha1((string) $clientKey);
+            return CacheKeys::idempotency($uploadId, $chunkIndex, sha1((string) $clientKey));
         }
 
         // Fall back to a server-derived key when the client didn't supply
@@ -94,7 +95,7 @@ class UploadChunkController extends Controller
         $checksum = $request->input('checksum');
 
         if ($checksum) {
-            return "chunky:idem:{$uploadId}:{$chunkIndex}:cs:{$checksum}";
+            return CacheKeys::idempotency($uploadId, $chunkIndex, "cs:{$checksum}");
         }
 
         return null;

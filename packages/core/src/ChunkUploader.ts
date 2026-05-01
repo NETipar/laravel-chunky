@@ -102,18 +102,33 @@ export class ChunkUploader {
             this.listeners.set(event, new Set());
         }
 
-        this.listeners.get(event)!.add(callback as EventCallback);
+        const set = this.listeners.get(event)!;
+        const stored = callback as EventCallback;
+        set.add(stored);
 
+        // Sticky-replay: deliver the last terminal event to a late
+        // subscriber so React/Vue cleanup-then-resubscribe doesn't lose
+        // it. The microtask checks `set.has(stored)` again because the
+        // caller may have synchronously unsubscribed before the
+        // microtask drains (typical `useEffect` cleanup pattern).
         if (event === 'complete' && this.lastComplete) {
             const sticky = this.lastComplete;
-            queueMicrotask(() => (callback as (d: UploadResult) => void)(sticky));
+            queueMicrotask(() => {
+                if (set.has(stored)) {
+                    (callback as (d: UploadResult) => void)(sticky);
+                }
+            });
         } else if (event === 'error' && this.lastError) {
             const sticky = this.lastError;
-            queueMicrotask(() => (callback as (d: UploadError) => void)(sticky));
+            queueMicrotask(() => {
+                if (set.has(stored)) {
+                    (callback as (d: UploadError) => void)(sticky);
+                }
+            });
         }
 
         return () => {
-            this.listeners.get(event)?.delete(callback as EventCallback);
+            set.delete(stored);
         };
     }
 
@@ -468,6 +483,12 @@ export class ChunkUploader {
         this.totalChunks = 0;
         this.currentFile = null;
         this.error = null;
+        // Drop the resume-state too. Without these, a `cancel()` followed
+        // by `retry()` would silently re-upload the cancelled file (the
+        // user explicitly cancelled — they shouldn't be able to resurrect
+        // the upload by accident).
+        this.lastFile = null;
+        this.lastMetadata = undefined;
         this.lastComplete = null;
         this.lastError = null;
         this.emitStateChange();

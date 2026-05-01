@@ -7,8 +7,8 @@ receive fixes only for Critical / High vulnerabilities at our discretion.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.14.x  | ✅ Yes             |
-| < 0.14  | ❌ No              |
+| 0.17.x  | ✅ Yes             |
+| < 0.17  | ❌ No              |
 
 ## Reporting a Vulnerability
 
@@ -47,8 +47,17 @@ The package treats these as security-relevant boundaries:
   by default; opt-in via `chunky.broadcasting.expose_internal_paths`.
 - **Idempotency** — chunk POSTs cache responses by `(uploadId, chunkIndex,
   Idempotency-Key|checksum)` to prevent duplicate side-effects on retry.
-- **Rate / size caps** — `chunky.metadata.max_keys` and
-  `chunky.max_files_per_batch` bound user-supplied input.
+- **Rate / size caps** — `chunky.metadata.max_keys`,
+  `chunky.max_files_per_batch`, `chunky.max_chunks_per_upload` and the
+  per-route `throttle:chunky` rate limiter bound user-supplied input.
+- **Lock-driver compatibility guard** — boot-time refusal to run with
+  `lock_driver = "cache"` against `array` / `file` cache stores. The
+  `FilesystemTracker` and batch-counter critical sections throw rather
+  than silently fall through when no lock can be acquired.
+- **Cache-key namespacing** — every lock / idempotency / counter key is
+  prefixed via `chunky.cache.prefix` (default `chunky:v1:`), so future
+  payload-shape changes can invalidate cached entries cleanly without
+  cooperating cache backends.
 
 If you believe one of these surfaces is bypassable, that's a security
 issue — report privately as above.

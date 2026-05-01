@@ -7,6 +7,7 @@ namespace NETipar\Chunky\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\ValidationException;
 use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Support\ChunkCalculator;
 
 class InitiateUploadRequest extends FormRequest
 {
@@ -45,6 +46,27 @@ class InitiateUploadRequest extends FormRequest
         if ($maxFileSize > 0) {
             $rules['file_size'][] = "max:{$maxFileSize}";
         }
+
+        $rules['file_size'][] = function (string $attr, mixed $value, \Closure $fail): void {
+            $maxChunks = (int) config('chunky.max_chunks_per_upload', 100_000);
+
+            if ($maxChunks <= 0) {
+                return;
+            }
+
+            $size = (int) $value;
+            $chunkSize = ChunkCalculator::chunkSize();
+            $totalChunks = ChunkCalculator::totalChunks($size, $chunkSize);
+
+            if ($totalChunks > $maxChunks) {
+                $fail(
+                    "The file would require {$totalChunks} chunks "
+                    ."(file_size {$size}, chunk_size {$chunkSize}), exceeding the "
+                    ."limit of {$maxChunks}. Increase chunky.chunk_size or "
+                    .'chunky.max_chunks_per_upload, or upload a smaller file.'
+                );
+            }
+        };
 
         $allowedMimes = config('chunky.allowed_mimes', []);
 

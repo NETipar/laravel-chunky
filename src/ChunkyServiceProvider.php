@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Component;
 use NETipar\Chunky\Authorization\Authorizer;
@@ -68,6 +71,7 @@ class ChunkyServiceProvider extends ServiceProvider
             __DIR__.'/../lang' => $this->app->langPath('vendor/chunky'),
         ], 'chunky-lang');
 
+        $this->registerRateLimiter();
         $this->registerRoutes();
         $this->registerBroadcastChannels();
         $this->registerContexts();
@@ -75,6 +79,36 @@ class ChunkyServiceProvider extends ServiceProvider
         $this->registerCleanup();
         $this->assertConfigurationIsValid();
         $this->assertLockDriverCompatibility();
+    }
+
+    /**
+     * Register the "chunky" RateLimiter so the route group's
+     * `throttle:chunky` middleware has something to consult. Keyed by
+     * the authenticated user id when present, else by IP — keeps a
+     * shared anonymous IP from being throttled across distinct users
+     * behind the same NAT, while still capping anonymous abuse.
+     *
+     * Set `chunky.throttle.attempts = 0` to disable rate limiting
+     * entirely (the limiter then returns no Limit instances).
+     */
+    private function registerRateLimiter(): void
+    {
+        if (! class_exists(RateLimiter::class)) {
+            return;
+        }
+
+        RateLimiter::for('chunky', function (Request $request) {
+            $attempts = (int) config('chunky.throttle.attempts', 120);
+            $decay = (int) config('chunky.throttle.decay_minutes', 1);
+
+            if ($attempts <= 0) {
+                return Limit::none();
+            }
+
+            $key = optional($request->user())->getAuthIdentifier() ?: $request->ip();
+
+            return Limit::perMinutes($decay, $attempts)->by((string) $key);
+        });
     }
 
     /**

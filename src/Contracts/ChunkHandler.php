@@ -13,9 +13,13 @@ interface ChunkHandler
     /**
      * Assemble all chunks into a final file.
      *
+     * @param  ?int  $expectedSize  Total bytes the final file is expected
+     *                              to be. Used for disk-space pre-flight
+     *                              and post-write integrity assertion. Pass
+     *                              null to skip the checks (back-compat).
      * @return string The final file path on the configured disk.
      */
-    public function assemble(string $uploadId, string $fileName, int $totalChunks): string;
+    public function assemble(string $uploadId, string $fileName, int $totalChunks, ?int $expectedSize = null): string;
 
     public function cleanup(string $uploadId): void;
 }

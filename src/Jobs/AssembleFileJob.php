@@ -67,6 +67,7 @@ class AssembleFileJob implements ShouldQueue
             $this->uploadId,
             $metadata->fileName,
             $metadata->totalChunks,
+            $metadata->fileSize,
         );
 
         Metrics::emit('assembly_completed', [

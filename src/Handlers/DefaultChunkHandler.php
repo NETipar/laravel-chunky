@@ -31,7 +31,7 @@ class DefaultChunkHandler implements ChunkHandler
         $this->disk()->put($path, $chunk->getContent());
     }
 
-    public function assemble(string $uploadId, string $fileName, int $totalChunks): string
+    public function assemble(string $uploadId, string $fileName, int $totalChunks, ?int $expectedSize = null): string
     {
         // Defence-in-depth against path traversal even if validation was
         // bypassed: basename() strips any leading directory components, and
@@ -46,6 +46,22 @@ class DefaultChunkHandler implements ChunkHandler
         $disk = $this->disk();
 
         $stagingDir = $this->resolveStagingDirectory();
+
+        // Pre-flight: when the caller knows the expected size, refuse to
+        // even start an assembly that the staging volume can't hold.
+        // Lets a 100GB upload fail fast instead of running fwrite() until
+        // the partition is full and crashing the worker mid-file.
+        if ($expectedSize !== null && $expectedSize > 0) {
+            $free = @disk_free_space($stagingDir);
+
+            if ($free !== false && $free < (int) ($expectedSize * 1.1)) {
+                throw new \RuntimeException(
+                    "Insufficient staging disk space for upload {$uploadId}: "
+                    ."need ~{$expectedSize} bytes (+10% margin), have {$free} bytes free in {$stagingDir}.",
+                );
+            }
+        }
+
         $tempFile = tempnam($stagingDir, 'chunky-');
 
         if ($tempFile === false) {
@@ -75,6 +91,25 @@ class DefaultChunkHandler implements ChunkHandler
 
             fclose($output);
             $output = null;
+
+            // Post-write integrity assertion: catch silent truncation
+            // (race / chunk corruption / partial Storage write). Without
+            // this, a missing chunk's bytes silently produce a smaller
+            // file and the user gets a corrupted download.
+            if ($expectedSize !== null) {
+                $actualSize = @filesize($tempFile);
+
+                if ($actualSize !== $expectedSize) {
+                    @unlink($tempFile);
+
+                    throw new \RuntimeException(
+                        "Assembled size mismatch for {$uploadId}: "
+                        ."expected {$expectedSize}, got "
+                        .(is_int($actualSize) ? (string) $actualSize : 'unknown')
+                        .'. Possible chunk corruption — refusing to publish.',
+                    );
+                }
+            }
 
             $upload = fopen($tempFile, 'rb');
 

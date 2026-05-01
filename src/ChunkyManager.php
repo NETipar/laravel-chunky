@@ -24,6 +24,7 @@ use NETipar\Chunky\Events\ChunkUploadFailed;
 use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Models\ChunkyBatch;
+use NETipar\Chunky\Support\CacheKeys;
 use NETipar\Chunky\Support\ChunkCalculator;
 use NETipar\Chunky\Support\Metrics;
 
@@ -510,7 +511,14 @@ class ChunkyManager
             $ttl = (int) config('chunky.lock_ttl_seconds', 30);
             $waitFor = (int) config('chunky.lock_wait_seconds', 5);
 
-            Cache::lock("chunky:batch:{$batchId}", $ttl)->block($waitFor, $callback);
+            $lock = Cache::lock(CacheKeys::batchLock($batchId), $ttl);
+
+            try {
+                $lock->block($waitFor);
+                $callback();
+            } finally {
+                $lock->release();
+            }
 
             return;
         }
@@ -520,32 +528,39 @@ class ChunkyManager
 
         try {
             $fullPath = $disk->path($relativePath);
-        } catch (\Throwable) {
-            $callback();
-
-            return;
+        } catch (\Throwable $e) {
+            // Cloud disk: refuse to silently run unlocked.
+            throw new ChunkyException(
+                "Batch lock for {$batchId} cannot be acquired: the configured disk "
+                .'does not expose a local path. Set chunky.lock_driver = "cache" '
+                .'to use cache-backed locks for cloud disks.',
+                previous: $e,
+            );
         }
 
         $directory = dirname($fullPath);
 
-        if (! is_dir($directory)) {
-            @mkdir($directory, 0755, true);
+        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            throw new ChunkyException(
+                "Could not create batch lock directory at {$directory}.",
+            );
         }
 
         $lockPath = $fullPath.'.lock';
         $handle = @fopen($lockPath, 'c+');
 
         if ($handle === false) {
-            $callback();
-
-            return;
+            throw new ChunkyException(
+                "Could not open batch lock file at {$lockPath}. "
+                .'Refusing to run critical section without lock.',
+            );
         }
 
         try {
             if (! flock($handle, LOCK_EX)) {
-                $callback();
-
-                return;
+                throw new ChunkyException(
+                    "Failed to acquire flock on batch lock {$lockPath}.",
+                );
             }
 
             try {

@@ -77,18 +77,35 @@ export class BatchUploader {
             this.listeners.set(event, new Set());
         }
 
-        this.listeners.get(event)!.add(callback as EventCallback);
+        const set = this.listeners.get(event)!;
+        const stored = callback as EventCallback;
+        set.add(stored);
 
+        // Sticky-replay: re-deliver the last `complete` / `error` to a
+        // late subscriber so React/Vue cleanup-then-resubscribe patterns
+        // don't lose terminal events. The microtask delivery has a
+        // late-arrival guard: if the caller synchronously unsubscribes
+        // before the microtask runs (e.g. `useEffect` cleanup right
+        // after subscription), skip the replay — otherwise the callback
+        // fires *after* explicit unsubscribe.
         if (event === 'complete' && this.lastComplete) {
             const sticky = this.lastComplete;
-            queueMicrotask(() => (callback as (d: BatchResult) => void)(sticky));
+            queueMicrotask(() => {
+                if (set.has(stored)) {
+                    (callback as (d: BatchResult) => void)(sticky);
+                }
+            });
         } else if (event === 'error' && this.lastError) {
             const sticky = this.lastError;
-            queueMicrotask(() => (callback as (d: UploadError) => void)(sticky));
+            queueMicrotask(() => {
+                if (set.has(stored)) {
+                    (callback as (d: UploadError) => void)(sticky);
+                }
+            });
         }
 
         return () => {
-            this.listeners.get(event)?.delete(callback as EventCallback);
+            set.delete(stored);
         };
     }
 
@@ -392,7 +409,25 @@ export class BatchUploader {
             this.emitProgress(uploader);
         });
 
-        return uploader.upload(file, metadata);
+        try {
+            return await uploader.upload(file, metadata);
+        } finally {
+            // Drop the per-file uploader as soon as it's done — without
+            // this the array grows forever for the lifetime of the
+            // BatchUploader, retaining 100MB+ File references and the
+            // closure-captured lastFile state. The aggregate progress
+            // walk (line ~410) skipped finished uploaders already, so
+            // the only callers of `this.uploaders` after this are
+            // `cancel()` / `pause()` / `destroy()`, which are no-ops on
+            // already-completed uploaders.
+            const idx = this.uploaders.indexOf(uploader);
+
+            if (idx >= 0) {
+                this.uploaders.splice(idx, 1);
+            }
+
+            uploader.destroy();
+        }
     }
 
     private aggregateProgress(): number {

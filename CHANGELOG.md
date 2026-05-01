@@ -6,9 +6,35 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.17.2 - 2026-05-02
+
+Critical bug-fix release. Eleven concurrency / DOS / data-integrity bugs surfaced by a deep code audit, plus refreshed security and example documentation. No public API changes — drop-in over v0.17.1.
+
+### Fixed
+- **`FilesystemTracker` lock fall-through (race condition).** Three branches (`fopen` failure, `flock` failure, cloud disk without `path()`) silently ran the critical section without a lock — every chunk write / status flip was a lost-update race. The branches now throw `ChunkyException` with actionable error messages, so the operator gets a fail-fast signal instead of corrupted metadata.
+- **`ChunkyManager::withBatchLock()` lock fall-through (race condition).** The same silent fall-through pattern existed for batch counter updates — `flock` unavailable on cloud disks would silently bypass the lock. Now throws with guidance to use `chunky.lock_driver = "cache"` for cloud disks.
+- **`BatchUploader.uploaders[]` memory leak.** Every per-file `ChunkUploader` was pushed and never removed, retaining 100MB+ `File` references plus closure state for the lifetime of the BatchUploader. A 10000-file enqueue session held all 10000 uploader instances in memory. The per-file uploader is now spliced out of the array and `destroy()`-ed in the `finally` block.
+- **`ChunkUploader.cancel()` did not reset `lastFile` / `lastMetadata`.** A `cancel()` followed by `retry()` silently re-uploaded the cancelled file (the retry path detected the still-set `lastFile`). Cancel now drops the resume state too.
+- **Sticky-replay race (`ChunkUploader.on()` and `BatchUploader.on()`).** The `queueMicrotask` re-delivery of a cached `complete`/`error` to a late subscriber did not check whether the subscriber had synchronously unsubscribed before the microtask drained. The typical React `useEffect` cleanup-then-resubscribe pattern triggered the callback after `unsub()` returned. The microtask now confirms the listener is still in the Set before delivering.
+- **`CompletionWatcher.extendTimeoutOnProgressMs` no-op when `timeoutMs = 0`.** The progress-extension safeguard only ran when an existing `timeoutTimer` was present, so opting into "extend on progress" with no static deadline silently never started the safeguard. The timer now (re)creates on every progress tick regardless of whether a static deadline was set.
+
+### Added
+- **`max_chunks_per_upload` config cap (default 100k).** A pathological initiate (file_size = 1TB, chunk_size = 1KB → 1 billion chunks) would explode the tracker row and grind the UI to a halt. The new `file_size` validation rule rejects any size that would require more chunks than the configured cap, with a helpful error message pointing at `chunk_size` / the cap setting.
+- **`throttle:chunky` rate limiter.** The package now registers a `RateLimiter::for('chunky')` keyed by user id (or IP for anonymous traffic) and adds `throttle:chunky` to the default route middleware. Configurable via `chunky.throttle.attempts` / `chunky.throttle.decay_minutes` (default 120/min) — set attempts to 0 to disable. Without this, the public batch/upload status endpoints could be hammered with random UUIDs to drive S3 GET costs.
+- **Versioned cache-key prefix.** Every lock / idempotency / counter cache key now goes through `Support\CacheKeys` with a configurable `chunky.cache.prefix` (default `chunky:v1:`). Lets a future major release invalidate cached payloads cleanly without cooperating cache backends — and removes the collision risk with other packages using a bare `chunky:` prefix.
+- **Disk-space pre-flight + assembled-size assertion in `DefaultChunkHandler`.** The `assemble()` method now accepts an optional `?int $expectedSize`, and when supplied (a) refuses to start an assembly the staging volume can't hold (10% margin) and (b) verifies the assembled temp file matches the expected size before publishing, so silent chunk-corruption truncations can never reach the final disk. The `AssembleFileJob` passes `$metadata->fileSize` so the checks are active by default.
+- **`Cache::lock` `try/finally` release** in `FilesystemTracker::withCacheLock()` and `ChunkyManager::withBatchLock()`. Previously a callback exception left the lock held until its TTL expired — a mild DoS amplifier under churn.
+
 ### Changed (CI / repo tooling — no published artefact change)
 - **Dependabot auto-merge for patch and minor updates.** New `.github/workflows/dependabot-auto-merge.yml` watches Dependabot PRs and, after the regular CI matrix passes, approves and enables auto-merge (squash) for `version-update:semver-patch` and `version-update:semver-minor` updates. Major bumps get a comment instead and stay open for manual review. The repository's "Allow auto-merge" and "Automatically delete head branches" settings are required and have been enabled.
 - **`dependabot.yml` per-package grouping.** Each `packages/{core,vue3,react,alpine}/` config now defines a single `*-dev-dependencies` group covering `typescript`, `esbuild`, `@types/*`, and the framework peer (`vue` / `react`). Last week's update produced 8 separate PRs for typescript+esbuild across the 4 packages; the same updates would now land as 4 grouped PRs (one per package). The `github-actions` ecosystem also got an `actions` group so all action bumps land in a single PR.
+
+### Documentation
+- **`SECURITY.md`** Supported Versions table updated to `0.17.x` (was stuck at `0.14.x`); Hardening Surface section now lists the rate limiter, lock-driver compatibility guard, and cache-key namespacing.
+- **`examples/en/configuration.md`** rewritten as a recipe-focused companion to the canonical `config/chunky.php` reference. The previous version was stuck at v0.7-era keys.
+
+### npm packages
+- All packages bumped to `0.17.2` (frontend bug fixes — BatchUploader memory leak, sticky-replay race, ChunkUploader cancel, CompletionWatcher).
 
 ## v0.17.1 - 2026-05-01
 

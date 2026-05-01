@@ -1,5 +1,10 @@
 # Configuration
 
+> The canonical configuration reference is in
+> [`config/chunky.php`](../../config/chunky.php) (every key is
+> commented inline) and the table in [README.md](../../README.md).
+> This document highlights common recipes only.
+
 ## Publishing the Config
 
 ```bash
@@ -8,215 +13,122 @@ php artisan vendor:publish --tag=chunky-config
 
 This creates `config/chunky.php` in your application.
 
-## Full Configuration Reference
+## Common Recipes
+
+### Large Video Uploads (4MB chunks, 5GB cap)
 
 ```php
 return [
-    // Tracking driver: 'database' | 'filesystem'
-    // Database: uses chunked_uploads table, queryable, supports status tracking
-    // Filesystem: uses JSON files on disk, zero DB dependency
-    'tracker' => env('CHUNKY_TRACKER', 'database'),
+    'chunk_size' => 4 * 1024 * 1024,
+    'max_file_size' => 5 * 1024 * 1024 * 1024,
+    'max_chunks_per_upload' => 200_000,
+    'allowed_mimes' => ['video/mp4', 'video/quicktime', 'video/webm'],
+    'expiration' => 4320, // 3 days
+];
+```
 
-    // Laravel filesystem disk for chunk and file storage
-    // Supports any configured disk: local, s3, etc.
-    'disk' => env('CHUNKY_DISK', 'local'),
+### S3 / cloud disk
 
-    // Chunk size in bytes
-    // Default: 1MB. Larger chunks = fewer requests, smaller chunks = better resume
-    'chunk_size' => env('CHUNKY_CHUNK_SIZE', 1024 * 1024),
+```php
+return [
+    'disk' => 's3',
+    // S3 doesn't expose a local path, so flock() can't be used. Switch
+    // to cache-backed locking (requires Redis / Memcached / DB cache).
+    'lock_driver' => 'cache',
+    // Cloud-disk assemblies still need local scratch space — point this
+    // at a volume with enough room for your largest file.
+    'staging_directory' => '/var/chunky-staging',
+];
+```
 
-    // Temp directory for chunk storage (relative to disk root)
-    'temp_directory' => 'chunky/temp',
+### Authenticated routes + custom rate limit
 
-    // Final directory for assembled files (relative to disk root)
-    'final_directory' => 'chunky/uploads',
-
-    // Upload expiration in minutes
-    // Uploads not completed within this time are marked as expired
-    'expiration' => 1440, // 24 hours
-
-    // Maximum file size in bytes (0 = unlimited)
-    'max_file_size' => 0,
-
-    // Allowed MIME types (empty array = all types allowed)
-    'allowed_mimes' => [],
-
-    // Class-based upload contexts (auto-registered on boot)
-    'contexts' => [],
-
-    // Route configuration
+```php
+return [
     'routes' => [
         'prefix' => 'api/chunky',
-        'middleware' => ['api'],
+        'middleware' => ['api', 'auth:sanctum', 'throttle:chunky'],
     ],
+    'throttle' => [
+        'attempts' => 240,   // chunks/minute per user
+        'decay_minutes' => 1,
+    ],
+];
+```
 
-    // Verify chunk integrity using SHA-256 checksums
-    'verify_integrity' => true,
+### Broadcasting (Echo / Reverb / Pusher)
 
-    // Automatic cleanup of expired uploads
-    'auto_cleanup' => true,
+```php
+return [
+    'broadcasting' => [
+        'enabled' => true,
+        'channel_prefix' => 'chunky',
+        'queue' => 'broadcasts',
+        // Strip server-internal `disk` / `finalPath` from the wire by
+        // default; opt back in only if a consumer truly needs them.
+        'expose_internal_paths' => false,
+    ],
+];
+```
+
+### Class-based upload contexts
+
+```php
+// app/Chunky/AvatarContext.php
+final class AvatarContext extends \NETipar\Chunky\ChunkyContext
+{
+    public function name(): string
+    {
+        return 'avatar';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'file_size' => ['max:5242880'], // 5MB
+            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
+        ];
+    }
+
+    public function save(\NETipar\Chunky\Data\UploadMetadata $metadata): void
+    {
+        // move from temp -> avatar storage, write DB record, etc.
+    }
+}
+
+// config/chunky.php
+return [
+    'contexts' => [
+        \App\Chunky\AvatarContext::class,
+    ],
 ];
 ```
 
 ## Environment Variables
 
 ```env
-# Tracking driver
 CHUNKY_TRACKER=database
-
-# Storage disk
 CHUNKY_DISK=local
-
-# Chunk size (bytes)
 CHUNKY_CHUNK_SIZE=1048576
+CHUNKY_LOCK_DRIVER=flock
+CHUNKY_BROADCASTING=false
+CHUNKY_STAGING_DIRECTORY=
+CHUNKY_CACHE_PREFIX=chunky:v1:
 ```
 
-## Common Configurations
+## Schema
 
-### Large Video Uploads
+The `database` tracker uses two tables. See
+`database/migrations/` for the canonical schema; key columns:
 
-```php
-// config/chunky.php
-return [
-    'chunk_size' => 10 * 1024 * 1024, // 10MB chunks
-    'max_file_size' => 5 * 1024 * 1024 * 1024, // 5GB max
-    'allowed_mimes' => ['video/mp4', 'video/quicktime', 'video/webm'],
-    'expiration' => 4320, // 3 days
-];
-```
+**`chunked_uploads`** — `upload_id`, `batch_id`, `user_id`, `file_name`,
+`file_size`, `mime_type`, `chunk_size`, `total_chunks`,
+`uploaded_chunks` (JSON), `status` (enum:
+`pending|assembling|completed|failed|cancelled|expired`), `disk`,
+`final_path`, `metadata` (JSON), `expires_at`, `claimed_at`,
+`completed_at`.
 
-### Document Uploads with S3
-
-```php
-// config/chunky.php
-return [
-    'disk' => 's3',
-    'max_file_size' => 100 * 1024 * 1024, // 100MB
-    'allowed_mimes' => ['application/pdf', 'application/zip'],
-];
-```
-
-### Authenticated Upload Routes
-
-```php
-// config/chunky.php
-return [
-    'routes' => [
-        'prefix' => 'api/chunky',
-        'middleware' => ['api', 'auth:sanctum'],
-    ],
-];
-```
-
-### Filesystem Tracker (No Database)
-
-```php
-// config/chunky.php
-return [
-    'tracker' => 'filesystem',
-];
-```
-
-No migration needed. Upload state is stored as JSON files alongside the chunks.
-
-## Context-based Validation
-
-### Class-based Contexts (Recommended)
-
-Create a context class for each upload type:
-
-```php
-namespace App\Chunky;
-
-use NETipar\Chunky\ChunkyContext;
-use NETipar\Chunky\Data\UploadMetadata;
-
-class ProfileAvatarContext extends ChunkyContext
-{
-    public function name(): string
-    {
-        return 'profile_avatar';
-    }
-
-    public function rules(): array
-    {
-        return [
-            'file_size' => ['max:5242880'],
-            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-        ];
-    }
-
-    public function save(UploadMetadata $metadata): void
-    {
-        auth()->user()
-            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
-            ->toMediaCollection('avatar');
-    }
-}
-```
-
-Register in `config/chunky.php`:
-
-```php
-'contexts' => [
-    App\Chunky\ProfileAvatarContext::class,
-],
-```
-
-### Inline Closures
-
-For simple cases:
-
-```php
-use NETipar\Chunky\Facades\Chunky;
-
-public function boot(): void
-{
-    Chunky::context('documents', rules: fn () => [
-        'file_size' => ['max:104857600'],
-        'mime_type' => ['in:application/pdf,application/zip'],
-    ]);
-}
-```
-
-Then use the context from the frontend:
-
-```typescript
-// Vue 3
-const { upload } = useChunkUpload({ context: 'profile_avatar' });
-
-// React
-const { upload } = useChunkUpload({ context: 'profile_avatar' });
-
-// Alpine.js
-// <div x-data="chunkUpload({ context: 'profile_avatar' })">
-```
-
-## Database Migration
-
-When using the `database` tracker, publish and run the migration:
-
-```bash
-php artisan vendor:publish --tag=chunky-migrations
-php artisan migrate
-```
-
-This creates the `chunked_uploads` table:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | ULID | Primary key |
-| `upload_id` | string | Unique upload identifier (UUID) |
-| `file_name` | string | Original file name |
-| `file_size` | bigint | Total file size in bytes |
-| `mime_type` | string | MIME type |
-| `chunk_size` | int | Chunk size used |
-| `total_chunks` | int | Expected number of chunks |
-| `uploaded_chunks` | JSON | Array of uploaded chunk indices |
-| `disk` | string | Laravel filesystem disk |
-| `context` | string | Upload context (nullable) |
-| `final_path` | string | Path after assembly |
-| `metadata` | JSON | Custom metadata from frontend |
-| `status` | string | pending, assembling, completed, expired |
-| `completed_at` | timestamp | When upload completed |
-| `expires_at` | timestamp | When upload expires |
+**`chunky_batches`** — `batch_id`, `user_id`, `total_files`,
+`completed_files`, `failed_files`, `status` (enum:
+`pending|processing|completed|partially_completed|expired`),
+`context`, `metadata` (JSON), `expires_at`.

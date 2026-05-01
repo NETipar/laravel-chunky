@@ -328,16 +328,20 @@ export class ChunkUploader {
             await this.uploadChunks(file, this.uploadId!, chunkSize, this.totalChunks);
 
             if (!this.isPaused && !this.abortController.signal.aborted) {
-                this.isComplete = true;
-                this.progress = 100;
-                this.emitStateChange();
-
                 const result: UploadResult = {
                     uploadId: this.uploadId!,
                     fileName: file.name,
                     fileSize: file.size,
                     totalChunks: this.totalChunks,
                 };
+
+                this.isComplete = true;
+                this.progress = 100;
+                this.uploadId = null;
+                this.pendingChunks = [];
+                this.lastFile = null;
+                this.lastMetadata = undefined;
+                this.emitStateChange();
 
                 this.emit('complete', result);
 

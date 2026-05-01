@@ -30,7 +30,7 @@ class DatabaseTracker implements UploadTracker
             'context' => $metadata->context,
             'metadata' => $metadata->metadata ?: null,
             'status' => UploadStatus::Pending,
-            'expires_at' => now()->addMinutes(config('chunky.expiration', 1440)),
+            'expires_at' => now()->addMinutes(config('chunky.lifecycle.expiration_minutes', 360)),
         ]);
     }
 
@@ -140,7 +140,7 @@ class DatabaseTracker implements UploadTracker
     public function claimForAssembly(string $uploadId): bool
     {
         $staleThreshold = now()->subMinutes(
-            (int) config('chunky.assembly_stale_after_minutes', 10),
+            (int) config('chunky.lifecycle.assembly_stale_after_minutes', 10),
         );
 
         // The CAS allows two transitions:
@@ -168,7 +168,7 @@ class DatabaseTracker implements UploadTracker
     public function expiredUploadIds(): array
     {
         $staleThreshold = now()->subMinutes(
-            (int) config('chunky.assembly_stale_after_minutes', 10),
+            (int) config('chunky.lifecycle.assembly_stale_after_minutes', 10),
         );
 
         // Skip uploads that are still actively being assembled (Assembling

@@ -121,7 +121,7 @@ it('rejects late chunks against a cancelled upload with HTTP 409', function () {
 });
 
 it('skips checksum verification when disabled', function () {
-    config(['chunky.verify_integrity' => false]);
+    config(['chunky.chunks.verify_integrity' => false]);
 
     $uploadId = initiateUpload($this);
 

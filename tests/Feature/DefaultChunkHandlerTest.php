@@ -4,7 +4,21 @@ declare(strict_types=1);
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Handlers\DefaultChunkHandler;
+
+function makeAssembleMetadata(string $uploadId, string $fileName, int $totalChunks, int $fileSize = 0): UploadMetadata
+{
+    return new UploadMetadata(
+        uploadId: $uploadId,
+        fileName: $fileName,
+        fileSize: $fileSize,
+        mimeType: null,
+        chunkSize: 1024,
+        totalChunks: $totalChunks,
+        disk: 'local',
+    );
+}
 
 beforeEach(function () {
     Storage::fake('local');
@@ -40,7 +54,7 @@ it('assembles chunks into a single file', function () {
         $handler->store('upload-456', $i, $chunk);
     }
 
-    $finalPath = $handler->assemble('upload-456', 'result.bin', 3);
+    $finalPath = $handler->assemble(makeAssembleMetadata('upload-456', 'result.bin', 3));
 
     expect($finalPath)->toBe('chunky/uploads/upload-456/result.bin');
 
@@ -69,7 +83,7 @@ it('assembles chunks via filesystem streams without relying on disk()->path()', 
         $handler->store('stream-1', $i, UploadedFile::fake()->createWithContent("chunk_{$i}", "block-{$i}-"));
     }
 
-    $finalPath = $handler->assemble('stream-1', 'big.bin', 5);
+    $finalPath = $handler->assemble(makeAssembleMetadata('stream-1', 'big.bin', 5));
 
     expect(Storage::disk('local')->get($finalPath))->toBe('block-0-block-1-block-2-block-3-block-4-');
 });
@@ -79,6 +93,6 @@ it('throws when a chunk is missing during assembly', function () {
 
     $handler->store('missing-1', 0, UploadedFile::fake()->createWithContent('chunk_0', 'a'));
 
-    expect(fn () => $handler->assemble('missing-1', 'file.bin', 2))
+    expect(fn () => $handler->assemble(makeAssembleMetadata('missing-1', 'file.bin', 2)))
         ->toThrow(RuntimeException::class);
 });

@@ -82,27 +82,5 @@ it('replays based on the chunk checksum when no Idempotency-Key is sent', functi
     Event::assertDispatchedTimes(ChunkUploaded::class, 1);
 });
 
-it('does not replay when chunky.idempotency.enabled is false', function () {
-    config(['chunky.idempotency.enabled' => false]);
-
-    $uploadId = initiateForIdempotency($this);
-
-    Event::fake([ChunkUploaded::class]);
-
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-
-    $this->postJson(
-        "/api/chunky/upload/{$uploadId}/chunks",
-        ['chunk' => $chunk, 'chunk_index' => 0],
-        ['Idempotency-Key' => 'k'],
-    )->assertOk();
-
-    $this->postJson(
-        "/api/chunky/upload/{$uploadId}/chunks",
-        ['chunk' => $chunk, 'chunk_index' => 0],
-        ['Idempotency-Key' => 'k'],
-    )->assertOk();
-
-    // Both requests went through to the manager → 2 events.
-    Event::assertDispatchedTimes(ChunkUploaded::class, 2);
-});
+// idempotency.enabled flag was removed in v0.18 — idempotency is now
+// always on. The opt-out test that used to live here is gone.

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Contracts\ChunkHandler;
+use NETipar\Chunky\Data\UploadMetadata;
 
 class DefaultChunkHandler implements ChunkHandler
 {
@@ -31,27 +32,32 @@ class DefaultChunkHandler implements ChunkHandler
         $this->disk()->put($path, $chunk->getContent());
     }
 
-    public function assemble(string $uploadId, string $fileName, int $totalChunks, ?int $expectedSize = null): string
+    public function assemble(UploadMetadata $metadata): string
     {
+        $uploadId = $metadata->uploadId;
+        $totalChunks = $metadata->totalChunks;
+        $expectedSize = $metadata->fileSize;
+
         // Defence-in-depth against path traversal even if validation was
         // bypassed: basename() strips any leading directory components, and
         // the leading "." / ".." cases are rejected outright.
-        $safeFileName = basename($fileName);
+        $safeFileName = basename($metadata->fileName);
 
         if ($safeFileName === '' || $safeFileName === '.' || $safeFileName === '..') {
             throw new \RuntimeException("Refusing to assemble upload {$uploadId}: invalid file name.");
         }
 
-        $finalPath = config('chunky.final_directory')."/{$uploadId}/{$safeFileName}";
+        $finalPath = config('chunky.storage.final_directory')."/{$uploadId}/{$safeFileName}";
         $disk = $this->disk();
 
         $stagingDir = $this->resolveStagingDirectory();
 
-        // Pre-flight: when the caller knows the expected size, refuse to
-        // even start an assembly that the staging volume can't hold.
-        // Lets a 100GB upload fail fast instead of running fwrite() until
-        // the partition is full and crashing the worker mid-file.
-        if ($expectedSize !== null && $expectedSize > 0) {
+        // Pre-flight: refuse to even start an assembly that the staging
+        // volume can't hold. Lets a 100GB upload fail fast instead of
+        // running fwrite() until the partition is full and crashing the
+        // worker mid-file. Skipped for fileSize=0 (test fixtures, empty
+        // file metadata).
+        if ($expectedSize > 0) {
             $free = @disk_free_space($stagingDir);
 
             if ($free !== false && $free < (int) ($expectedSize * 1.1)) {
@@ -96,7 +102,7 @@ class DefaultChunkHandler implements ChunkHandler
             // (race / chunk corruption / partial Storage write). Without
             // this, a missing chunk's bytes silently produce a smaller
             // file and the user gets a corrupted download.
-            if ($expectedSize !== null) {
+            if ($expectedSize > 0) {
                 $actualSize = @filesize($tempFile);
 
                 if ($actualSize !== $expectedSize) {
@@ -131,14 +137,14 @@ class DefaultChunkHandler implements ChunkHandler
 
     public function cleanup(string $uploadId): void
     {
-        $tempDir = config('chunky.temp_directory')."/{$uploadId}";
+        $tempDir = config('chunky.storage.temp_directory')."/{$uploadId}";
 
         $this->disk()->deleteDirectory($tempDir);
     }
 
     private function chunkPath(string $uploadId, int $chunkIndex): string
     {
-        return config('chunky.temp_directory')."/{$uploadId}/chunk_{$chunkIndex}";
+        return config('chunky.storage.temp_directory')."/{$uploadId}/chunk_{$chunkIndex}";
     }
 
     private function disk(): Filesystem
@@ -148,7 +154,7 @@ class DefaultChunkHandler implements ChunkHandler
 
     private function resolveStagingDirectory(): string
     {
-        $configured = config('chunky.staging_directory');
+        $configured = config('chunky.storage.staging_directory');
 
         if (! $configured) {
             return sys_get_temp_dir();

@@ -433,14 +433,26 @@ export class ChunkUploader {
                 totalChunks: this.totalChunks,
             };
         } catch (err) {
+            const aborted = this.abortController?.signal.aborted === true
+                || (err instanceof Error && err.name === 'AbortError');
+
+            // Pause-induced aborts are not failures — the run will be
+            // resumed by resume(). Skip the error event so a paused
+            // upload doesn't surface a transient "AbortError" while the
+            // user just clicked the pause button.
+            if (aborted && this.isPaused) {
+                throw err;
+            }
+
             const message = err instanceof Error ? err.message : 'Upload failed';
-            this.error = message;
+            this.error = aborted ? null : message;
             this.emitStateChange();
 
             const uploadError: UploadError = {
                 uploadId: this.uploadId,
                 message,
-                cause: err,
+                cause: err instanceof UploadHttpError || err instanceof Error ? err : undefined,
+                cancelled: aborted,
             };
 
             this.emit('error', uploadError);
@@ -453,6 +465,14 @@ export class ChunkUploader {
 
     pause(): void {
         this.isPaused = true;
+        // Aborting the in-flight chunk POSTs releases worker threads
+        // immediately instead of letting them continue until the next
+        // pause-check. Without this a `pause()` followed by `cancel()`
+        // 50ms later races: the abort below catches up only after the
+        // chunk completes naturally. The fetchJson signal is bound to
+        // the same abortController, so we rotate it: signal new abort,
+        // re-create for resume.
+        this.abortController?.abort();
         this.emitStateChange();
     }
 
@@ -463,6 +483,9 @@ export class ChunkUploader {
 
         this.isPaused = false;
         this.emitStateChange();
+        // upload() rebuilds abortController in its own setup path, so a
+        // fresh resume gets a fresh signal — chunks aborted by pause()
+        // are picked up again from pendingChunks.
         this.upload(this.lastFile, this.lastMetadata).catch(() => {
             // Already surfaced via the 'error' event listener.
         });

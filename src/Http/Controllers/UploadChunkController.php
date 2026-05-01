@@ -70,7 +70,7 @@ class UploadChunkController extends Controller
         ];
 
         if ($idempotencyKey) {
-            $ttl = (int) config('chunky.idempotency_ttl_seconds', 300);
+            $ttl = (int) config('chunky.idempotency.ttl_seconds', 300);
             Cache::put($idempotencyKey, $payload, $ttl);
         }
 
@@ -79,10 +79,6 @@ class UploadChunkController extends Controller
 
     private function resolveIdempotencyKey(UploadChunkRequest $request, string $uploadId, int $chunkIndex): ?string
     {
-        if (! config('chunky.idempotency.enabled', true)) {
-            return null;
-        }
-
         $clientKey = $request->header('Idempotency-Key');
 
         if ($clientKey) {

@@ -10,6 +10,7 @@ enum BatchStatus: string
     case Processing = 'processing';
     case Completed = 'completed';
     case PartiallyCompleted = 'partially_completed';
+    case Cancelled = 'cancelled';
     case Expired = 'expired';
 
     /**
@@ -20,8 +21,21 @@ enum BatchStatus: string
     public function isTerminal(): bool
     {
         return match ($this) {
-            self::Completed, self::PartiallyCompleted, self::Expired => true,
+            self::Completed, self::PartiallyCompleted, self::Cancelled, self::Expired => true,
             self::Pending, self::Processing => false,
         };
+    }
+
+    /**
+     * @return array<int, self>
+     */
+    public static function terminalCases(): array
+    {
+        return [
+            self::Completed,
+            self::PartiallyCompleted,
+            self::Cancelled,
+            self::Expired,
+        ];
     }
 }

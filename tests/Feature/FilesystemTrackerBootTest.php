@@ -32,30 +32,19 @@ it('boots successfully when the configured disk exposes a local path', function 
 });
 
 it('refuses to boot on a non-local disk under flock mode', function () {
-    config(['chunky.disk' => 'fake-cloud', 'chunky.lock_driver' => 'flock']);
+    config(['chunky.disk' => 'fake-cloud', 'chunky.locking.driver' => 'flock']);
     bindNonLocalDisk('fake-cloud');
 
     expect(fn () => new FilesystemTracker)
         ->toThrow(ChunkyException::class, 'FilesystemTracker requires a local-path-capable disk');
 });
 
-it('boots successfully on a non-local disk when chunky.lock_driver is cache', function () {
+it('boots successfully on a non-local disk when chunky.locking.driver is cache', function () {
     config([
         'chunky.disk' => 'fake-cloud-2',
-        'chunky.lock_driver' => 'cache',
+        'chunky.locking.driver' => 'cache',
     ]);
     bindNonLocalDisk('fake-cloud-2');
-
-    expect(fn () => new FilesystemTracker)->not->toThrow(ChunkyException::class);
-});
-
-it('respects the skip_local_disk_guard escape hatch', function () {
-    config([
-        'chunky.disk' => 'fake-cloud-3',
-        'chunky.lock_driver' => 'flock',
-        'chunky.skip_local_disk_guard' => true,
-    ]);
-    bindNonLocalDisk('fake-cloud-3');
 
     expect(fn () => new FilesystemTracker)->not->toThrow(ChunkyException::class);
 });

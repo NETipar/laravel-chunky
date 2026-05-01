@@ -4,6 +4,106 @@ Migration notes for breaking changes between minor versions while the
 package is in `0.x`. Patch releases (`0.x.y`) never contain breaking
 changes — refer to the [CHANGELOG](CHANGELOG.md) for the full log.
 
+## Upgrading to 0.18 from 0.17
+
+v0.18 is the structural-cleanup minor: thinner ChunkyManager, namespaced
+config, deduplicated request validation. The runtime behaviour is the
+same, but a published `config/chunky.php` and any code that relied on
+the internal interfaces needs adjustment.
+
+### Config keys are namespaced
+
+The flat config grew to 30+ keys over v0.10–0.17. v0.18 reshapes them
+into eight namespaces. The compatibility map:
+
+| Old key | New key |
+|---|---|
+| `chunky.chunk_size` | `chunky.chunks.size` |
+| `chunky.verify_integrity` | `chunky.chunks.verify_integrity` |
+| `chunky.temp_directory` | `chunky.storage.temp_directory` |
+| `chunky.final_directory` | `chunky.storage.final_directory` |
+| `chunky.staging_directory` | `chunky.storage.staging_directory` |
+| `chunky.expiration` | `chunky.lifecycle.expiration_minutes` |
+| `chunky.assembly_stale_after_minutes` | `chunky.lifecycle.assembly_stale_after_minutes` |
+| `chunky.auto_cleanup` | `chunky.lifecycle.auto_cleanup` |
+| `chunky.max_file_size` | `chunky.limits.max_file_size` |
+| `chunky.max_chunks_per_upload` | `chunky.limits.max_chunks_per_upload` |
+| `chunky.max_files_per_batch` | `chunky.limits.max_files_per_batch` |
+| `chunky.allowed_mimes` | `chunky.limits.allowed_mimes` |
+| `chunky.lock_driver` | `chunky.locking.driver` |
+| `chunky.lock_ttl_seconds` | `chunky.locking.ttl_seconds` |
+| `chunky.lock_wait_seconds` | `chunky.locking.wait_seconds` |
+| `chunky.idempotency_ttl_seconds` | `chunky.idempotency.ttl_seconds` |
+
+**Removed flags** (always-on or rendered redundant by the rewrite):
+
+- `chunky.idempotency.enabled` — idempotency is always on; the
+  Idempotency-Key cache key is per-(uploadId, chunkIndex) so collisions
+  are impossible and there's no realistic reason to opt out.
+- `chunky.skip_local_disk_guard` — the boot-time guard now keys off
+  `chunky.locking.driver` directly. Set the driver to `cache` for cloud
+  disks (the only legitimate use of the old escape hatch).
+- `chunky.broadcasting.user_channel` — the user channel is registered
+  whenever a broadcast event has a non-null `userId`. No flag needed.
+
+**Migration:** republish the config (`php artisan vendor:publish --tag=chunky-config --force`)
+or hand-edit your existing `config/chunky.php` using the table above.
+The package no longer reads the old keys.
+
+### `ChunkyManager` constructor signature
+
+`ChunkyManager::__construct` now takes four arguments:
+
+```php
+public function __construct(
+    ChunkHandler $handler,
+    UploadTracker $tracker,
+    BatchTracker $batchTracker,           // new
+    ContextRegistry $contexts,            // new
+)
+```
+
+Callers that resolve the manager from the container are unaffected.
+Custom service-provider bindings need updating.
+
+### `ChunkHandler::assemble()` accepts `UploadMetadata`
+
+The handler interface now takes the full metadata DTO:
+
+```php
+// before
+public function assemble(string $uploadId, string $fileName, int $totalChunks): string;
+
+// after
+public function assemble(UploadMetadata $metadata): string;
+```
+
+Custom `ChunkHandler` implementations need to update the signature.
+The new shape gives the handler access to `fileSize` for disk-space
+pre-flight and post-write integrity checks (now active by default in
+`DefaultChunkHandler`).
+
+### New `BatchTracker` contract
+
+Batch state lives behind `NETipar\Chunky\Contracts\BatchTracker`, with
+two implementations (`DatabaseBatchTracker`, `FilesystemBatchTracker`).
+The package handles binding via the service provider; you don't need
+to change anything unless you've written a custom batch backend, in
+which case implement the new contract.
+
+### `metadata` validation tightened
+
+`InitiateUploadRequest` now applies the new `ValidMetadata` rule, which
+caps per-value length (default 1KB), total payload size (default 16KB),
+and rejects non-scalar values (arrays, objects, resources). Configurable
+under `chunky.metadata.*`. Most apps won't notice; apps that send large
+metadata blobs will get 422 — adjust the config to relax the limits.
+
+### `BatchStatus::Cancelled` enum case
+
+The enum gained a `Cancelled` terminal case. Custom code that
+exhaustively matches `BatchStatus` will hit a TypeError until updated.
+
 ## Upgrading to 0.14 from 0.13
 
 ### `user_id` columns are now `string`

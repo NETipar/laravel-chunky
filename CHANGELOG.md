@@ -6,6 +6,41 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.18.0 - 2026-05-02
+
+Structural-cleanup minor. Thinner ChunkyManager, namespaced config,
+deduplicated request validation, generic Echo channel, removed dead
+flags. The runtime behaviour is the same — see [UPGRADE.md](UPGRADE.md)
+for the config & API migration details.
+
+### Added
+- **`BatchTracker` contract** (`NETipar\Chunky\Contracts\BatchTracker`) with two implementations (`DatabaseBatchTracker`, `FilesystemBatchTracker`). The Database implementation runs the increment helpers in a transaction with `lockForUpdate()`, eliminating the read-modify-write race that the old in-manager `markUploadCompleted/Failed` had. Hidden behind the same `chunky.tracker` config switch.
+- **`ContextRegistry` support class** holds the validation-rules + save-callback registry. `ChunkyManager` delegates the public `register()` / `simple()` / `context()` helpers to it for back-compat, but the registry can also be resolved directly from the container.
+- **`ValidMetadata` validation rule** caps per-value length (default 1KB), total serialized size (default 16KB), and disallows non-scalar values. Wired up in the baseline `InitiateUploadRequest` rules.
+- **`AbstractInitiateUploadRequest`** holds the shared baseline rules; `InitiateUploadRequest` and `InitiateBatchUploadRequest` are now thin subclasses that just apply context-specific rules. Adding a new constraint touches one place instead of two.
+- **Generic `EchoChannel<EventMap>` interface** (`packages/core/src/echo.ts`) lets typed Echo wrappers narrow event payloads instead of falling back to `any`.
+- **`UploadError.cancelled` flag** lets the caller distinguish "user explicitly cancelled" from "transport/server failure" without parsing the message.
+- **`UploadError.cause`** is now typed as `UploadHttpError | Error` instead of `unknown`.
+- **`BatchStatus::Cancelled`** enum case (the v0.19 batch-cancel API will use it; carved out now to keep the enum forward-compatible).
+- **`tsconfig.base.json`** at the repo root, extended by every package's `tsconfig.json` and `tsconfig.build.json`. Removes the 4-way copy-paste of compiler options.
+
+### Changed (breaking)
+- **Config keys reshaped into 8 namespaces** (`chunks`, `storage`, `lifecycle`, `limits`, `locking`, `idempotency`, `cache`, `broadcasting`). See [UPGRADE.md](UPGRADE.md) for the full mapping. Republish the config or hand-edit per the migration table.
+- **`ChunkyManager` constructor takes four arguments now** — `(ChunkHandler, UploadTracker, BatchTracker, ContextRegistry)`. Container-bound callers are unaffected.
+- **`ChunkHandler::assemble()` accepts `UploadMetadata`** instead of `(string $uploadId, string $fileName, int $totalChunks)`. Handlers get access to `fileSize` for the disk-space + integrity checks landed in v0.17.2; custom implementations need to update the signature.
+- **Removed `chunky.idempotency.enabled` flag** — idempotency is always on (always was, really; the flag had no realistic use case).
+- **Removed `chunky.skip_local_disk_guard` flag** — the boot-time guard now keys off `chunky.locking.driver` directly. Set the driver to `cache` for cloud disks.
+- **Removed `chunky.broadcasting.user_channel` flag** — the user channel is registered whenever an event has a non-null `userId`. No flag needed.
+- **`TrackerDriver` enum is now actively used** in the service provider, the config validator, and every place that previously magic-strung `config('chunky.tracker') === 'database'`. Adding a new driver is now a single enum case + match arm.
+- **`pause()` aborts the in-flight chunk POST** in `ChunkUploader`. The previous flag-only pause raced with `cancel()` — a paused chunk would complete naturally before the cancel registered. The catch path skips the error event when both `aborted` and `isPaused` are set, so the resume can pick up cleanly.
+- **Echo `listenForUser` / `listenForUploadEvents` / `listenForBatchComplete`** unsubscribe only the events the caller registered. The old implementation called `stopListening` for every event in the channel, which would detach a sibling consumer (two components on the same channel) on cleanup.
+
+### Documentation
+- **UPGRADE.md** has a full v0.17 → v0.18 section with the config mapping table, constructor changes, handler signature change, removed flags, and `BatchStatus::Cancelled` notice.
+
+### npm packages
+- All packages bumped to `0.18.0` (frontend changes — `EchoChannel<EventMap>`, `UploadError.cancelled`, pause/cancel race fix, `tsconfig.base.json` extraction).
+
 ## v0.17.2 - 2026-05-02
 
 Critical bug-fix release. Eleven concurrency / DOS / data-integrity bugs surfaced by a deep code audit, plus refreshed security and example documentation. No public API changes — drop-in over v0.17.1.

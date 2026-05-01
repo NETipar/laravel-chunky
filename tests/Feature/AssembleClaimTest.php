@@ -87,7 +87,7 @@ it('claimForAssembly takes over a stale Assembling claim after the configured th
     expect($tracker->claimForAssembly('stale-1'))->toBeFalse();
 
     // Simulate the worker crashed long enough ago that the row is now stale.
-    config(['chunky.assembly_stale_after_minutes' => 1]);
+    config(['chunky.lifecycle.assembly_stale_after_minutes' => 1]);
     ChunkedUpload::where('upload_id', 'stale-1')->update([
         'updated_at' => now()->subMinutes(5),
     ]);
@@ -105,7 +105,7 @@ it('AssembleFileJob retried after a simulated crash recovers and emits UploadCom
 
     // Without the takeover guard, a queue retry would no-op forever.
     // Make the previous claim look stale.
-    config(['chunky.assembly_stale_after_minutes' => 1]);
+    config(['chunky.lifecycle.assembly_stale_after_minutes' => 1]);
     ChunkedUpload::where('upload_id', 'crash-1')->update([
         'updated_at' => now()->subMinutes(5),
     ]);
@@ -132,7 +132,7 @@ it('expiredUploadIds includes stale Assembling rows but skips fresh ones', funct
     $tracker->claimForAssembly('stale-assembling');
 
     // Both expired by their TTL.
-    config(['chunky.assembly_stale_after_minutes' => 1]);
+    config(['chunky.lifecycle.assembly_stale_after_minutes' => 1]);
     ChunkedUpload::query()->update(['expires_at' => now()->subDay()]);
 
     // Only the stale one has an old updated_at.

@@ -26,7 +26,18 @@ export interface UploadError {
     uploadId: string | null;
     chunkIndex?: number;
     message: string;
-    cause?: unknown;
+    /**
+     * The underlying error. UploadHttpError when the failure came from
+     * a chunk POST response, a generic Error otherwise.
+     */
+    cause?: UploadHttpError | Error;
+    /**
+     * True when the failure is the result of an explicit cancel() call,
+     * false / undefined for genuine transport / server failures. Lets
+     * the caller distinguish "user cancelled" from "network died"
+     * without parsing the error message.
+     */
+    cancelled?: boolean;
 }
 
 export class UploadHttpError extends Error {

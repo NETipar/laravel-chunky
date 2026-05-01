@@ -27,15 +27,13 @@ class FilesystemTracker implements UploadTracker
         //
         //  2. Cache::lock() against the configured cache driver (Redis,
         //     Memcached, DB). Required for cloud disks (S3/GCS) where
-        //     `disk()->path()` throws and flock() is impossible. Opt in via
-        //     chunky.lock_driver = 'cache'.
+        //     `disk()->path()` throws and flock() is impossible. Opt in
+        //     via chunky.locking.driver = 'cache'.
         //
         // If neither is available we'd silently run the critical sections
         // lock-free, turning every chunk-write/claim/status flip into a
         // lost-update race. Detect the combination and refuse to boot.
-        $driver = config('chunky.lock_driver', 'flock');
-
-        if ($driver === 'flock' && ! (bool) config('chunky.skip_local_disk_guard', false)) {
+        if (config('chunky.locking.driver', 'flock') === 'flock') {
             $this->assertLocalDisk();
         }
     }
@@ -45,7 +43,7 @@ class FilesystemTracker implements UploadTracker
         $data = [
             ...$metadata->toArray(),
             'uploaded_chunks' => [],
-            'expires_at' => now()->addMinutes(config('chunky.expiration', 1440))->toIso8601String(),
+            'expires_at' => now()->addMinutes(config('chunky.lifecycle.expiration_minutes', 360))->toIso8601String(),
             'created_at' => now()->toIso8601String(),
         ];
 
@@ -156,7 +154,7 @@ class FilesystemTracker implements UploadTracker
             // Stale-claim takeover: previous worker flipped to Assembling
             // but never persisted a terminal status — most likely crashed.
             if ($status === UploadStatus::Assembling->value) {
-                $staleAfter = (int) config('chunky.assembly_stale_after_minutes', 10);
+                $staleAfter = (int) config('chunky.lifecycle.assembly_stale_after_minutes', 10);
                 $claimedAt = $data['claimed_at'] ?? null;
 
                 if ($claimedAt === null || $now->isAfter(Carbon::parse($claimedAt)->addMinutes($staleAfter))) {
@@ -176,9 +174,9 @@ class FilesystemTracker implements UploadTracker
      */
     public function expiredUploadIds(): array
     {
-        $directories = $this->disk()->directories(config('chunky.temp_directory'));
+        $directories = $this->disk()->directories(config('chunky.storage.temp_directory'));
         $expired = [];
-        $staleAfter = (int) config('chunky.assembly_stale_after_minutes', 10);
+        $staleAfter = (int) config('chunky.lifecycle.assembly_stale_after_minutes', 10);
         $now = now();
 
         foreach ($directories as $directory) {
@@ -260,7 +258,7 @@ class FilesystemTracker implements UploadTracker
 
     private function metadataPath(string $uploadId): string
     {
-        return config('chunky.temp_directory')."/{$uploadId}/metadata.json";
+        return config('chunky.storage.temp_directory')."/{$uploadId}/metadata.json";
     }
 
     private function disk(): Filesystem
@@ -276,9 +274,8 @@ class FilesystemTracker implements UploadTracker
             throw new ChunkyException(
                 'FilesystemTracker requires a local-path-capable disk because its '
                 .'mutation paths depend on flock(). Switch chunky.tracker to '
-                .'"database", or use a local Laravel disk for chunky.disk. '
-                .'(Set chunky.skip_local_disk_guard=true to bypass this check '
-                .'if you have implemented external locking.)',
+                .'"database", use a local Laravel disk for chunky.disk, or set '
+                .'chunky.locking.driver to "cache" to use cache-backed locking.',
                 previous: $e,
             );
         }
@@ -296,7 +293,7 @@ class FilesystemTracker implements UploadTracker
      */
     private function withLock(string $uploadId, callable $callback): mixed
     {
-        if (config('chunky.lock_driver', 'flock') === 'cache') {
+        if (config('chunky.locking.driver', 'flock') === 'cache') {
             return $this->withCacheLock(CacheKeys::uploadLock($uploadId), $callback);
         }
 
@@ -371,8 +368,8 @@ class FilesystemTracker implements UploadTracker
      */
     private function withCacheLock(string $key, callable $callback): mixed
     {
-        $ttl = (int) config('chunky.lock_ttl_seconds', 30);
-        $waitFor = (int) config('chunky.lock_wait_seconds', 5);
+        $ttl = (int) config('chunky.locking.ttl_seconds', 30);
+        $waitFor = (int) config('chunky.locking.wait_seconds', 5);
 
         $lock = Cache::lock($key, $ttl);
 

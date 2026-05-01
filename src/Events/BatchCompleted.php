@@ -28,7 +28,7 @@ class BatchCompleted implements ShouldBroadcast
 
         $channels = [new PrivateChannel("{$prefix}.batches.{$this->batchId}")];
 
-        if (config('chunky.broadcasting.user_channel') && $this->userId) {
+        if ($this->userId) {
             $channels[] = new PrivateChannel("{$prefix}.user.{$this->userId}");
         }
 

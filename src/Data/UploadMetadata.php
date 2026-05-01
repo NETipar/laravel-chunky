@@ -21,7 +21,7 @@ class UploadMetadata
         public readonly int $chunkSize,
         public readonly int $totalChunks,
         public readonly string $disk,
-        public readonly ?string $context,
+        public readonly ?string $context = null,
         public readonly array $metadata = [],
         public readonly array $uploadedChunks = [],
         public readonly UploadStatus $status = UploadStatus::Pending,

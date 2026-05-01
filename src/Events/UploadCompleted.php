@@ -40,7 +40,7 @@ class UploadCompleted implements ShouldBroadcast
         $prefix = config('chunky.broadcasting.channel_prefix', 'chunky');
         $channels = [new PrivateChannel("{$prefix}.uploads.{$this->uploadId}")];
 
-        if (config('chunky.broadcasting.user_channel') && $this->upload->userId) {
+        if ($this->upload->userId) {
             $channels[] = new PrivateChannel("{$prefix}.user.{$this->upload->userId}");
         }
 

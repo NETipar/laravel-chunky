@@ -1,48 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$batch_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$completed_files\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$context\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$failed_files\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$status\.$#'
-			identifier: property.notFound
-			count: 3
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$total_files\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
-			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$user_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/ChunkyManager.php
-
-		-
 			message: '#^Call to static method component\(\) on an unknown class Livewire\\Livewire\.$#'
 			identifier: class.notFound
 			count: 1
@@ -125,6 +83,66 @@ parameters:
 			identifier: property.phpDocType
 			count: 1
 			path: src/Models/ChunkyBatch.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$completed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$completed_files\.$#'
+			identifier: property.notFound
+			count: 3
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$context\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$failed_files\.$#'
+			identifier: property.notFound
+			count: 3
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$metadata\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 4
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$total_files\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Trackers/DatabaseBatchTracker.php
+
+		-
+			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkyBatch\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Trackers/DatabaseBatchTracker.php
 
 		-
 			message: '#^Access to an undefined property NETipar\\Chunky\\Models\\ChunkedUpload\:\:\$batch_id\.$#'

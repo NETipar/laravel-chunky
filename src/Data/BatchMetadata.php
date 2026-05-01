@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Data;
 
+use Illuminate\Support\Carbon;
 use NETipar\Chunky\Enums\BatchStatus;
 
 class BatchMetadata
 {
+    /**
+     * @param  array<string, mixed>|null  $metadata
+     */
     public function __construct(
         public readonly string $batchId,
         public readonly int $totalFiles,
@@ -17,6 +21,8 @@ class BatchMetadata
         public readonly ?string $context = null,
         // See UploadMetadata::$userId for the type rationale.
         public readonly ?string $userId = null,
+        public readonly ?array $metadata = null,
+        public readonly ?Carbon $expiresAt = null,
     ) {}
 
     public function pendingFiles(): int
@@ -91,7 +97,16 @@ class BatchMetadata
             userId: isset($data['user_id']) && $data['user_id'] !== ''
                 ? (string) $data['user_id']
                 : null,
+            metadata: isset($data['metadata']) && is_array($data['metadata'])
+                ? $data['metadata']
+                : null,
+            expiresAt: isset($data['expires_at']) ? Carbon::parse($data['expires_at']) : null,
         );
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->expiresAt !== null && now()->isAfter($this->expiresAt);
     }
 
     private static function resolveStatus(mixed $raw): BatchStatus

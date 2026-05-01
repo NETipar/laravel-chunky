@@ -25,7 +25,7 @@ class TestCase extends Orchestra
     {
         $app['config']->set('chunky.tracker', 'database');
         $app['config']->set('chunky.disk', 'local');
-        $app['config']->set('chunky.chunk_size', 1024 * 1024);
-        $app['config']->set('chunky.verify_integrity', true);
+        $app['config']->set('chunky.chunks.size', 1024 * 1024);
+        $app['config']->set('chunky.chunks.verify_integrity', true);
     }
 }

@@ -10,14 +10,14 @@ use NETipar\Chunky\Trackers\FilesystemTracker;
 it('loads the default configuration', function () {
     expect(config('chunky.tracker'))->toBe('database');
     expect(config('chunky.disk'))->toBe('local');
-    expect(config('chunky.chunk_size'))->toBe(1024 * 1024);
-    expect(config('chunky.temp_directory'))->toBe('chunky/temp');
-    expect(config('chunky.final_directory'))->toBe('chunky/uploads');
-    expect(config('chunky.expiration'))->toBe(1440);
-    expect(config('chunky.max_file_size'))->toBe(0);
-    expect(config('chunky.allowed_mimes'))->toBe([]);
-    expect(config('chunky.verify_integrity'))->toBeTrue();
-    expect(config('chunky.auto_cleanup'))->toBeTrue();
+    expect(config('chunky.chunks.size'))->toBe(1024 * 1024);
+    expect(config('chunky.storage.temp_directory'))->toBe('chunky/temp');
+    expect(config('chunky.storage.final_directory'))->toBe('chunky/uploads');
+    expect(config('chunky.lifecycle.expiration_minutes'))->toBe(360);
+    expect(config('chunky.limits.max_file_size'))->toBe(0);
+    expect(config('chunky.limits.allowed_mimes'))->toBe([]);
+    expect(config('chunky.chunks.verify_integrity'))->toBeTrue();
+    expect(config('chunky.lifecycle.auto_cleanup'))->toBeTrue();
 });
 
 it('registers the chunky manager singleton', function () {

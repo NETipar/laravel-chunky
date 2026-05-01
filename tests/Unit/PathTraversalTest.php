@@ -13,6 +13,19 @@ beforeEach(function () {
     Storage::fake('local');
 });
 
+function pathTraversalMetadata(string $uploadId, string $fileName, int $totalChunks = 1, int $fileSize = 0): UploadMetadata
+{
+    return new UploadMetadata(
+        uploadId: $uploadId,
+        fileName: $fileName,
+        fileSize: $fileSize,
+        mimeType: null,
+        chunkSize: 1024,
+        totalChunks: $totalChunks,
+        disk: 'local',
+    );
+}
+
 it('DefaultChunkHandler::assemble strips leading directories from a hostile file name (basename)', function () {
     $handler = new DefaultChunkHandler;
 
@@ -20,17 +33,17 @@ it('DefaultChunkHandler::assemble strips leading directories from a hostile file
     // longer escapes — it tries to assemble a `passwd` file under the
     // upload's own directory. That fails on the missing-chunks path here
     // (we didn't seed any), proving it took the *safe* branch.
-    expect(fn () => $handler->assemble('upload-x', '../../etc/passwd', 1))
+    expect(fn () => $handler->assemble(pathTraversalMetadata('upload-x', '../../etc/passwd')))
         ->toThrow(RuntimeException::class, 'could not be read');
 });
 
 it('DefaultChunkHandler::assemble refuses dot-only file names that basename leaves empty', function () {
     $handler = new DefaultChunkHandler;
 
-    expect(fn () => $handler->assemble('upload-y', '.', 1))
+    expect(fn () => $handler->assemble(pathTraversalMetadata('upload-y', '.')))
         ->toThrow(RuntimeException::class, 'invalid file name');
 
-    expect(fn () => $handler->assemble('upload-z', '..', 1))
+    expect(fn () => $handler->assemble(pathTraversalMetadata('upload-z', '..')))
         ->toThrow(RuntimeException::class, 'invalid file name');
 });
 

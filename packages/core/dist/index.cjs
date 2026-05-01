@@ -392,13 +392,18 @@ var ChunkUploader = class {
         totalChunks: this.totalChunks
       };
     } catch (err) {
+      const aborted = this.abortController?.signal.aborted === true || err instanceof Error && err.name === "AbortError";
+      if (aborted && this.isPaused) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : "Upload failed";
-      this.error = message;
+      this.error = aborted ? null : message;
       this.emitStateChange();
       const uploadError = {
         uploadId: this.uploadId,
         message,
-        cause: err
+        cause: err instanceof UploadHttpError || err instanceof Error ? err : void 0,
+        cancelled: aborted
       };
       this.emit("error", uploadError);
       throw err;
@@ -409,6 +414,7 @@ var ChunkUploader = class {
   }
   pause() {
     this.isPaused = true;
+    this.abortController?.abort();
     this.emitStateChange();
   }
   resume() {
@@ -641,7 +647,8 @@ var BatchUploader = class {
             const uploadError = {
               uploadId: null,
               message: err instanceof Error ? err.message : "File upload failed",
-              cause: err
+              cause: err instanceof UploadHttpError || err instanceof Error ? err : void 0,
+              cancelled: this.cancelledThisRun
             };
             this.emit("fileError", uploadError);
           }
@@ -688,7 +695,8 @@ var BatchUploader = class {
       const uploadError = {
         uploadId: null,
         message,
-        cause: err
+        cause: err instanceof UploadHttpError || err instanceof Error ? err : void 0,
+        cancelled: this.cancelledThisRun
       };
       this.emit("error", uploadError);
       throw err;
@@ -863,17 +871,22 @@ var BatchUploader = class {
 // src/echo.ts
 function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
   const channel = echo.private(`${channelPrefix}.user.${userId}`);
+  const stopFns = [];
   if (callbacks.onUploadComplete) {
     channel.listen(".UploadCompleted", callbacks.onUploadComplete);
+    stopFns.push(() => channel.stopListening(".UploadCompleted"));
   }
   if (callbacks.onUploadFailed) {
     channel.listen(".UploadFailed", callbacks.onUploadFailed);
+    stopFns.push(() => channel.stopListening(".UploadFailed"));
   }
   if (callbacks.onBatchComplete) {
     channel.listen(".BatchCompleted", callbacks.onBatchComplete);
+    stopFns.push(() => channel.stopListening(".BatchCompleted"));
   }
   if (callbacks.onBatchPartiallyCompleted) {
     channel.listen(".BatchPartiallyCompleted", callbacks.onBatchPartiallyCompleted);
+    stopFns.push(() => channel.stopListening(".BatchPartiallyCompleted"));
   }
   if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
     channel.subscribed(callbacks.onSubscribed);
@@ -882,10 +895,7 @@ function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
     channel.error(callbacks.onSubscribeError);
   }
   return () => {
-    channel.stopListening(".UploadCompleted");
-    channel.stopListening(".UploadFailed");
-    channel.stopListening(".BatchCompleted");
-    channel.stopListening(".BatchPartiallyCompleted");
+    stopFns.forEach((fn) => fn());
   };
 }
 function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chunky") {
@@ -897,11 +907,14 @@ function listenForUploadComplete(echo, uploadId, callback, channelPrefix = "chun
 }
 function listenForUploadEvents(echo, uploadId, callbacks, channelPrefix = "chunky") {
   const channel = echo.private(`${channelPrefix}.uploads.${uploadId}`);
+  const stopFns = [];
   if (callbacks.onComplete) {
     channel.listen(".UploadCompleted", callbacks.onComplete);
+    stopFns.push(() => channel.stopListening(".UploadCompleted"));
   }
   if (callbacks.onFailed) {
     channel.listen(".UploadFailed", callbacks.onFailed);
+    stopFns.push(() => channel.stopListening(".UploadFailed"));
   }
   if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
     channel.subscribed(callbacks.onSubscribed);
@@ -910,17 +923,19 @@ function listenForUploadEvents(echo, uploadId, callbacks, channelPrefix = "chunk
     channel.error(callbacks.onSubscribeError);
   }
   return () => {
-    channel.stopListening(".UploadCompleted");
-    channel.stopListening(".UploadFailed");
+    stopFns.forEach((fn) => fn());
   };
 }
 function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunky") {
   const channel = echo.private(`${channelPrefix}.batches.${batchId}`);
+  const stopFns = [];
   if (callbacks.onComplete) {
     channel.listen(".BatchCompleted", callbacks.onComplete);
+    stopFns.push(() => channel.stopListening(".BatchCompleted"));
   }
   if (callbacks.onPartiallyCompleted) {
     channel.listen(".BatchPartiallyCompleted", callbacks.onPartiallyCompleted);
+    stopFns.push(() => channel.stopListening(".BatchPartiallyCompleted"));
   }
   if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
     channel.subscribed(callbacks.onSubscribed);
@@ -929,8 +944,7 @@ function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunk
     channel.error(callbacks.onSubscribeError);
   }
   return () => {
-    channel.stopListening(".BatchCompleted");
-    channel.stopListening(".BatchPartiallyCompleted");
+    stopFns.forEach((fn) => fn());
   };
 }
 

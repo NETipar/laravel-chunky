@@ -19,7 +19,7 @@ function bootChunkyAgain(): void
 
 it('rejects chunky.lock_driver=cache with cache.default=array', function () {
     config([
-        'chunky.lock_driver' => 'cache',
+        'chunky.locking.driver' => 'cache',
         'cache.default' => 'array',
     ]);
 
@@ -29,7 +29,7 @@ it('rejects chunky.lock_driver=cache with cache.default=array', function () {
 
 it('rejects chunky.lock_driver=cache with cache.default=file', function () {
     config([
-        'chunky.lock_driver' => 'cache',
+        'chunky.locking.driver' => 'cache',
         'cache.default' => 'file',
     ]);
 
@@ -39,7 +39,7 @@ it('rejects chunky.lock_driver=cache with cache.default=file', function () {
 
 it('accepts chunky.lock_driver=cache with cache.default=redis', function () {
     config([
-        'chunky.lock_driver' => 'cache',
+        'chunky.locking.driver' => 'cache',
         'cache.default' => 'redis',
     ]);
 
@@ -49,7 +49,7 @@ it('accepts chunky.lock_driver=cache with cache.default=redis', function () {
 it('does not check the cache driver under the default flock locking', function () {
     // Even with an unsafe cache driver, flock mode is fine.
     config([
-        'chunky.lock_driver' => 'flock',
+        'chunky.locking.driver' => 'flock',
         'cache.default' => 'array',
     ]);
 

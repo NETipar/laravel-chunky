@@ -14,10 +14,15 @@ use Livewire\Component;
 use NETipar\Chunky\Authorization\Authorizer;
 use NETipar\Chunky\Authorization\DefaultAuthorizer;
 use NETipar\Chunky\Console\CleanupCommand;
+use NETipar\Chunky\Contracts\BatchTracker;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
+use NETipar\Chunky\Enums\TrackerDriver;
 use NETipar\Chunky\Handlers\DefaultChunkHandler;
+use NETipar\Chunky\Support\ContextRegistry;
+use NETipar\Chunky\Trackers\DatabaseBatchTracker;
 use NETipar\Chunky\Trackers\DatabaseTracker;
+use NETipar\Chunky\Trackers\FilesystemBatchTracker;
 use NETipar\Chunky\Trackers\FilesystemTracker;
 
 class ChunkyServiceProvider extends ServiceProvider
@@ -29,18 +34,28 @@ class ChunkyServiceProvider extends ServiceProvider
         $this->app->singleton(ChunkHandler::class, DefaultChunkHandler::class);
 
         $this->app->singleton(UploadTracker::class, function () {
-            return match (config('chunky.tracker')) {
-                'filesystem' => new FilesystemTracker,
-                default => new DatabaseTracker,
+            return match (TrackerDriver::current()) {
+                TrackerDriver::Filesystem => new FilesystemTracker,
+                TrackerDriver::Database => new DatabaseTracker,
             };
         });
 
+        $this->app->singleton(BatchTracker::class, function () {
+            return match (TrackerDriver::current()) {
+                TrackerDriver::Filesystem => new FilesystemBatchTracker,
+                TrackerDriver::Database => new DatabaseBatchTracker,
+            };
+        });
+
+        $this->app->singleton(ContextRegistry::class);
         $this->app->singleton(Authorizer::class, DefaultAuthorizer::class);
 
         $this->app->singleton(ChunkyManager::class, function ($app) {
             return new ChunkyManager(
                 $app->make(ChunkHandler::class),
                 $app->make(UploadTracker::class),
+                $app->make(BatchTracker::class),
+                $app->make(ContextRegistry::class),
             );
         });
     }
@@ -55,7 +70,7 @@ class ChunkyServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'chunky-migrations');
 
-        if (config('chunky.tracker') === 'database') {
+        if (TrackerDriver::current() === TrackerDriver::Database) {
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
@@ -121,13 +136,17 @@ class ChunkyServiceProvider extends ServiceProvider
     {
         $tracker = config('chunky.tracker', 'database');
 
-        if (! in_array($tracker, ['database', 'filesystem'], true)) {
+        if (TrackerDriver::tryFrom((string) $tracker) === null) {
+            $allowed = collect(TrackerDriver::cases())
+                ->map(fn (TrackerDriver $d) => "'{$d->value}'")
+                ->implode(', ');
+
             throw new \RuntimeException(
-                "Invalid chunky.tracker value '{$tracker}'. Allowed: 'database', 'filesystem'.",
+                "Invalid chunky.tracker value '{$tracker}'. Allowed: {$allowed}.",
             );
         }
 
-        $lockDriver = config('chunky.lock_driver', 'flock');
+        $lockDriver = config('chunky.locking.driver', 'flock');
 
         if (! in_array($lockDriver, ['flock', 'cache'], true)) {
             throw new \RuntimeException(
@@ -146,7 +165,7 @@ class ChunkyServiceProvider extends ServiceProvider
      */
     private function assertLockDriverCompatibility(): void
     {
-        if (config('chunky.lock_driver', 'flock') !== 'cache') {
+        if (config('chunky.locking.driver', 'flock') !== 'cache') {
             return;
         }
 
@@ -187,7 +206,7 @@ class ChunkyServiceProvider extends ServiceProvider
 
         $this->commands([CleanupCommand::class]);
 
-        if (! config('chunky.auto_cleanup', true)) {
+        if (! config('chunky.lifecycle.auto_cleanup', true)) {
             return;
         }
 
@@ -205,10 +224,10 @@ class ChunkyServiceProvider extends ServiceProvider
             return;
         }
 
-        $manager = $this->app->make(ChunkyManager::class);
+        $registry = $this->app->make(ContextRegistry::class);
 
         foreach ($contexts as $contextClass) {
-            $manager->register($contextClass);
+            $registry->registerClass($contextClass);
         }
     }
 

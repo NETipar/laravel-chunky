@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky;
 
+use Closure;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use NETipar\Chunky\Contracts\BatchTracker;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\BatchMetadata;
@@ -16,27 +16,35 @@ use NETipar\Chunky\Data\InitiateResult;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\BatchStatus;
 use NETipar\Chunky\Enums\UploadStatus;
-use NETipar\Chunky\Events\BatchCompleted;
 use NETipar\Chunky\Events\BatchInitiated;
-use NETipar\Chunky\Events\BatchPartiallyCompleted;
 use NETipar\Chunky\Events\ChunkUploaded;
 use NETipar\Chunky\Events\ChunkUploadFailed;
 use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkyException;
-use NETipar\Chunky\Models\ChunkyBatch;
-use NETipar\Chunky\Support\CacheKeys;
 use NETipar\Chunky\Support\ChunkCalculator;
+use NETipar\Chunky\Support\ContextRegistry;
 use NETipar\Chunky\Support\Metrics;
 
+/**
+ * The package's coordinating service. After the v0.18 refactor it is a
+ * thin orchestrator: per-upload state lives in UploadTracker, per-batch
+ * state lives in BatchTracker, and validation/save callbacks live in
+ * ContextRegistry. The manager wires them together and emits the
+ * lifecycle events that the package promises.
+ */
 class ChunkyManager
 {
-    /** @var array<string, array{rules: ?\Closure, save: ?\Closure}> */
-    private array $contexts = [];
-
     public function __construct(
         private ChunkHandler $handler,
         private UploadTracker $tracker,
+        private BatchTracker $batchTracker,
+        private ContextRegistry $contexts,
     ) {}
+
+    // ------------------------------------------------------------------
+    // Context registration (delegates to ContextRegistry — kept on the
+    // manager surface for back-compat with existing callers).
+    // ------------------------------------------------------------------
 
     /**
      * Register a class-based upload context.
@@ -45,13 +53,7 @@ class ChunkyManager
      */
     public function register(string $contextClass): void
     {
-        $instance = app($contextClass);
-
-        $this->context(
-            name: $instance->name(),
-            rules: fn () => $instance->rules(),
-            save: fn (UploadMetadata $metadata) => $instance->save($metadata),
-        );
+        $this->contexts->registerClass($contextClass);
     }
 
     /**
@@ -61,64 +63,18 @@ class ChunkyManager
      */
     public function simple(string $name, string $directory, array $options = []): void
     {
-        $rules = null;
-
-        if (! empty($options['max_size']) || ! empty($options['mimes'])) {
-            $rules = function () use ($options) {
-                $r = [];
-
-                if (! empty($options['max_size'])) {
-                    $r['file_size'] = ["max:{$options['max_size']}"];
-                }
-
-                if (! empty($options['mimes'])) {
-                    $r['mime_type'] = ['in:'.implode(',', $options['mimes'])];
-                }
-
-                return $r;
-            };
-        }
-
-        $this->context(
-            name: $name,
-            rules: $rules,
-            save: function (UploadMetadata $metadata) use ($directory) {
-                $disk = Storage::disk($metadata->disk);
-                // Defence-in-depth: even though InitiateUploadRequest's
-                // file_name regex blocks path-traversal characters and the
-                // assembler applies basename(), guard the destination here
-                // too in case a custom request layer slips one through.
-                $safeName = basename($metadata->fileName);
-
-                if ($safeName === '' || $safeName === '.' || $safeName === '..') {
-                    throw new ChunkyException(
-                        "Refusing to move upload {$metadata->uploadId}: invalid file name."
-                    );
-                }
-
-                $destination = rtrim($directory, '/')."/{$safeName}";
-
-                $disk->move($metadata->finalPath, $destination);
-            },
-        );
+        $this->contexts->registerSimple($name, $directory, $options);
     }
 
     /**
      * Register validation rules and/or save handler for an upload context.
      *
-     * @param  ?\Closure(): array<string, array<int, mixed>>  $rules
-     * @param  ?\Closure(UploadMetadata $metadata): void  $save
+     * @param  ?Closure(): array<string, array<int, mixed>>  $rules
+     * @param  ?Closure(UploadMetadata $metadata): void  $save
      */
-    public function context(string $name, ?\Closure $rules = null, ?\Closure $save = null): void
+    public function context(string $name, ?Closure $rules = null, ?Closure $save = null): void
     {
-        if (trim($name) === '') {
-            throw new ChunkyException('Context name must be a non-empty string.');
-        }
-
-        $this->contexts[$name] = [
-            'rules' => $rules,
-            'save' => $save,
-        ];
+        $this->contexts->register($name, $rules, $save);
     }
 
     /**
@@ -126,22 +82,27 @@ class ChunkyManager
      */
     public function getContextRules(string $name): array
     {
-        if (! isset($this->contexts[$name]['rules'])) {
-            return [];
-        }
-
-        return ($this->contexts[$name]['rules'])();
+        return $this->contexts->rules($name);
     }
 
-    public function getContextSaveCallback(string $name): ?\Closure
+    public function getContextSaveCallback(string $name): ?Closure
     {
-        return $this->contexts[$name]['save'] ?? null;
+        return $this->contexts->saveCallback($name);
     }
 
     public function hasContext(string $name): bool
     {
-        return isset($this->contexts[$name]);
+        return $this->contexts->has($name);
     }
+
+    public function contexts(): ContextRegistry
+    {
+        return $this->contexts;
+    }
+
+    // ------------------------------------------------------------------
+    // Single-file upload lifecycle.
+    // ------------------------------------------------------------------
 
     /**
      * @param  array<string, mixed>  $metadata
@@ -266,6 +227,10 @@ class ChunkyManager
         return true;
     }
 
+    // ------------------------------------------------------------------
+    // Batch lifecycle (delegates to BatchTracker).
+    // ------------------------------------------------------------------
+
     /**
      * @param  array<string, mixed>  $metadata
      */
@@ -274,34 +239,7 @@ class ChunkyManager
         $batchId = (string) Str::uuid();
         $userId = $this->resolveUserId();
 
-        if (config('chunky.tracker') === 'database') {
-            ChunkyBatch::create([
-                'batch_id' => $batchId,
-                'user_id' => $userId,
-                'total_files' => $totalFiles,
-                'context' => $context,
-                'metadata' => $metadata ?: null,
-                'status' => BatchStatus::Pending,
-                'expires_at' => now()->addMinutes(config('chunky.expiration', 1440)),
-            ]);
-        } else {
-            $this->writeBatchJson($batchId, [
-                'batch_id' => $batchId,
-                'user_id' => $userId,
-                'total_files' => $totalFiles,
-                'completed_files' => 0,
-                'failed_files' => 0,
-                'context' => $context,
-                'metadata' => $metadata ?: null,
-                'status' => BatchStatus::Pending->value,
-                'expires_at' => now()->addMinutes(config('chunky.expiration', 1440))->toIso8601String(),
-                'created_at' => now()->toIso8601String(),
-            ]);
-        }
-
-        BatchInitiated::dispatch($batchId, $totalFiles);
-
-        return new BatchMetadata(
+        $batch = new BatchMetadata(
             batchId: $batchId,
             totalFiles: $totalFiles,
             completedFiles: 0,
@@ -309,7 +247,15 @@ class ChunkyManager
             status: BatchStatus::Pending,
             context: $context,
             userId: $userId,
+            metadata: $metadata ?: null,
+            expiresAt: now()->addMinutes(config('chunky.lifecycle.expiration_minutes', 360)),
         );
+
+        $this->batchTracker->initiate($batch);
+
+        BatchInitiated::dispatch($batchId, $totalFiles);
+
+        return $batch;
     }
 
     /**
@@ -323,7 +269,7 @@ class ChunkyManager
         array $metadata = [],
         ?string $context = null,
     ): InitiateResult {
-        $this->validateBatchExists($batchId);
+        $this->assertBatchAcceptsUploads($batchId);
 
         $uploadId = (string) Str::uuid();
         $chunkSize = ChunkCalculator::chunkSize();
@@ -345,18 +291,7 @@ class ChunkyManager
 
         $this->tracker->initiate($uploadId, $uploadMetadata);
 
-        if (config('chunky.tracker') === 'database') {
-            ChunkyBatch::where('batch_id', $batchId)
-                ->where('status', BatchStatus::Pending)
-                ->update(['status' => BatchStatus::Processing]);
-        } else {
-            $batchData = $this->readBatchJson($batchId);
-
-            if ($batchData && $batchData['status'] === BatchStatus::Pending->value) {
-                $batchData['status'] = BatchStatus::Processing->value;
-                $this->writeBatchJson($batchId, $batchData);
-            }
-        }
+        $this->batchTracker->markProcessing($batchId);
 
         UploadInitiated::dispatch($uploadId, $fileName, $fileSize, $totalChunks);
 
@@ -370,56 +305,42 @@ class ChunkyManager
 
     public function getBatchStatus(string $batchId): ?BatchMetadata
     {
-        if (config('chunky.tracker') === 'database') {
-            $batch = ChunkyBatch::where('batch_id', $batchId)->first();
-
-            if (! $batch) {
-                return null;
-            }
-
-            return new BatchMetadata(
-                batchId: $batch->batch_id,
-                totalFiles: $batch->total_files,
-                completedFiles: $batch->completed_files,
-                failedFiles: $batch->failed_files,
-                status: $batch->status,
-                context: $batch->context,
-                userId: $batch->user_id,
-            );
-        }
-
-        $batchData = $this->readBatchJson($batchId);
-
-        if (! $batchData) {
-            return null;
-        }
-
-        return BatchMetadata::fromArray($batchData);
+        return $this->batchTracker->find($batchId);
     }
 
     public function markBatchUploadCompleted(string $batchId): void
     {
-        if (config('chunky.tracker') === 'database') {
-            $batch = ChunkyBatch::where('batch_id', $batchId)->first();
-            $batch?->markUploadCompleted();
-
-            return;
-        }
-
-        $this->updateFilesystemBatchCounter($batchId, 'completed_files');
+        $this->batchTracker->incrementCompleted($batchId);
     }
 
     public function markBatchUploadFailed(string $batchId): void
     {
-        if (config('chunky.tracker') === 'database') {
-            $batch = ChunkyBatch::where('batch_id', $batchId)->first();
-            $batch?->markUploadFailed();
+        $this->batchTracker->incrementFailed($batchId);
+    }
 
-            return;
+    private function assertBatchAcceptsUploads(string $batchId): void
+    {
+        $batch = $this->batchTracker->find($batchId);
+
+        if (! $batch) {
+            throw new ChunkyException("Batch {$batchId} not found.");
         }
 
-        $this->updateFilesystemBatchCounter($batchId, 'failed_files');
+        if ($batch->isExpired()) {
+            $this->batchTracker->updateStatus($batchId, BatchStatus::Expired);
+            throw new ChunkyException("Batch {$batchId} has expired.");
+        }
+
+        if ($batch->status->isTerminal()) {
+            throw new ChunkyException(
+                "Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value}).",
+            );
+        }
     }
+
+    // ------------------------------------------------------------------
+    // Internals.
+    // ------------------------------------------------------------------
 
     /**
      * @internal Used by the package's own internals (cleanup command, jobs).
@@ -439,138 +360,12 @@ class ChunkyManager
         return $this->tracker;
     }
 
-    private function updateFilesystemBatchCounter(string $batchId, string $field): void
+    /**
+     * @internal
+     */
+    public function batchTracker(): BatchTracker
     {
-        $shouldDispatch = null;
-        $dispatchPayload = null;
-
-        $this->withBatchLock($batchId, function () use ($batchId, $field, &$shouldDispatch, &$dispatchPayload) {
-            $data = $this->readBatchJson($batchId);
-
-            if (! $data) {
-                return;
-            }
-
-            $alreadyTerminal = in_array(
-                $data['status'] ?? null,
-                [BatchStatus::Completed->value, BatchStatus::PartiallyCompleted->value],
-                true,
-            );
-
-            $data[$field] = ($data[$field] ?? 0) + 1;
-
-            $completed = $data['completed_files'] ?? 0;
-            $failed = $data['failed_files'] ?? 0;
-            $total = $data['total_files'] ?? 0;
-
-            if ($completed + $failed < $total) {
-                $this->writeBatchJson($batchId, $data);
-
-                return;
-            }
-
-            $status = $failed > 0
-                ? BatchStatus::PartiallyCompleted
-                : BatchStatus::Completed;
-
-            $data['status'] = $status->value;
-            $data['completed_at'] = now()->toIso8601String();
-            $this->writeBatchJson($batchId, $data);
-
-            if ($alreadyTerminal) {
-                return;
-            }
-
-            $shouldDispatch = $status;
-            $dispatchPayload = [
-                'completed' => $completed,
-                'failed' => $failed,
-                'total' => $total,
-                'userId' => isset($data['user_id']) && $data['user_id'] !== ''
-                    ? (string) $data['user_id']
-                    : null,
-            ];
-        });
-
-        if ($shouldDispatch === BatchStatus::Completed) {
-            BatchCompleted::dispatch($batchId, $dispatchPayload['total'], $dispatchPayload['userId']);
-        } elseif ($shouldDispatch === BatchStatus::PartiallyCompleted) {
-            BatchPartiallyCompleted::dispatch(
-                $batchId,
-                $dispatchPayload['completed'],
-                $dispatchPayload['failed'],
-                $dispatchPayload['total'],
-                $dispatchPayload['userId'],
-            );
-        }
-    }
-
-    private function withBatchLock(string $batchId, \Closure $callback): void
-    {
-        if (config('chunky.lock_driver', 'flock') === 'cache') {
-            $ttl = (int) config('chunky.lock_ttl_seconds', 30);
-            $waitFor = (int) config('chunky.lock_wait_seconds', 5);
-
-            $lock = Cache::lock(CacheKeys::batchLock($batchId), $ttl);
-
-            try {
-                $lock->block($waitFor);
-                $callback();
-            } finally {
-                $lock->release();
-            }
-
-            return;
-        }
-
-        $disk = Storage::disk(config('chunky.disk'));
-        $relativePath = config('chunky.temp_directory')."/batches/{$batchId}/batch.json";
-
-        try {
-            $fullPath = $disk->path($relativePath);
-        } catch (\Throwable $e) {
-            // Cloud disk: refuse to silently run unlocked.
-            throw new ChunkyException(
-                "Batch lock for {$batchId} cannot be acquired: the configured disk "
-                .'does not expose a local path. Set chunky.lock_driver = "cache" '
-                .'to use cache-backed locks for cloud disks.',
-                previous: $e,
-            );
-        }
-
-        $directory = dirname($fullPath);
-
-        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
-            throw new ChunkyException(
-                "Could not create batch lock directory at {$directory}.",
-            );
-        }
-
-        $lockPath = $fullPath.'.lock';
-        $handle = @fopen($lockPath, 'c+');
-
-        if ($handle === false) {
-            throw new ChunkyException(
-                "Could not open batch lock file at {$lockPath}. "
-                .'Refusing to run critical section without lock.',
-            );
-        }
-
-        try {
-            if (! flock($handle, LOCK_EX)) {
-                throw new ChunkyException(
-                    "Failed to acquire flock on batch lock {$lockPath}.",
-                );
-            }
-
-            try {
-                $callback();
-            } finally {
-                flock($handle, LOCK_UN);
-            }
-        } finally {
-            fclose($handle);
-        }
+        return $this->batchTracker;
     }
 
     private function resolveUserId(): ?string
@@ -583,75 +378,5 @@ class ChunkyManager
         $id = auth()->id();
 
         return $id !== null ? (string) $id : null;
-    }
-
-    private function validateBatchExists(string $batchId): void
-    {
-        if (config('chunky.tracker') === 'database') {
-            $batch = ChunkyBatch::where('batch_id', $batchId)->first();
-
-            if (! $batch) {
-                throw new ChunkyException("Batch {$batchId} not found.");
-            }
-
-            if ($batch->isExpired()) {
-                $batch->update(['status' => BatchStatus::Expired]);
-                throw new ChunkyException("Batch {$batchId} has expired.");
-            }
-
-            if ($batch->status->isTerminal()) {
-                throw new ChunkyException(
-                    "Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value}).",
-                );
-            }
-
-            return;
-        }
-
-        $batchData = $this->readBatchJson($batchId);
-
-        if (! $batchData) {
-            throw new ChunkyException("Batch {$batchId} not found.");
-        }
-
-        if (isset($batchData['expires_at']) && now()->isAfter($batchData['expires_at'])) {
-            $batchData['status'] = BatchStatus::Expired->value;
-            $this->writeBatchJson($batchId, $batchData);
-            throw new ChunkyException("Batch {$batchId} has expired.");
-        }
-
-        $statusValue = $batchData['status'] ?? null;
-        $status = $statusValue ? BatchStatus::tryFrom($statusValue) : null;
-
-        if ($status !== null && $status->isTerminal()) {
-            throw new ChunkyException(
-                "Batch {$batchId} is no longer accepting uploads (status: {$statusValue}).",
-            );
-        }
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function readBatchJson(string $batchId): ?array
-    {
-        $path = config('chunky.temp_directory')."/batches/{$batchId}/batch.json";
-        $disk = Storage::disk(config('chunky.disk'));
-
-        if (! $disk->exists($path)) {
-            return null;
-        }
-
-        return json_decode($disk->get($path), true);
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function writeBatchJson(string $batchId, array $data): void
-    {
-        $path = config('chunky.temp_directory')."/batches/{$batchId}/batch.json";
-
-        Storage::disk(config('chunky.disk'))->put($path, json_encode($data));
     }
 }

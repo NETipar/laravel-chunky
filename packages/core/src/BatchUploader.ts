@@ -242,7 +242,8 @@ export class BatchUploader {
                         const uploadError: UploadError = {
                             uploadId: null,
                             message: err instanceof Error ? err.message : 'File upload failed',
-                            cause: err,
+                            cause: err instanceof UploadHttpError || err instanceof Error ? err : undefined,
+                            cancelled: this.cancelledThisRun,
                         };
 
                         this.emit('fileError', uploadError);
@@ -314,7 +315,8 @@ export class BatchUploader {
             const uploadError: UploadError = {
                 uploadId: null,
                 message,
-                cause: err,
+                cause: err instanceof UploadHttpError || err instanceof Error ? err : undefined,
+                cancelled: this.cancelledThisRun,
             };
 
             this.emit('error', uploadError);

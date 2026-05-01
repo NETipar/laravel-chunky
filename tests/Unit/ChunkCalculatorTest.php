@@ -11,7 +11,7 @@ it('calculates total chunks correctly', function () {
 });
 
 it('returns chunk size from config or override', function () {
-    config(['chunky.chunk_size' => 2 * 1024 * 1024]);
+    config(['chunky.chunks.size' => 2 * 1024 * 1024]);
 
     expect(ChunkCalculator::chunkSize())->toBe(2 * 1024 * 1024);
     expect(ChunkCalculator::chunkSize(5 * 1024 * 1024))->toBe(5 * 1024 * 1024);

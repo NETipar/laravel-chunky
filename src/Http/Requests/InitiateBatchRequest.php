@@ -18,7 +18,7 @@ class InitiateBatchRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxFiles = (int) config('chunky.max_files_per_batch', 1000);
+        $maxFiles = (int) config('chunky.limits.max_files_per_batch', 100);
 
         return [
             'total_files' => ['required', 'integer', 'min:1', "max:{$maxFiles}"],

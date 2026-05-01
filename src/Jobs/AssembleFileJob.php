@@ -63,12 +63,7 @@ class AssembleFileJob implements ShouldQueue
 
         $startedAt = hrtime(true);
 
-        $finalPath = $handler->assemble(
-            $this->uploadId,
-            $metadata->fileName,
-            $metadata->totalChunks,
-            $metadata->fileSize,
-        );
+        $finalPath = $handler->assemble($metadata);
 
         Metrics::emit('assembly_completed', [
             'upload_id' => $this->uploadId,

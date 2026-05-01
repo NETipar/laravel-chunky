@@ -13,7 +13,7 @@ class ChunkCalculator
 
     public static function chunkSize(?int $override = null): int
     {
-        return $override ?? config('chunky.chunk_size', 1024 * 1024);
+        return $override ?? config('chunky.chunks.size', 1024 * 1024);
     }
 
     public static function progress(int $uploadedCount, int $totalChunks): float

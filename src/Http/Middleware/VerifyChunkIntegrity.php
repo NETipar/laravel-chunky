@@ -13,7 +13,7 @@ class VerifyChunkIntegrity
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! config('chunky.verify_integrity', true)) {
+        if (! config('chunky.chunks.verify_integrity', true)) {
             return $next($request);
         }
 

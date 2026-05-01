@@ -43,7 +43,7 @@ it('validates file size must be positive', function () {
 });
 
 it('validates max file size when configured', function () {
-    config(['chunky.max_file_size' => 1024 * 1024]); // 1MB
+    config(['chunky.limits.max_file_size' => 1024 * 1024]); // 1MB
 
     $response = $this->postJson('/api/chunky/upload', [
         'file_name' => 'test.txt',
@@ -55,7 +55,7 @@ it('validates max file size when configured', function () {
 });
 
 it('validates allowed mime types when configured', function () {
-    config(['chunky.allowed_mimes' => ['image/jpeg', 'image/png']]);
+    config(['chunky.limits.allowed_mimes' => ['image/jpeg', 'image/png']]);
 
     $response = $this->postJson('/api/chunky/upload', [
         'file_name' => 'test.pdf',

@@ -29,19 +29,21 @@ class FilesystemTracker implements UploadTracker
 
     public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
     {
-        $data = $this->readRawMetadata($uploadId);
-        $chunks = $data['uploaded_chunks'] ?? [];
+        return $this->withLock($uploadId, function () use ($uploadId, $chunkIndex): UploadMetadata {
+            $data = $this->readRawMetadata($uploadId);
+            $chunks = $data['uploaded_chunks'] ?? [];
 
-        if (! in_array($chunkIndex, $chunks)) {
-            $chunks[] = $chunkIndex;
-            sort($chunks);
-        }
+            if (! in_array($chunkIndex, $chunks)) {
+                $chunks[] = $chunkIndex;
+                sort($chunks);
+            }
 
-        $data['uploaded_chunks'] = $chunks;
+            $data['uploaded_chunks'] = $chunks;
 
-        $this->writeRawMetadata($uploadId, $data);
+            $this->writeRawMetadata($uploadId, $data);
 
-        return UploadMetadata::fromArray($data);
+            return UploadMetadata::fromArray($data);
+        });
     }
 
     /**
@@ -79,18 +81,20 @@ class FilesystemTracker implements UploadTracker
 
     public function updateStatus(string $uploadId, UploadStatus $status, ?string $finalPath = null): void
     {
-        $data = $this->readRawMetadata($uploadId);
-        $data['status'] = $status->value;
+        $this->withLock($uploadId, function () use ($uploadId, $status, $finalPath): void {
+            $data = $this->readRawMetadata($uploadId);
+            $data['status'] = $status->value;
 
-        if ($finalPath) {
-            $data['final_path'] = $finalPath;
-        }
+            if ($finalPath) {
+                $data['final_path'] = $finalPath;
+            }
 
-        if ($status === UploadStatus::Completed) {
-            $data['completed_at'] = now()->toIso8601String();
-        }
+            if ($status === UploadStatus::Completed) {
+                $data['completed_at'] = now()->toIso8601String();
+            }
 
-        $this->writeRawMetadata($uploadId, $data);
+            $this->writeRawMetadata($uploadId, $data);
+        });
     }
 
     public function claimForAssembly(string $uploadId): bool
@@ -99,16 +103,18 @@ class FilesystemTracker implements UploadTracker
             return false;
         }
 
-        $data = $this->readRawMetadata($uploadId);
+        return $this->withLock($uploadId, function () use ($uploadId): bool {
+            $data = $this->readRawMetadata($uploadId);
 
-        if (($data['status'] ?? UploadStatus::Pending->value) !== UploadStatus::Pending->value) {
-            return false;
-        }
+            if (($data['status'] ?? UploadStatus::Pending->value) !== UploadStatus::Pending->value) {
+                return false;
+            }
 
-        $data['status'] = UploadStatus::Assembling->value;
-        $this->writeRawMetadata($uploadId, $data);
+            $data['status'] = UploadStatus::Assembling->value;
+            $this->writeRawMetadata($uploadId, $data);
 
-        return true;
+            return true;
+        });
     }
 
     /**
@@ -193,5 +199,54 @@ class FilesystemTracker implements UploadTracker
     private function disk(): Filesystem
     {
         return Storage::disk(config('chunky.disk'));
+    }
+
+    /**
+     * Run $callback under an exclusive flock() guard against the upload's
+     * metadata file. Falls back to running the callback unguarded when the
+     * underlying filesystem driver does not expose a real local path (for
+     * example S3 or any non-local Flysystem adapter).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    private function withLock(string $uploadId, callable $callback): mixed
+    {
+        $disk = $this->disk();
+
+        try {
+            $fullPath = $disk->path($this->metadataPath($uploadId));
+        } catch (\Throwable) {
+            return $callback();
+        }
+
+        $directory = dirname($fullPath);
+
+        if (! is_dir($directory)) {
+            @mkdir($directory, 0755, true);
+        }
+
+        $lockPath = $fullPath.'.lock';
+        $handle = @fopen($lockPath, 'c+');
+
+        if ($handle === false) {
+            return $callback();
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                return $callback();
+            }
+
+            try {
+                return $callback();
+            } finally {
+                flock($handle, LOCK_UN);
+            }
+        } finally {
+            fclose($handle);
+        }
     }
 }

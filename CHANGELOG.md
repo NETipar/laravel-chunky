@@ -2,7 +2,7 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
-## Unreleased
+## v0.12.0 - 2026-05-01
 
 This release is a substantial hardening pass driven by an end-to-end review of the package: race conditions, security-sensitive paths, fault tolerance, and frontend ergonomics. Highlights below; more detail in the per-section entries.
 

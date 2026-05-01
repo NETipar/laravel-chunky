@@ -2,7 +2,7 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
-## Unreleased
+## v0.13.0 - 2026-05-01
 
 This release applies the remaining items from the v0.12.0 deep review (cross-cutting concerns + nits) plus a few new findings from the implementation pass. The headline change is **opt-in support for cloud disks** in the FilesystemTracker via Cache-backed locks, alongside built-in idempotency for chunk POSTs and a metrics-callback surface for observability integrations.
 

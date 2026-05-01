@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-alpine",
-    "version": "0.12.0",
+    "version": "0.13.0",
     "description": "Alpine.js data component for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",
@@ -20,7 +20,16 @@
     "scripts": {
         "build": "node build.js && tsc --emitDeclarationOnly"
     },
-    "keywords": ["chunky", "upload", "chunk", "file-upload", "laravel", "alpine", "alpinejs", "livewire"],
+    "keywords": [
+        "chunky",
+        "upload",
+        "chunk",
+        "file-upload",
+        "laravel",
+        "alpine",
+        "alpinejs",
+        "livewire"
+    ],
     "license": "MIT",
     "homepage": "https://github.com/NETipar/laravel-chunky",
     "repository": {

@@ -2,6 +2,44 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.10.0 - 2026-05-01
+
+This release fixes the long-standing "the file uploaded but the UI shows it failed" symptom on large uploads, plus a related cluster of race conditions and a couple of long-overdue ergonomics gaps. There are intentional contract changes — see **Breaking changes** at the bottom.
+
+### Fixed
+- **Concurrent `AssembleFileJob` runs no longer corrupt each other.** `UploadChunkController` dispatches the assembly job whenever the tracker reports `is_complete=true`. The v0.9.3 `lockForUpdate` only protected the chunk-list write, not the subsequent `isComplete` read, so two parallel chunk requests near the end of a large upload could each observe completion and each enqueue a job. The first job assembled the file and ran `cleanup()`; the second job crashed mid-`assemble()` because the chunks were gone, dispatched `UploadFailed`, and the user saw a failure even though the file was on disk. Adds `UploadTracker::claimForAssembly()` (CAS update from `Pending` to `Assembling` on the database tracker, status-guarded write under `flock` on the filesystem tracker), and `AssembleFileJob` returns silently when another worker already won the claim.
+- **Concurrent client-side workers stop on the first `is_complete` response.** When the backend reported `is_complete=true`, only the worker that received the response returned — the other workers continued POSTing their already-in-flight chunks, which fed the server-side race above. A shared `completed` flag now bails out the remaining workers before the next request.
+- **`DefaultChunkHandler::assemble()` now works on every Flysystem driver.** The previous implementation called `$disk->path()` and used `fopen()`/`mkdir()` directly, which only works on the local driver — S3, GCS, and friends raised a `RuntimeException` for every assembly and the chunks were never cleaned up. Streams chunk-by-chunk through `readStream()` into a `sys_get_temp_dir()` temp file, then uploads with `writeStream()`. Memory stays at the 8 KB read buffer regardless of file size, and the temp file is unlinked even if an error is thrown. Missing chunks now raise a descriptive `RuntimeException` with the chunk index instead of a warning-level `fopen()` failure.
+- **`ChunkUploader` resets its internal state after a successful upload.** When the same instance was reused for a second file (the default for `ChunkDropzone`, `useChunkUpload`, and any UI that holds a single uploader reference), the leftover `uploadId` from the previous run made `upload()` enter the resume branch, hit `/status` with the stale id, and either upload nothing or throw. Clears `uploadId`, `pendingChunks`, `lastFile`, and `lastMetadata` when emitting the `complete` event. `isComplete`, `progress`, and `currentFile` are intentionally preserved so the UI can still display the finished file.
+- **Late listeners receive a sticky `complete` / `error` replay.** Both `ChunkUploader` and `BatchUploader` fired `complete` and `error` synchronously, so any listener that registered after the upload finished — for example because the parent component mounted while the upload was in flight — never received the event. `on('complete', cb)` and `on('error', cb)` now schedule the callback in a microtask if the event has already happened. The cache is cleared on the next `upload()` and on `cancel()`.
+- **`pause()`/`resume()`/`retry()` no longer leak unhandled promise rejections.** The fire-and-forget `this.upload(...)` call inside `resume()` and `retry()` had no `.catch()`, so a network failure surfaced as an `UnhandledPromiseRejection` in browser devtools. The error itself was already delivered through the `error` event, so we just swallow the rejection.
+- **Per-chunk N+1 query is gone.** `ChunkyManager::uploadChunk()` previously called `markChunkUploaded` + `getMetadata` + `isComplete` — three reads per chunk, on top of the chunk write. For a 1000-chunk upload that was 3000+ DB queries, and the unlocked `isComplete` read was part of the assembly race above. `markChunkUploaded()` now returns the freshly updated `UploadMetadata` from inside the `lockForUpdate` transaction; `uploadChunk()` consumes that one snapshot.
+- **`VerifyChunkIntegrity` middleware and `DefaultChunkHandler::store()` no longer buffer the chunk twice into memory.** Each chunk request used to allocate `2 × chunk_size` of PHP heap (one read for the SHA-256, one for the disk write). The middleware now `hash_file()`s the upload's temp path; the handler streams it via `writeStream()`. Both fall back to `getContent()` when no temp file is available.
+- **`BatchUploader.pause()` actually pauses the batch worker loop.** It used to pause only the active per-file uploaders; the outer worker loop kept pulling files from the queue and starting fresh uploaders. Adds a Promise-based barrier the loop awaits between files when `isPausedBatch` is true.
+- **`BatchUploader.cancel()` resets `isComplete` and emits a dedicated `cancel` event** (`{ batchId }`). Previously a cancel after the last `fileComplete` left `isComplete=true`, and consumers had no way to tell apart "user cancelled" from "upload finished". The sticky event cache is also cleared so a late listener cannot replay a stale event after the user cancelled.
+- **`BatchUploader.fetchJson` captures the `AbortSignal` locally.** It used to read `this.abortController?.signal` at await-time, which could attach a request to a freshly-replaced controller in destroy/cancel flows.
+- **HTTP errors preserve the response body.** Both `fetchJson` paths used to collapse non-2xx responses into `new Error('HTTP {status}: {body}')`, hiding Laravel validation arrays behind an opaque string. They now throw `UploadHttpError` with `status` and parsed `body` fields. Existing `error.message` consumers keep working.
+- **`FilesystemTracker` mutations are guarded by `flock()`.** v0.9.3 fixed the `DatabaseTracker` race; the filesystem tracker still did a bare read-modify-write on `metadata.json`, which dropped chunk indices under concurrent writes. `markChunkUploaded`, `updateStatus`, and `claimForAssembly` now run under an exclusive lock on a sibling `.lock` file. The guard is best-effort: when the disk does not expose a local path (S3, etc.) the callback runs unguarded — that combination was already unsupported.
+- **Batch completion broadcasts deduplicate.** When several `AssembleFileJob` workers finished within the same tick, each one persisted the terminal status and dispatched a `BatchCompleted` event, so the frontend received N notifications for one logical transition. The DB path now uses a CAS UPDATE that only matches non-terminal statuses; the filesystem path runs its check under the new batch flock.
+
+### Added
+- **`DELETE /api/chunky/upload/{uploadId}` cancel endpoint** (`CancelUploadController`). The frontend `ChunkUploader.cancel()` now fires a background `DELETE` against it so the chunks are released immediately instead of waiting for the expiration sweep.
+- **`UploadStatus::Cancelled` enum case.**
+- **`chunky:cleanup` Artisan command.** Removes expired uploads (chunk files + tracker metadata) for both database and filesystem trackers. Supports `--dry-run`. The previously-orphaned `auto_cleanup` config option is now respected — when `true`, the service provider schedules the command daily with `withoutOverlapping()`.
+- **`UploadHttpError` exported from `@netipar/chunky-core`** with `status` + parsed `body` for granular client error handling.
+- **`BatchCancelEvent` event** on `BatchUploader` and corresponding type export.
+- `chunk_index` validation now rejects values above the upload's `total_chunks` (resolved through the tracker).
+
+### Changed (Breaking)
+- **`UploadTracker` contract.** Custom tracker implementations must update:
+  - `markChunkUploaded()` returns `UploadMetadata` instead of `void` (the freshly updated snapshot from inside the lock).
+  - New required methods: `claimForAssembly(string $uploadId): bool`, `expiredUploadIds(): array<int, string>`, `forget(string $uploadId): void`.
+- **New `UploadStatus::Cancelled` case.** Any consumer doing an exhaustive `match` on `UploadStatus` needs to add a branch.
+- **New `DELETE /api/chunky/upload/{uploadId}` route.** If you publish and customise `routes/api.php`, re-run `php artisan vendor:publish --tag=chunky-routes` (if you publish them) or merge the new route manually.
+
+### npm packages
+- All packages bumped to `0.10.0` (core, vue3, react, alpine). Sister packages now require `@netipar/chunky-core: ^0.10.0`.
+
 ## v0.9.4 - 2026-04-24
 
 ### Fixed

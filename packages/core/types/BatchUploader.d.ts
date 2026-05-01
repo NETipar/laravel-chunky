@@ -18,6 +18,11 @@ export declare class BatchUploader {
     private results;
     private abortController;
     private listeners;
+    private lastComplete;
+    private lastError;
+    private isPausedBatch;
+    private resumeBarrier;
+    private resumeBarrierResolve;
     constructor(options?: BatchUploadOptions, scope?: DefaultsScope);
     on<K extends keyof BatchUploaderEventMap>(event: K, callback: (data: BatchUploaderEventMap[K]) => void): Unsubscribe;
     private emit;

@@ -11,6 +11,7 @@ export interface ChunkUploadOptions {
         initiate?: string;
         upload?: string;
         status?: string;
+        cancel?: string;
     };
 }
 export interface UploadResult {
@@ -24,6 +25,11 @@ export interface UploadError {
     chunkIndex?: number;
     message: string;
     cause?: unknown;
+}
+export declare class UploadHttpError extends Error {
+    readonly status: number;
+    readonly body: unknown;
+    constructor(status: number, body: unknown, message: string);
 }
 export interface ChunkInfo {
     index: number;
@@ -123,11 +129,15 @@ export interface BatchUploaderState {
     error: string | null;
     currentFileName: string | null;
 }
+export interface BatchCancelEvent {
+    batchId: string | null;
+}
 export type BatchUploaderEventMap = {
     progress: BatchProgressEvent;
     fileComplete: UploadResult;
     fileError: UploadError;
     complete: BatchResult;
     error: UploadError;
+    cancel: BatchCancelEvent;
     stateChange: BatchUploaderState;
 };

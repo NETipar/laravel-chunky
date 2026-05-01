@@ -25,6 +25,8 @@ export declare class ChunkUploader {
     private lastFile;
     private lastMetadata?;
     private listeners;
+    private lastComplete;
+    private lastError;
     constructor(options?: ChunkUploadOptions, scope?: DefaultsScope);
     private validateEndpoints;
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe;
@@ -42,6 +44,7 @@ export declare class ChunkUploader {
     pause(): void;
     resume(): boolean;
     cancel(): void;
+    private cancelOnServer;
     retry(): boolean;
     destroy(): void;
 }

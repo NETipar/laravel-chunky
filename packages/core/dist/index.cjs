@@ -22,6 +22,7 @@ var src_exports = {};
 __export(src_exports, {
   BatchUploader: () => BatchUploader,
   ChunkUploader: () => ChunkUploader,
+  UploadHttpError: () => UploadHttpError,
   createDefaults: () => createDefaults,
   getDefaults: () => getDefaults,
   listenForBatchComplete: () => listenForBatchComplete,
@@ -51,11 +52,22 @@ function createDefaults(initial = {}) {
   };
 }
 
+// src/types.ts
+var UploadHttpError = class extends Error {
+  constructor(status, body, message) {
+    super(message);
+    this.name = "UploadHttpError";
+    this.status = status;
+    this.body = body;
+  }
+};
+
 // src/ChunkUploader.ts
 var DEFAULT_ENDPOINTS = {
   initiate: "/api/chunky/upload",
   upload: "/api/chunky/upload/{uploadId}/chunks",
-  status: "/api/chunky/upload/{uploadId}"
+  status: "/api/chunky/upload/{uploadId}",
+  cancel: "/api/chunky/upload/{uploadId}"
 };
 async function computeChecksum(data) {
   if (typeof crypto === "undefined" || !crypto.subtle) {
@@ -82,6 +94,8 @@ var ChunkUploader = class {
     this.serverChunkSize = null;
     this.lastFile = null;
     this.listeners = /* @__PURE__ */ new Map();
+    this.lastComplete = null;
+    this.lastError = null;
     const defaults = scope ? scope.getDefaults() : getDefaults();
     const merged = { ...defaults, ...options };
     this.maxConcurrent = merged.maxConcurrent ?? 3;
@@ -102,17 +116,33 @@ var ChunkUploader = class {
     if (!this.endpoints.status.includes("{uploadId}")) {
       throw new Error('Status endpoint must contain "{uploadId}" placeholder.');
     }
+    if (!this.endpoints.cancel.includes("{uploadId}")) {
+      throw new Error('Cancel endpoint must contain "{uploadId}" placeholder.');
+    }
   }
   on(event, callback) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, /* @__PURE__ */ new Set());
     }
     this.listeners.get(event).add(callback);
+    if (event === "complete" && this.lastComplete) {
+      const sticky = this.lastComplete;
+      queueMicrotask(() => callback(sticky));
+    } else if (event === "error" && this.lastError) {
+      const sticky = this.lastError;
+      queueMicrotask(() => callback(sticky));
+    }
     return () => {
       this.listeners.get(event)?.delete(callback);
     };
   }
   emit(event, data) {
+    if (event === "complete") {
+      this.lastComplete = data;
+      this.lastError = null;
+    } else if (event === "error") {
+      this.lastError = data;
+    }
     this.listeners.get(event)?.forEach((cb) => cb(data));
   }
   emitStateChange() {
@@ -162,8 +192,17 @@ var ChunkUploader = class {
       signal: this.abortController?.signal
     });
     if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`HTTP ${response.status}: ${body}`);
+      const text = await response.text();
+      let body = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+      }
+      throw new UploadHttpError(
+        response.status,
+        body,
+        `HTTP ${response.status}: ${text || response.statusText}`
+      );
     }
     return response.json();
   }
@@ -226,9 +265,10 @@ var ChunkUploader = class {
   async uploadChunks(file, id, chunkSize, total) {
     const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
     let index = 0;
+    let completed = false;
     const next = async () => {
       while (index < chunks.length) {
-        if (this.isPaused || this.abortController?.signal.aborted) {
+        if (completed || this.isPaused || this.abortController?.signal.aborted) {
           return;
         }
         const chunkIndex = chunks[index++];
@@ -238,6 +278,7 @@ var ChunkUploader = class {
         const result = await this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, this.maxRetries);
         this.pendingChunks = this.pendingChunks.filter((i) => i !== chunkIndex);
         if (result.is_complete) {
+          completed = true;
           return;
         }
       }
@@ -266,6 +307,8 @@ var ChunkUploader = class {
     this.error = null;
     this.progress = 0;
     this.uploadedChunks = 0;
+    this.lastComplete = null;
+    this.lastError = null;
     this.abortController = new AbortController();
     this.emitStateChange();
     try {
@@ -289,15 +332,19 @@ var ChunkUploader = class {
       const chunkSize = this.chunkSizeOverride ?? this.serverChunkSize ?? 1024 * 1024;
       await this.uploadChunks(file, this.uploadId, chunkSize, this.totalChunks);
       if (!this.isPaused && !this.abortController.signal.aborted) {
-        this.isComplete = true;
-        this.progress = 100;
-        this.emitStateChange();
         const result = {
           uploadId: this.uploadId,
           fileName: file.name,
           fileSize: file.size,
           totalChunks: this.totalChunks
         };
+        this.isComplete = true;
+        this.progress = 100;
+        this.uploadId = null;
+        this.pendingChunks = [];
+        this.lastFile = null;
+        this.lastMetadata = void 0;
+        this.emitStateChange();
         this.emit("complete", result);
         return result;
       }
@@ -333,10 +380,12 @@ var ChunkUploader = class {
     }
     this.isPaused = false;
     this.emitStateChange();
-    this.upload(this.lastFile, this.lastMetadata);
+    this.upload(this.lastFile, this.lastMetadata).catch(() => {
+    });
     return true;
   }
   cancel() {
+    const abandonedId = this.uploadId;
     this.abortController?.abort();
     this.isPaused = false;
     this.isUploading = false;
@@ -347,7 +396,21 @@ var ChunkUploader = class {
     this.totalChunks = 0;
     this.currentFile = null;
     this.error = null;
+    this.lastComplete = null;
+    this.lastError = null;
     this.emitStateChange();
+    if (abandonedId) {
+      this.cancelOnServer(abandonedId).catch(() => {
+      });
+    }
+  }
+  async cancelOnServer(id) {
+    const url = this.endpoints.cancel.replace("{uploadId}", id);
+    await fetch(url, {
+      method: "DELETE",
+      credentials: this.withCredentials ? "include" : "same-origin",
+      headers: this.getHeaders()
+    });
   }
   retry() {
     if (!this.lastFile || this.isUploading && !this.isPaused) {
@@ -355,7 +418,8 @@ var ChunkUploader = class {
     }
     this.error = null;
     this.emitStateChange();
-    this.upload(this.lastFile, this.lastMetadata);
+    this.upload(this.lastFile, this.lastMetadata).catch(() => {
+    });
     return true;
   }
   destroy() {
@@ -385,6 +449,11 @@ var BatchUploader = class {
     this.results = [];
     this.abortController = null;
     this.listeners = /* @__PURE__ */ new Map();
+    this.lastComplete = null;
+    this.lastError = null;
+    this.isPausedBatch = false;
+    this.resumeBarrier = null;
+    this.resumeBarrierResolve = null;
     this.options = options;
     this.scope = scope;
     this.maxConcurrentFiles = options.maxConcurrentFiles ?? 2;
@@ -398,11 +467,24 @@ var BatchUploader = class {
       this.listeners.set(event, /* @__PURE__ */ new Set());
     }
     this.listeners.get(event).add(callback);
+    if (event === "complete" && this.lastComplete) {
+      const sticky = this.lastComplete;
+      queueMicrotask(() => callback(sticky));
+    } else if (event === "error" && this.lastError) {
+      const sticky = this.lastError;
+      queueMicrotask(() => callback(sticky));
+    }
     return () => {
       this.listeners.get(event)?.delete(callback);
     };
   }
   emit(event, data) {
+    if (event === "complete") {
+      this.lastComplete = data;
+      this.lastError = null;
+    } else if (event === "error") {
+      this.lastError = data;
+    }
     this.listeners.get(event)?.forEach((cb) => cb(data));
   }
   emitStateChange() {
@@ -445,15 +527,24 @@ var BatchUploader = class {
     }
     return headers;
   }
-  async fetchJson(url, init) {
+  async fetchJson(url, init, signal) {
     const response = await fetch(url, {
       ...init,
       credentials: this.options.withCredentials !== false ? "include" : "same-origin",
-      signal: this.abortController?.signal
+      signal: signal ?? this.abortController?.signal
     });
     if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`HTTP ${response.status}: ${body}`);
+      const text = await response.text();
+      let body = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+      }
+      throw new UploadHttpError(
+        response.status,
+        body,
+        `HTTP ${response.status}: ${text || response.statusText}`
+      );
     }
     return response.json();
   }
@@ -471,7 +562,10 @@ var BatchUploader = class {
     this.error = null;
     this.results = [];
     this.uploaders = [];
+    this.lastComplete = null;
+    this.lastError = null;
     this.emitStateChange();
+    const signal = this.abortController.signal;
     try {
       const batchResponse = await this.fetchJson(
         this.batchEndpoints.batchInitiate,
@@ -483,7 +577,8 @@ var BatchUploader = class {
             context: this.options.context ?? null,
             metadata: metadata ?? null
           })
-        }
+        },
+        signal
       );
       this.batchId = batchResponse.batch_id;
       this.emitStateChange();
@@ -493,6 +588,12 @@ var BatchUploader = class {
         while (fileIndex < fileQueue.length) {
           if (this.abortController?.signal.aborted) {
             return;
+          }
+          if (this.isPausedBatch && this.resumeBarrier) {
+            await this.resumeBarrier;
+            if (this.abortController?.signal.aborted) {
+              return;
+            }
           }
           const currentIndex = fileIndex++;
           const file = fileQueue[currentIndex];
@@ -580,23 +681,52 @@ var BatchUploader = class {
     });
   }
   cancel() {
+    const cancelledBatchId = this.batchId;
     this.abortController?.abort();
+    this.isPausedBatch = false;
+    const resolve = this.resumeBarrierResolve;
+    this.resumeBarrier = null;
+    this.resumeBarrierResolve = null;
+    resolve?.();
     for (const uploader of this.uploaders) {
       uploader.cancel();
     }
     this.isUploading = false;
+    this.isComplete = false;
     this.currentFileName = null;
+    this.lastComplete = null;
+    this.lastError = null;
+    this.emit("cancel", { batchId: cancelledBatchId });
     this.emitStateChange();
   }
   pause() {
+    if (!this.isUploading) {
+      return;
+    }
+    this.isPausedBatch = true;
+    if (!this.resumeBarrier) {
+      this.resumeBarrier = new Promise((resolve) => {
+        this.resumeBarrierResolve = resolve;
+      });
+    }
     for (const uploader of this.uploaders) {
       uploader.pause();
     }
+    this.emitStateChange();
   }
   resume() {
+    if (!this.isPausedBatch) {
+      return;
+    }
+    this.isPausedBatch = false;
+    const resolve = this.resumeBarrierResolve;
+    this.resumeBarrier = null;
+    this.resumeBarrierResolve = null;
+    resolve?.();
     for (const uploader of this.uploaders) {
       uploader.resume();
     }
+    this.emitStateChange();
   }
   destroy() {
     this.cancel();

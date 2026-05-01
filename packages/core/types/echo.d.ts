@@ -4,6 +4,8 @@ export interface EchoInstance {
 export interface EchoChannel {
     listen(event: string, callback: (data: any) => void): EchoChannel;
     stopListening(event: string): EchoChannel;
+    subscribed?(callback: () => void): EchoChannel;
+    error?(callback: (err: unknown) => void): EchoChannel;
 }
 export interface UploadCompletedData {
     uploadId: string;
@@ -28,9 +30,13 @@ export declare function listenForUser(echo: EchoInstance, userId: string | numbe
     onUploadComplete?: (data: UploadCompletedData) => void;
     onBatchComplete?: (data: BatchCompletedData) => void;
     onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+    onSubscribed?: () => void;
+    onSubscribeError?: (err: unknown) => void;
 }, channelPrefix?: string): () => void;
 export declare function listenForUploadComplete(echo: EchoInstance, uploadId: string, callback: (data: UploadCompletedData) => void, channelPrefix?: string): () => void;
 export declare function listenForBatchComplete(echo: EchoInstance, batchId: string, callbacks: {
     onComplete?: (data: BatchCompletedData) => void;
     onPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+    onSubscribed?: () => void;
+    onSubscribeError?: (err: unknown) => void;
 }, channelPrefix?: string): () => void;

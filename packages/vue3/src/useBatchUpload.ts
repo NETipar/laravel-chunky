@@ -4,6 +4,7 @@ import type {
     BatchProgressEvent,
     BatchResult,
     BatchUploadOptions,
+    FileProgressEvent,
     Unsubscribe,
     UploadError,
     UploadResult,
@@ -26,6 +27,7 @@ export interface BatchUploadReturn {
     resume: () => void;
 
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;
+    onFileProgress: (callback: (event: FileProgressEvent) => void) => Unsubscribe;
     onFileComplete: (callback: (result: UploadResult) => void) => Unsubscribe;
     onFileError: (callback: (error: UploadError) => void) => Unsubscribe;
     onComplete: (callback: (result: BatchResult) => void) => Unsubscribe;
@@ -78,6 +80,7 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
         resume: () => uploader.resume(),
 
         onProgress: (cb) => uploader.on('progress', cb),
+        onFileProgress: (cb) => uploader.on('fileProgress', cb),
         onFileComplete: (cb) => uploader.on('fileComplete', cb),
         onFileError: (cb) => uploader.on('fileError', cb),
         onComplete: (cb) => uploader.on('complete', cb),

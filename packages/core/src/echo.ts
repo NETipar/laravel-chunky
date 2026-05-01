@@ -5,6 +5,8 @@ export interface EchoInstance {
 export interface EchoChannel {
     listen(event: string, callback: (data: any) => void): EchoChannel;
     stopListening(event: string): EchoChannel;
+    subscribed?(callback: () => void): EchoChannel;
+    error?(callback: (err: unknown) => void): EchoChannel;
 }
 
 export interface UploadCompletedData {
@@ -36,6 +38,8 @@ export function listenForUser(
         onUploadComplete?: (data: UploadCompletedData) => void;
         onBatchComplete?: (data: BatchCompletedData) => void;
         onBatchPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+        onSubscribed?: () => void;
+        onSubscribeError?: (err: unknown) => void;
     },
     channelPrefix = 'chunky',
 ): () => void {
@@ -51,6 +55,14 @@ export function listenForUser(
 
     if (callbacks.onBatchPartiallyCompleted) {
         channel.listen('.BatchPartiallyCompleted', callbacks.onBatchPartiallyCompleted);
+    }
+
+    if (callbacks.onSubscribed && typeof channel.subscribed === 'function') {
+        channel.subscribed(callbacks.onSubscribed);
+    }
+
+    if (callbacks.onSubscribeError && typeof channel.error === 'function') {
+        channel.error(callbacks.onSubscribeError);
     }
 
     return () => {
@@ -80,6 +92,8 @@ export function listenForBatchComplete(
     callbacks: {
         onComplete?: (data: BatchCompletedData) => void;
         onPartiallyCompleted?: (data: BatchPartiallyCompletedData) => void;
+        onSubscribed?: () => void;
+        onSubscribeError?: (err: unknown) => void;
     },
     channelPrefix = 'chunky',
 ): () => void {
@@ -91,6 +105,14 @@ export function listenForBatchComplete(
 
     if (callbacks.onPartiallyCompleted) {
         channel.listen('.BatchPartiallyCompleted', callbacks.onPartiallyCompleted);
+    }
+
+    if (callbacks.onSubscribed && typeof channel.subscribed === 'function') {
+        channel.subscribed(callbacks.onSubscribed);
+    }
+
+    if (callbacks.onSubscribeError && typeof channel.error === 'function') {
+        channel.error(callbacks.onSubscribeError);
     }
 
     return () => {

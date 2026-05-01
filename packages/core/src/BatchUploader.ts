@@ -1,6 +1,7 @@
 import { getDefaults } from './config';
 import type { DefaultsScope } from './config';
 import { ChunkUploader } from './ChunkUploader';
+import { buildHeaders } from './http';
 import type {
     BatchInitiateResponse,
     BatchProgressEvent,
@@ -8,6 +9,7 @@ import type {
     BatchUploadOptions,
     BatchUploaderEventMap,
     BatchUploaderState,
+    ProgressEvent,
     Unsubscribe,
     UploadError,
     UploadResult,
@@ -105,40 +107,6 @@ export class BatchUploader {
         };
     }
 
-    private getCsrfFromCookie(): string | null {
-        if (typeof document === 'undefined') {
-            return null;
-        }
-
-        const match = document.cookie
-            .split('; ')
-            .find((row) => row.startsWith('XSRF-TOKEN='));
-
-        if (!match) {
-            return null;
-        }
-
-        return decodeURIComponent(match.split('=')[1]);
-    }
-
-    private getHeaders(): Record<string, string> {
-        const headers: Record<string, string> = {
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            ...(this.options.headers ?? {}),
-        };
-
-        if (!headers['X-XSRF-TOKEN']) {
-            const token = this.getCsrfFromCookie();
-
-            if (token) {
-                headers['X-XSRF-TOKEN'] = token;
-            }
-        }
-
-        return headers;
-    }
-
     private async fetchJson<T>(url: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
         const response = await fetch(url, {
             ...init,
@@ -193,7 +161,7 @@ export class BatchUploader {
                 this.batchEndpoints.batchInitiate,
                 {
                     method: 'POST',
-                    headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+                    headers: { ...buildHeaders(this.options.headers), 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         total_files: files.length,
                         context: this.options.context ?? null,
@@ -247,9 +215,6 @@ export class BatchUploader {
 
                         this.emit('fileError', uploadError);
                     }
-
-                    this.progress = ((this.completedFiles + this.failedFiles) / this.totalFiles) * 100;
-                    this.emitStateChange();
 
                     this.emitProgress();
                 }
@@ -313,14 +278,46 @@ export class BatchUploader {
 
         this.uploaders.push(uploader);
 
-        uploader.on('progress', () => {
+        uploader.on('progress', (event: ProgressEvent) => {
+            this.emit('fileProgress', {
+                batchId: this.batchId ?? '',
+                uploadId: event.uploadId,
+                fileName: file.name,
+                loaded: event.loaded,
+                total: event.total,
+                percentage: event.percentage,
+                chunkIndex: event.chunkIndex,
+                totalChunks: event.totalChunks,
+            });
+
             this.emitProgress(uploader);
         });
 
         return uploader.upload(file, metadata);
     }
 
+    private aggregateProgress(): number {
+        if (this.totalFiles === 0) {
+            return 0;
+        }
+
+        const inProgressContribution = this.uploaders.reduce((acc, uploader) => {
+            if (uploader.isUploading && !uploader.isComplete) {
+                return acc + uploader.progress / 100;
+            }
+
+            return acc;
+        }, 0);
+
+        const finishedFiles = this.completedFiles + this.failedFiles;
+        const total = finishedFiles + inProgressContribution;
+
+        return Math.min(100, (total / this.totalFiles) * 100);
+    }
+
     private emitProgress(uploader?: ChunkUploader): void {
+        this.progress = this.aggregateProgress();
+
         this.emit('progress', {
             batchId: this.batchId ?? '',
             completedFiles: this.completedFiles,
@@ -331,6 +328,8 @@ export class BatchUploader {
                 ? { name: uploader.currentFile.name, progress: uploader.progress }
                 : null,
         });
+
+        this.emitStateChange();
     }
 
     cancel(): void {

@@ -20,14 +20,16 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  createDefaults: () => import_chunky_core4.createDefaults,
-  getDefaults: () => import_chunky_core4.getDefaults,
-  setDefaults: () => import_chunky_core4.setDefaults,
+  createDefaults: () => import_chunky_core5.createDefaults,
+  getDefaults: () => import_chunky_core5.getDefaults,
+  setDefaults: () => import_chunky_core5.setDefaults,
+  useBatchCompletion: () => useBatchCompletion,
   useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload,
   useUploadEcho: () => useUploadEcho,
-  useUserEcho: () => useUserEcho
+  useUserEcho: () => useUserEcho,
+  watchBatchCompletion: () => import_chunky_core5.watchBatchCompletion
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -124,6 +126,7 @@ function useBatchUpload(options = {}) {
     pause: () => uploader.pause(),
     resume: () => uploader.resume(),
     onProgress: (cb) => uploader.on("progress", cb),
+    onFileProgress: (cb) => uploader.on("fileProgress", cb),
     onFileComplete: (cb) => uploader.on("fileComplete", cb),
     onFileError: (cb) => uploader.on("fileError", cb),
     onComplete: (cb) => uploader.on("complete", cb),
@@ -174,6 +177,81 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
   }
 }
 
-// src/index.ts
+// src/useBatchCompletion.ts
+var import_vue4 = require("vue");
 var import_chunky_core4 = require("@netipar/chunky-core");
+function useBatchCompletion(batchId, options = {}) {
+  const isWaiting = (0, import_vue4.ref)(false);
+  const receivedVia = (0, import_vue4.ref)(null);
+  const result = (0, import_vue4.ref)(null);
+  let cleanup = null;
+  const stop = () => {
+    cleanup?.();
+    cleanup = null;
+    isWaiting.value = false;
+  };
+  const handleResult = (kind, data) => {
+    result.value = data;
+    receivedVia.value = data.source;
+    isWaiting.value = false;
+    cleanup = null;
+    if (kind === "partial") {
+      options.onPartiallyCompleted?.(data);
+    } else {
+      options.onComplete?.(data);
+    }
+  };
+  (0, import_vue4.watch)(
+    batchId,
+    (id) => {
+      stop();
+      if (!id) {
+        return;
+      }
+      result.value = null;
+      receivedVia.value = null;
+      isWaiting.value = true;
+      cleanup = (0, import_chunky_core4.watchBatchCompletion)({
+        batchId: id,
+        statusEndpoint: options.statusEndpoint,
+        echo: options.echo,
+        channelPrefix: options.channelPrefix,
+        pollStartDelayMs: options.pollStartDelayMs,
+        pollIntervalMs: options.pollIntervalMs,
+        timeoutMs: options.timeoutMs,
+        headers: options.headers,
+        withCredentials: options.withCredentials,
+        onSubscribed: options.onSubscribed,
+        onSubscribeError: options.onSubscribeError,
+        onComplete: (data) => handleResult("complete", data),
+        onPartiallyCompleted: (data) => handleResult("partial", data),
+        onTimeout: () => {
+          isWaiting.value = false;
+          cleanup = null;
+          options.onTimeout?.();
+        },
+        onError: (err, isFatal) => {
+          if (isFatal) {
+            isWaiting.value = false;
+            cleanup = null;
+          }
+          options.onError?.(err, isFatal);
+        }
+      });
+    },
+    { immediate: true }
+  );
+  if ((0, import_vue4.getCurrentInstance)()) {
+    (0, import_vue4.onBeforeUnmount)(stop);
+  }
+  return {
+    isWaiting,
+    receivedVia,
+    result,
+    cancel: stop
+  };
+}
+
+// src/index.ts
+var import_chunky_core5 = require("@netipar/chunky-core");
 //# sourceMappingURL=index.cjs.map

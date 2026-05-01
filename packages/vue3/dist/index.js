@@ -91,6 +91,7 @@ function useBatchUpload(options = {}) {
     pause: () => uploader.pause(),
     resume: () => uploader.resume(),
     onProgress: (cb) => uploader.on("progress", cb),
+    onFileProgress: (cb) => uploader.on("fileProgress", cb),
     onFileComplete: (cb) => uploader.on("fileComplete", cb),
     onFileError: (cb) => uploader.on("fileError", cb),
     onComplete: (cb) => uploader.on("complete", cb),
@@ -141,16 +142,93 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
   }
 }
 
+// src/useBatchCompletion.ts
+import { onBeforeUnmount as onBeforeUnmount4, ref as ref3, watch as watch2, getCurrentInstance as getCurrentInstance4 } from "vue";
+import { watchBatchCompletion } from "@netipar/chunky-core";
+function useBatchCompletion(batchId, options = {}) {
+  const isWaiting = ref3(false);
+  const receivedVia = ref3(null);
+  const result = ref3(null);
+  let cleanup = null;
+  const stop = () => {
+    cleanup?.();
+    cleanup = null;
+    isWaiting.value = false;
+  };
+  const handleResult = (kind, data) => {
+    result.value = data;
+    receivedVia.value = data.source;
+    isWaiting.value = false;
+    cleanup = null;
+    if (kind === "partial") {
+      options.onPartiallyCompleted?.(data);
+    } else {
+      options.onComplete?.(data);
+    }
+  };
+  watch2(
+    batchId,
+    (id) => {
+      stop();
+      if (!id) {
+        return;
+      }
+      result.value = null;
+      receivedVia.value = null;
+      isWaiting.value = true;
+      cleanup = watchBatchCompletion({
+        batchId: id,
+        statusEndpoint: options.statusEndpoint,
+        echo: options.echo,
+        channelPrefix: options.channelPrefix,
+        pollStartDelayMs: options.pollStartDelayMs,
+        pollIntervalMs: options.pollIntervalMs,
+        timeoutMs: options.timeoutMs,
+        headers: options.headers,
+        withCredentials: options.withCredentials,
+        onSubscribed: options.onSubscribed,
+        onSubscribeError: options.onSubscribeError,
+        onComplete: (data) => handleResult("complete", data),
+        onPartiallyCompleted: (data) => handleResult("partial", data),
+        onTimeout: () => {
+          isWaiting.value = false;
+          cleanup = null;
+          options.onTimeout?.();
+        },
+        onError: (err, isFatal) => {
+          if (isFatal) {
+            isWaiting.value = false;
+            cleanup = null;
+          }
+          options.onError?.(err, isFatal);
+        }
+      });
+    },
+    { immediate: true }
+  );
+  if (getCurrentInstance4()) {
+    onBeforeUnmount4(stop);
+  }
+  return {
+    isWaiting,
+    receivedVia,
+    result,
+    cancel: stop
+  };
+}
+
 // src/index.ts
-import { setDefaults, getDefaults, createDefaults } from "@netipar/chunky-core";
+import { setDefaults, getDefaults, createDefaults, watchBatchCompletion as watchBatchCompletion2 } from "@netipar/chunky-core";
 export {
   createDefaults,
   getDefaults,
   setDefaults,
+  useBatchCompletion,
   useBatchEcho,
   useBatchUpload,
   useChunkUpload,
   useUploadEcho,
-  useUserEcho
+  useUserEcho,
+  watchBatchCompletion2 as watchBatchCompletion
 };
 //# sourceMappingURL=index.js.map

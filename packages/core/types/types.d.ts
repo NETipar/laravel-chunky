@@ -111,6 +111,16 @@ export interface BatchProgressEvent {
         progress: number;
     } | null;
 }
+export interface FileProgressEvent {
+    batchId: string;
+    uploadId: string;
+    fileName: string;
+    loaded: number;
+    total: number;
+    percentage: number;
+    chunkIndex: number;
+    totalChunks: number;
+}
 export interface BatchResult {
     batchId: string;
     totalFiles: number;
@@ -134,6 +144,7 @@ export interface BatchCancelEvent {
 }
 export type BatchUploaderEventMap = {
     progress: BatchProgressEvent;
+    fileProgress: FileProgressEvent;
     fileComplete: UploadResult;
     fileError: UploadError;
     complete: BatchResult;

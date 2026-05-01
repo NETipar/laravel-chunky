@@ -28,11 +28,10 @@ export declare class BatchUploader {
     private emit;
     private emitStateChange;
     getState(): BatchUploaderState;
-    private getCsrfFromCookie;
-    private getHeaders;
     private fetchJson;
     upload(files: File[], metadata?: Record<string, unknown>): Promise<BatchResult>;
     private uploadFileInBatch;
+    private aggregateProgress;
     private emitProgress;
     cancel(): void;
     pause(): void;

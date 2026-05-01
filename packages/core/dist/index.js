@@ -18,6 +18,32 @@ function createDefaults(initial = {}) {
   };
 }
 
+// src/http.ts
+function getCsrfFromCookie() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const match = document.cookie.split("; ").find((row) => row.startsWith("XSRF-TOKEN="));
+  if (!match) {
+    return null;
+  }
+  return decodeURIComponent(match.split("=")[1]);
+}
+function buildHeaders(extra) {
+  const headers = {
+    Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest",
+    ...extra ?? {}
+  };
+  if (!headers["X-XSRF-TOKEN"]) {
+    const token = getCsrfFromCookie();
+    if (token) {
+      headers["X-XSRF-TOKEN"] = token;
+    }
+  }
+  return headers;
+}
+
 // src/types.ts
 var UploadHttpError = class extends Error {
   constructor(status, body, message) {
@@ -127,29 +153,8 @@ var ChunkUploader = class {
       currentFile: this.currentFile
     };
   }
-  getCsrfFromCookie() {
-    if (typeof document === "undefined") {
-      return null;
-    }
-    const match = document.cookie.split("; ").find((row) => row.startsWith("XSRF-TOKEN="));
-    if (!match) {
-      return null;
-    }
-    return decodeURIComponent(match.split("=")[1]);
-  }
   getHeaders() {
-    const headers = {
-      Accept: "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-      ...this.headers
-    };
-    if (!headers["X-XSRF-TOKEN"]) {
-      const token = this.getCsrfFromCookie();
-      if (token) {
-        headers["X-XSRF-TOKEN"] = token;
-      }
-    }
-    return headers;
+    return buildHeaders(this.headers);
   }
   async fetchJson(url, init) {
     const response = await fetch(url, {
@@ -469,30 +474,6 @@ var BatchUploader = class {
       currentFileName: this.currentFileName
     };
   }
-  getCsrfFromCookie() {
-    if (typeof document === "undefined") {
-      return null;
-    }
-    const match = document.cookie.split("; ").find((row) => row.startsWith("XSRF-TOKEN="));
-    if (!match) {
-      return null;
-    }
-    return decodeURIComponent(match.split("=")[1]);
-  }
-  getHeaders() {
-    const headers = {
-      Accept: "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-      ...this.options.headers ?? {}
-    };
-    if (!headers["X-XSRF-TOKEN"]) {
-      const token = this.getCsrfFromCookie();
-      if (token) {
-        headers["X-XSRF-TOKEN"] = token;
-      }
-    }
-    return headers;
-  }
   async fetchJson(url, init, signal) {
     const response = await fetch(url, {
       ...init,
@@ -537,7 +518,7 @@ var BatchUploader = class {
         this.batchEndpoints.batchInitiate,
         {
           method: "POST",
-          headers: { ...this.getHeaders(), "Content-Type": "application/json" },
+          headers: { ...buildHeaders(this.options.headers), "Content-Type": "application/json" },
           body: JSON.stringify({
             total_files: files.length,
             context: this.options.context ?? null,
@@ -579,8 +560,6 @@ var BatchUploader = class {
             };
             this.emit("fileError", uploadError);
           }
-          this.progress = (this.completedFiles + this.failedFiles) / this.totalFiles * 100;
-          this.emitStateChange();
           this.emitProgress();
         }
       };
@@ -631,12 +610,37 @@ var BatchUploader = class {
       this.scope
     );
     this.uploaders.push(uploader);
-    uploader.on("progress", () => {
+    uploader.on("progress", (event) => {
+      this.emit("fileProgress", {
+        batchId: this.batchId ?? "",
+        uploadId: event.uploadId,
+        fileName: file.name,
+        loaded: event.loaded,
+        total: event.total,
+        percentage: event.percentage,
+        chunkIndex: event.chunkIndex,
+        totalChunks: event.totalChunks
+      });
       this.emitProgress(uploader);
     });
     return uploader.upload(file, metadata);
   }
+  aggregateProgress() {
+    if (this.totalFiles === 0) {
+      return 0;
+    }
+    const inProgressContribution = this.uploaders.reduce((acc, uploader) => {
+      if (uploader.isUploading && !uploader.isComplete) {
+        return acc + uploader.progress / 100;
+      }
+      return acc;
+    }, 0);
+    const finishedFiles = this.completedFiles + this.failedFiles;
+    const total = finishedFiles + inProgressContribution;
+    return Math.min(100, total / this.totalFiles * 100);
+  }
   emitProgress(uploader) {
+    this.progress = this.aggregateProgress();
     this.emit("progress", {
       batchId: this.batchId ?? "",
       completedFiles: this.completedFiles,
@@ -645,6 +649,7 @@ var BatchUploader = class {
       percentage: this.progress,
       currentFile: uploader?.currentFile ? { name: uploader.currentFile.name, progress: uploader.progress } : null
     });
+    this.emitStateChange();
   }
   cancel() {
     const cancelledBatchId = this.batchId;
@@ -716,6 +721,12 @@ function listenForUser(echo, userId, callbacks, channelPrefix = "chunky") {
   if (callbacks.onBatchPartiallyCompleted) {
     channel.listen(".BatchPartiallyCompleted", callbacks.onBatchPartiallyCompleted);
   }
+  if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
+    channel.subscribed(callbacks.onSubscribed);
+  }
+  if (callbacks.onSubscribeError && typeof channel.error === "function") {
+    channel.error(callbacks.onSubscribeError);
+  }
   return () => {
     channel.stopListening(".UploadCompleted");
     channel.stopListening(".BatchCompleted");
@@ -737,10 +748,185 @@ function listenForBatchComplete(echo, batchId, callbacks, channelPrefix = "chunk
   if (callbacks.onPartiallyCompleted) {
     channel.listen(".BatchPartiallyCompleted", callbacks.onPartiallyCompleted);
   }
+  if (callbacks.onSubscribed && typeof channel.subscribed === "function") {
+    channel.subscribed(callbacks.onSubscribed);
+  }
+  if (callbacks.onSubscribeError && typeof channel.error === "function") {
+    channel.error(callbacks.onSubscribeError);
+  }
   return () => {
     channel.stopListening(".BatchCompleted");
     channel.stopListening(".BatchPartiallyCompleted");
   };
+}
+
+// src/CompletionWatcher.ts
+var DEFAULT_STATUS_ENDPOINT = "/api/chunky/batch/{batchId}";
+var DEFAULT_POLL_START_DELAY_MS = 1500;
+var DEFAULT_POLL_INTERVAL_MS = 2e3;
+var DEFAULT_TIMEOUT_MS = 5 * 60 * 1e3;
+function isTerminalStatus(status) {
+  return status === "completed" || status === "partially_completed" || status === "expired";
+}
+function toResult(source, response) {
+  return {
+    source,
+    batchId: response.batch_id,
+    totalFiles: response.total_files,
+    completedFiles: response.completed_files,
+    failedFiles: response.failed_files,
+    status: response.status
+  };
+}
+function watchBatchCompletion(options) {
+  const {
+    batchId,
+    statusEndpoint = DEFAULT_STATUS_ENDPOINT,
+    echo,
+    channelPrefix,
+    pollStartDelayMs = DEFAULT_POLL_START_DELAY_MS,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    headers,
+    withCredentials = true,
+    onComplete,
+    onPartiallyCompleted,
+    onTimeout,
+    onError,
+    onSubscribed,
+    onSubscribeError
+  } = options;
+  const url = statusEndpoint.replace("{batchId}", batchId);
+  let resolved = false;
+  let echoCleanup = null;
+  let pollStartTimer = null;
+  let pollTimer = null;
+  let timeoutTimer = null;
+  let abortController = null;
+  const cleanup = () => {
+    echoCleanup?.();
+    echoCleanup = null;
+    if (pollStartTimer) {
+      clearTimeout(pollStartTimer);
+      pollStartTimer = null;
+    }
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+    if (timeoutTimer) {
+      clearTimeout(timeoutTimer);
+      timeoutTimer = null;
+    }
+    abortController?.abort();
+    abortController = null;
+  };
+  const resolveBroadcast = (kind, data) => {
+    if (resolved) {
+      return;
+    }
+    resolved = true;
+    const completedFiles = kind === "partial" ? data.completedFiles : data.totalFiles;
+    const failedFiles = kind === "partial" ? data.failedFiles : 0;
+    const result = {
+      source: "broadcast",
+      batchId: data.batchId,
+      totalFiles: data.totalFiles,
+      completedFiles,
+      failedFiles,
+      status: kind === "partial" ? "partially_completed" : "completed"
+    };
+    cleanup();
+    if (kind === "partial") {
+      onPartiallyCompleted?.(result);
+    } else {
+      onComplete?.(result);
+    }
+  };
+  const resolvePolling = (response) => {
+    if (resolved) {
+      return;
+    }
+    resolved = true;
+    const result = toResult("polling", response);
+    cleanup();
+    if (response.status === "partially_completed") {
+      onPartiallyCompleted?.(result);
+    } else {
+      onComplete?.(result);
+    }
+  };
+  const failFatal = (error) => {
+    if (resolved) {
+      return;
+    }
+    resolved = true;
+    cleanup();
+    onError?.(error, true);
+  };
+  const poll = async () => {
+    if (resolved) {
+      return;
+    }
+    abortController = new AbortController();
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: withCredentials ? "include" : "same-origin",
+        headers: buildHeaders(headers),
+        signal: abortController.signal
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          failFatal(new Error(`Batch ${batchId} not found.`));
+          return;
+        }
+        throw new Error(`Batch status request failed: HTTP ${response.status}`);
+      }
+      const body = await response.json();
+      if (isTerminalStatus(body.status)) {
+        resolvePolling(body);
+        return;
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        return;
+      }
+      onError?.(err instanceof Error ? err : new Error("Polling failed"), false);
+    }
+    if (resolved) {
+      return;
+    }
+    pollTimer = setTimeout(poll, pollIntervalMs);
+  };
+  if (echo) {
+    echoCleanup = listenForBatchComplete(
+      echo,
+      batchId,
+      {
+        onComplete: (data) => resolveBroadcast("complete", data),
+        onPartiallyCompleted: (data) => resolveBroadcast("partial", data),
+        onSubscribed,
+        onSubscribeError
+      },
+      channelPrefix
+    );
+  }
+  pollStartTimer = setTimeout(() => {
+    pollStartTimer = null;
+    void poll();
+  }, pollStartDelayMs);
+  if (timeoutMs > 0) {
+    timeoutTimer = setTimeout(() => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanup();
+      onTimeout?.();
+    }, timeoutMs);
+  }
+  return cleanup;
 }
 export {
   BatchUploader,
@@ -751,6 +937,7 @@ export {
   listenForBatchComplete,
   listenForUploadComplete,
   listenForUser,
-  setDefaults
+  setDefaults,
+  watchBatchCompletion
 };
 //# sourceMappingURL=index.js.map

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
@@ -13,7 +14,7 @@ use NETipar\Chunky\Events\UploadFailed;
 use NETipar\Chunky\Jobs\AssembleFileJob;
 use NETipar\Chunky\Models\ChunkyBatch;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 beforeEach(function () {
     Storage::fake('local');
@@ -48,7 +49,7 @@ function seedUpload(string $uploadId, ?string $context = null, ?string $batchId 
 
 it('marks upload as failed and dispatches UploadFailed when save callback throws', function () {
     app(ChunkyManager::class)->context('boom', save: function () {
-        throw new \RuntimeException('save failed');
+        throw new RuntimeException('save failed');
     });
 
     seedUpload('up-1', context: 'boom');
@@ -57,7 +58,7 @@ it('marks upload as failed and dispatches UploadFailed when save callback throws
         app(ChunkHandler::class),
         app(UploadTracker::class),
         app(ChunkyManager::class),
-    ))->toThrow(\RuntimeException::class, 'save failed');
+    ))->toThrow(RuntimeException::class, 'save failed');
 
     $metadata = app(UploadTracker::class)->getMetadata('up-1');
 
@@ -76,7 +77,7 @@ it('marks the batch as failed when save callback throws', function () {
     ]);
 
     app(ChunkyManager::class)->context('boom', save: function () {
-        throw new \RuntimeException('nope');
+        throw new RuntimeException('nope');
     });
 
     seedUpload('up-2', context: 'boom', batchId: 'batch-1');
@@ -85,7 +86,7 @@ it('marks the batch as failed when save callback throws', function () {
         app(ChunkHandler::class),
         app(UploadTracker::class),
         app(ChunkyManager::class),
-    ))->toThrow(\RuntimeException::class);
+    ))->toThrow(RuntimeException::class);
 
     expect($batch->fresh()->failed_files)->toBe(1);
 });
@@ -122,7 +123,7 @@ it('dispatches UploadFailed and marks batch failed in failed() callback', functi
 
     seedUpload('up-4', batchId: 'batch-2');
 
-    (new AssembleFileJob('up-4'))->failed(new \RuntimeException('queue died'));
+    (new AssembleFileJob('up-4'))->failed(new RuntimeException('queue died'));
 
     $metadata = app(UploadTracker::class)->getMetadata('up-4');
 
@@ -133,7 +134,7 @@ it('dispatches UploadFailed and marks batch failed in failed() callback', functi
 
 it('does not double-dispatch UploadFailed when failed() runs after handle() already failed', function () {
     app(ChunkyManager::class)->context('boom', save: function () {
-        throw new \RuntimeException('save failed');
+        throw new RuntimeException('save failed');
     });
 
     seedUpload('up-5', context: 'boom');
@@ -144,10 +145,10 @@ it('does not double-dispatch UploadFailed when failed() runs after handle() alre
             app(UploadTracker::class),
             app(ChunkyManager::class),
         );
-    } catch (\Throwable) {
+    } catch (Throwable) {
     }
 
-    (new AssembleFileJob('up-5'))->failed(new \RuntimeException('save failed'));
+    (new AssembleFileJob('up-5'))->failed(new RuntimeException('save failed'));
 
     Event::assertDispatchedTimes(UploadFailed::class, 1);
 });

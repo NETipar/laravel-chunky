@@ -4,6 +4,11 @@ All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While in `0.x`, minor releases (`0.x.0`) may contain breaking changes; patch releases (`0.x.y`) are bug-fix only. See [UPGRADE.md](UPGRADE.md) for migration notes.
 
+## v0.17.1 - 2026-05-01
+
+### Fixed
+- **Dropzone peer constraint** loosened from `^6.0` (which resolves to nothing on npm — the latest published Dropzone is `6.0.0-beta.2`) to `^5.9 || 6.0.0-beta`. The original constraint broke `pnpm install --frozen-lockfile` in the publish workflow, which is why v0.17.0 npm packages didn't make it out. v0.17.0 stays available on Packagist (PHP-only); v0.17.1 is the first npm-published cut of the Ops Hardening release.
+
 ## v0.17.0 - 2026-05-01
 
 Operational hardening release: governance metadata, CI policy upgrades, reproducible publish flow with npm provenance, and Dependabot. No source-code changes — pure release engineering.

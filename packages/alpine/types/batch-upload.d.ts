@@ -1,5 +1,6 @@
 import { BatchUploader } from '@netipar/chunky-core';
 import type { BatchResult } from '@netipar/chunky-core';
+import type { AlpineLike } from './chunk-upload';
 export interface AlpineBatchUploadData {
     batchId: string | null;
     totalFiles: number;
@@ -19,4 +20,4 @@ export interface AlpineBatchUploadData {
     pause(): void;
     resume(): void;
 }
-export declare function registerBatchUpload(Alpine: any): void;
+export declare function registerBatchUpload(Alpine: AlpineLike): void;

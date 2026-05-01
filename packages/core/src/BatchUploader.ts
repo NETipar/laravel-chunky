@@ -31,14 +31,23 @@ interface PendingBatch {
 }
 
 export class BatchUploader {
+    /** @deprecated Read via `getState().batchId`. The public field will become private in v1.0. */
     batchId: string | null = null;
+    /** @deprecated Read via `getState().totalFiles`. The public field will become private in v1.0. */
     totalFiles = 0;
+    /** @deprecated Read via `getState().completedFiles`. The public field will become private in v1.0. */
     completedFiles = 0;
+    /** @deprecated Read via `getState().failedFiles`. The public field will become private in v1.0. */
     failedFiles = 0;
+    /** @deprecated Read via `getState().progress`. The public field will become private in v1.0. */
     progress = 0;
+    /** @deprecated Read via `getState().isUploading`. The public field will become private in v1.0. */
     isUploading = false;
+    /** @deprecated Read via `getState().isComplete`. The public field will become private in v1.0. */
     isComplete = false;
+    /** @deprecated Read via `getState().error`. The public field will become private in v1.0. */
     error: string | null = null;
+    /** @deprecated Read via `getState().currentFileName`. The public field will become private in v1.0. */
     currentFileName: string | null = null;
 
     private readonly maxConcurrentFiles: number;

@@ -1,5 +1,6 @@
 import { BatchUploader } from '@netipar/chunky-core';
 import type { BatchUploadOptions, BatchResult } from '@netipar/chunky-core';
+import type { AlpineContext, AlpineLike } from './chunk-upload';
 
 export interface AlpineBatchUploadData {
     batchId: string | null;
@@ -23,8 +24,8 @@ export interface AlpineBatchUploadData {
     resume(): void;
 }
 
-export function registerBatchUpload(Alpine: any): void {
-    Alpine.data('batchUpload', (options: BatchUploadOptions = {}): AlpineBatchUploadData => ({
+export function registerBatchUpload(Alpine: AlpineLike): void {
+    Alpine.data('batchUpload', ((options: BatchUploadOptions = {}): AlpineBatchUploadData => ({
         batchId: null,
         totalFiles: 0,
         completedFiles: 0,
@@ -53,27 +54,27 @@ export function registerBatchUpload(Alpine: any): void {
             });
 
             this._uploader.on('progress', (event) => {
-                (this as any).$dispatch('chunky:batch-progress', event);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-progress', event);
             });
 
             this._uploader.on('fileProgress', (event) => {
-                (this as any).$dispatch('chunky:batch-file-progress', event);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-file-progress', event);
             });
 
             this._uploader.on('fileComplete', (result) => {
-                (this as any).$dispatch('chunky:batch-file-complete', result);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-file-complete', result);
             });
 
             this._uploader.on('fileError', (error) => {
-                (this as any).$dispatch('chunky:batch-file-error', error);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-file-error', error);
             });
 
             this._uploader.on('complete', (result) => {
-                (this as any).$dispatch('chunky:batch-complete', result);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-complete', result);
             });
 
             this._uploader.on('error', (error) => {
-                (this as any).$dispatch('chunky:batch-error', error);
+                (this as unknown as AlpineContext).$dispatch('chunky:batch-error', error);
             });
         },
 
@@ -105,5 +106,5 @@ export function registerBatchUpload(Alpine: any): void {
         resume() {
             this._uploader!.resume();
         },
-    }));
+    })) as (...args: unknown[]) => AlpineBatchUploadData);
 }

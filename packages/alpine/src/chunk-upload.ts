@@ -1,6 +1,27 @@
 import { ChunkUploader } from '@netipar/chunky-core';
 import type { ChunkUploadOptions, UploadResult } from '@netipar/chunky-core';
 
+/**
+ * Minimal contract for the bits of Alpine.js the factory needs. Lets
+ * the package compile without Alpine itself as a peer/dev dep, while
+ * still keeping a type-safe entry point. Alpine 3's actual `Alpine`
+ * object satisfies this interface (and many more methods we don't
+ * use here).
+ */
+export interface AlpineLike {
+    data<T>(name: string, factory: (...args: unknown[]) => T): void;
+}
+
+/**
+ * Minimal type for the `this` context Alpine binds to component
+ * methods. Alpine adds `$dispatch` (and `$watch`, `$el`, …) as
+ * implicit fields; we only call `$dispatch`, so that's the only one
+ * we type here.
+ */
+export interface AlpineContext {
+    $dispatch(event: string, detail?: unknown): void;
+}
+
 export interface AlpineChunkUploadData {
     progress: number;
     isUploading: boolean;
@@ -24,8 +45,8 @@ export interface AlpineChunkUploadData {
     retry(): boolean;
 }
 
-export function registerChunkUpload(Alpine: any): void {
-    Alpine.data('chunkUpload', (options: ChunkUploadOptions = {}): AlpineChunkUploadData => ({
+export function registerChunkUpload(Alpine: AlpineLike): void {
+    Alpine.data('chunkUpload', ((options: ChunkUploadOptions = {}): AlpineChunkUploadData => ({
         progress: 0,
         isUploading: false,
         isPaused: false,
@@ -54,19 +75,19 @@ export function registerChunkUpload(Alpine: any): void {
             });
 
             this._uploader.on('progress', (event) => {
-                (this as any).$dispatch('chunky:progress', event);
+                (this as unknown as AlpineContext).$dispatch('chunky:progress', event);
             });
 
             this._uploader.on('chunkUploaded', (chunk) => {
-                (this as any).$dispatch('chunky:chunk-uploaded', chunk);
+                (this as unknown as AlpineContext).$dispatch('chunky:chunk-uploaded', chunk);
             });
 
             this._uploader.on('complete', (result) => {
-                (this as any).$dispatch('chunky:complete', result);
+                (this as unknown as AlpineContext).$dispatch('chunky:complete', result);
             });
 
             this._uploader.on('error', (error) => {
-                (this as any).$dispatch('chunky:error', error);
+                (this as unknown as AlpineContext).$dispatch('chunky:error', error);
             });
         },
 
@@ -102,5 +123,5 @@ export function registerChunkUpload(Alpine: any): void {
         retry() {
             return this._uploader!.retry();
         },
-    }));
+    })) as (...args: unknown[]) => AlpineChunkUploadData);
 }

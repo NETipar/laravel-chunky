@@ -12,6 +12,30 @@
 
 Chunk-based file upload package for Laravel with event-driven architecture, resume support, and framework-agnostic frontend clients for **Vue 3**, **React**, **Alpine.js**, and **Livewire**. Upload large files reliably over unstable connections.
 
+## Table of contents
+
+- [Quick example](#quick-example)
+- [Requirements](#requirements)
+- [5-minute quickstart](#5-minute-quickstart)
+- [Production deployment checklist](#production-deployment-checklist)
+- [Installation](#installation) — [Backend](#backend) · [Frontend](#frontend) · [Livewire](#livewire)
+- [Frontend packages](#frontend-packages)
+- [Usage](#usage)
+- [Batch upload (multiple files)](#batch-upload-multiple-files)
+- [Authentication & authorization](#authentication--authorization)
+- [Context setup](#quick-context-setup)
+- [Listening to events](#listening-to-events)
+- [Broadcasting (Laravel Echo)](#broadcasting-laravel-echo)
+- [Using the facade](#using-the-facade)
+- [Configuration](#configuration) → full reference in [`docs/configuration.md`](docs/configuration.md)
+- [Error handling](#error-handling)
+
+Additional documentation:
+- [`docs/configuration.md`](docs/configuration.md) — full config reference + deployment recipes
+- [UPGRADE.md](UPGRADE.md) — minor-release migration notes (the package is in `0.x`)
+- [SECURITY.md](SECURITY.md) — supported versions and reporting policy
+- [CHANGELOG.md](CHANGELOG.md) — release history
+
 ## Quick Example
 
 ```php
@@ -905,83 +929,25 @@ $batch = Chunky::getBatchStatus($batchId);
 
 ## Configuration
 
-Key `.env` variables:
+The full configuration reference lives in [`docs/configuration.md`](docs/configuration.md) — every key, default, and the common deployment recipes (large videos, S3, authenticated routes, per-chunk progress broadcast). The TL;DR `.env`:
 
 ```
-CHUNKY_TRACKER=database
-CHUNKY_DISK=local
-CHUNKY_CHUNK_SIZE=1048576
-CHUNKY_BROADCASTING=false
-CHUNKY_LOCK_DRIVER=flock
-CHUNKY_STAGING_DIRECTORY=
+CHUNKY_TRACKER=database          # database | filesystem
+CHUNKY_DISK=local                # any Laravel filesystem disk
+CHUNKY_CHUNK_SIZE=1048576        # 1MB
+CHUNKY_BROADCASTING=false        # opt-in WebSocket broadcasting
+CHUNKY_LOCK_DRIVER=flock         # flock | cache (cache for cloud disks)
+CHUNKY_STAGING_DIRECTORY=        # null = sys_get_temp_dir()
+CHUNKY_CACHE_PREFIX=chunky:v1:   # versioned cache-key prefix
 ```
 
-Full `config/chunky.php`:
+Publish the config to customise:
 
-### Storage and lifecycle
+```bash
+php artisan vendor:publish --tag=chunky-config
+```
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `tracker` | `database` | Tracking driver: `database` or `filesystem` |
-| `disk` | `local` | Laravel filesystem disk for storage |
-| `chunk_size` | `1048576` (1MB) | Chunk size in bytes |
-| `temp_directory` | `chunky/temp` | Temp directory for chunks |
-| `final_directory` | `chunky/uploads` | Directory for assembled files |
-| `staging_directory` | `null` (= `sys_get_temp_dir()`) | Local filesystem directory used while assembling chunks. Set when /tmp can't fit the largest expected upload. |
-| `expiration` | `1440` | Upload expiration in minutes (24h) |
-| `assembly_stale_after_minutes` | `10` | An `Assembling` upload older than this is considered stale and may be re-claimed by a retrying AssembleFileJob. |
-
-### Validation
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `max_file_size` | `0` | Max file size in bytes (0 = unlimited) |
-| `max_files_per_batch` | `1000` | Max files allowed in a single batch (DOS protection) |
-| `allowed_mimes` | `[]` | Allowed MIME types (empty = all) |
-| `metadata.max_keys` | `50` | Max keys in user-supplied `metadata` array |
-| `contexts` | `[]` | Class-based context classes (auto-registered) |
-
-### Routes
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `routes.prefix` | `api/chunky` | Route prefix |
-| `routes.middleware` | `['api']` | Route middleware |
-
-### Integrity and locking
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `verify_integrity` | `true` | SHA-256 checksum verification on each chunk |
-| `auto_cleanup` | `true` | Auto-cleanup expired uploads via daily schedule |
-| `lock_driver` | `flock` | Locking primitive: `flock` (local-disk only) or `cache` (S3/multi-server, requires Cache::lock-capable cache driver) |
-| `lock_ttl_seconds` | `30` | TTL for held locks (force-release deadline) |
-| `lock_wait_seconds` | `5` | Block timeout when waiting for an existing lock |
-| `skip_local_disk_guard` | `false` | Bypass FilesystemTracker's boot-time check for local-path-capable disk (advanced) |
-
-### Idempotency
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `idempotency.enabled` | `true` | Cache chunk POST responses by `(uploadId, chunkIndex, key)` for retry replay |
-| `idempotency_ttl_seconds` | `300` | Cached idempotency entry TTL |
-
-### Broadcasting
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `broadcasting.enabled` | `false` | Enable WebSocket broadcasting (Echo) |
-| `broadcasting.channel_prefix` | `chunky` | Private channel prefix |
-| `broadcasting.queue` | `null` | Broadcast queue name (null = default) |
-| `broadcasting.user_channel` | `true` | Broadcast on user channel too |
-| `broadcasting.register_channels` | `true` | Auto-register `Broadcast::channel()` callbacks via the bound Authorizer |
-| `broadcasting.expose_internal_paths` | `false` | Include `disk` and `finalPath` in broadcast payloads (off by default; opt in if a consumer needs them) |
-
-### Observability
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `metrics.<event>` | `null` | Optional handler (class string or closure) for `chunk_uploaded`, `chunk_upload_failed`, `assembly_started`, `assembly_completed`, `assembly_failed`. Class strings are `config:cache`-compatible and resolved through the container. |
+The config is grouped into 10 sections (since v0.18): `storage`, `chunks`, `lifecycle`, `limits`, `metadata`, `locking`, `idempotency`, `cache`, `authorization`, `broadcasting`. Older flat keys were renamed — see [UPGRADE.md](UPGRADE.md) for the full migration table.
 
 ## Tracking Drivers
 

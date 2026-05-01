@@ -1,14 +1,23 @@
 import type { DefaultsScope } from './config';
 import type { BatchResult, BatchUploadOptions, BatchUploaderEventMap, BatchUploaderState, Unsubscribe } from './types';
 export declare class BatchUploader {
+    /** @deprecated Read via `getState().batchId`. The public field will become private in v1.0. */
     batchId: string | null;
+    /** @deprecated Read via `getState().totalFiles`. The public field will become private in v1.0. */
     totalFiles: number;
+    /** @deprecated Read via `getState().completedFiles`. The public field will become private in v1.0. */
     completedFiles: number;
+    /** @deprecated Read via `getState().failedFiles`. The public field will become private in v1.0. */
     failedFiles: number;
+    /** @deprecated Read via `getState().progress`. The public field will become private in v1.0. */
     progress: number;
+    /** @deprecated Read via `getState().isUploading`. The public field will become private in v1.0. */
     isUploading: boolean;
+    /** @deprecated Read via `getState().isComplete`. The public field will become private in v1.0. */
     isComplete: boolean;
+    /** @deprecated Read via `getState().error`. The public field will become private in v1.0. */
     error: string | null;
+    /** @deprecated Read via `getState().currentFileName`. The public field will become private in v1.0. */
     currentFileName: string | null;
     private readonly maxConcurrentFiles;
     private readonly options;

@@ -37,19 +37,35 @@ async function computeChecksum(data: Blob): Promise<string | null> {
 }
 
 export class ChunkUploader {
+    /** @deprecated Read via `getState().progress`. The public field will become private in v1.0. */
     progress = 0;
+    /** @deprecated Read via `getState().isUploading`. The public field will become private in v1.0. */
     isUploading = false;
+    /** @deprecated Read via `getState().isPaused`. The public field will become private in v1.0. */
     isPaused = false;
+    /** @deprecated Read via `getState().isComplete`. The public field will become private in v1.0. */
     isComplete = false;
+    /** @deprecated Read via `getState().error`. The public field will become private in v1.0. */
     error: string | null = null;
+    /** @deprecated Read via `getState().uploadId`. The public field will become private in v1.0. */
     uploadId: string | null = null;
+    /** @deprecated Read via `getState().uploadedChunks`. The public field will become private in v1.0. */
     uploadedChunks = 0;
+    /** @deprecated Read via `getState().totalChunks`. The public field will become private in v1.0. */
     totalChunks = 0;
+    /** @deprecated Read via `getState().currentFile`. The public field will become private in v1.0. */
     currentFile: File | null = null;
 
     private readonly maxConcurrent: number;
-    private readonly autoRetry: boolean;
+    private readonly autoRetry: ChunkUploadOptions['autoRetry'];
     private readonly maxRetries: number;
+    /**
+     * HTTP statuses that are inherently non-retryable: client errors that
+     * won't change on retry. Auth (401/403), not found (404, 410),
+     * payload-too-large (413), unsupported media (415), and validation
+     * errors (422). The default retry callback short-circuits on these.
+     */
+    private static readonly FATAL_STATUSES = new Set([400, 401, 403, 404, 410, 413, 415, 422]);
     private readonly headers: Record<string, string>;
     private readonly withCredentials: boolean;
     private readonly context?: string;
@@ -262,7 +278,7 @@ export class ChunkUploader {
 
             return result;
         } catch (err) {
-            if (this.autoRetry && retriesLeft > 0) {
+            if (retriesLeft > 0 && this.shouldRetry(err, chunkIndex, retriesLeft)) {
                 // Exponential backoff with full jitter (AWS-style). Without
                 // jitter, N parallel chunk workers retry in lockstep and
                 // hammer a struggling server in a thundering herd.
@@ -277,6 +293,26 @@ export class ChunkUploader {
 
             throw err;
         }
+    }
+
+    private shouldRetry(err: unknown, chunkIndex: number, retriesLeft: number): boolean {
+        // Caller-supplied callback always wins.
+        if (typeof this.autoRetry === 'function') {
+            const error = err instanceof Error ? err : new Error(String(err));
+
+            return this.autoRetry(error, { chunkIndex, retriesLeft });
+        }
+
+        if (this.autoRetry === false) {
+            return false;
+        }
+
+        // Default policy: retry transport / 5xx, refuse fatal 4xx.
+        if (err instanceof UploadHttpError && ChunkUploader.FATAL_STATUSES.has(err.status)) {
+            return false;
+        }
+
+        return true;
     }
 
     private async uploadChunks(file: File, id: string, chunkSize: number, total: number): Promise<void> {

@@ -10,10 +10,36 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
+/**
+ * Optional persistence hook for `BatchUploader.enqueue()` — lets the
+ * pending-batch queue survive a page reload. The default in-memory
+ * queue forgets enqueued batches when the tab navigates away; a
+ * caller-supplied IndexedDB / localStorage adapter can rehydrate them.
+ *
+ * Files cannot be persisted directly (they're not serialisable), so an
+ * adapter typically stores file references the host app can re-resolve
+ * on load (e.g. a tuple of `(handle, name, size)` for the File System
+ * Access API, or a server-side staged-upload id).
+ */
+export interface BatchPersistence<TSerialized = unknown> {
+    save(payload: TSerialized): Promise<void> | void;
+    load(): Promise<TSerialized | null> | TSerialized | null;
+    clear(): Promise<void> | void;
+}
+
 export interface ChunkUploadOptions {
     chunkSize?: number;
     maxConcurrent?: number;
-    autoRetry?: boolean;
+    /**
+     * Retry policy for chunk POSTs. Three forms:
+     * - `true` (default): retry every error up to `maxRetries`.
+     * - `false`: never retry.
+     * - `(error, context) => boolean`: callback decides per error. Useful
+     *   for refusing to retry fatal HTTP statuses (401, 403, 422) — those
+     *   won't change on retry. The context carries the chunkIndex and the
+     *   number of retries left.
+     */
+    autoRetry?: boolean | ((error: UploadHttpError | Error, context: { chunkIndex: number; retriesLeft: number }) => boolean);
     maxRetries?: number;
     headers?: Record<string, string>;
     withCredentials?: boolean;
@@ -146,6 +172,14 @@ export interface BatchUploadOptions extends ChunkUploadOptions {
         batchUpload?: string;
         batchStatus?: string;
     };
+    /**
+     * Adapter to persist the pending batch queue across page reloads.
+     * The adapter is responsible for serialising whatever the host app
+     * needs to re-resolve File references (handles, server-side staging
+     * ids, etc.). When provided, BatchUploader saves the queue on
+     * enqueue and clears it on a clean drain.
+     */
+    persistence?: BatchPersistence;
 }
 
 export interface BatchInitiateResponse {

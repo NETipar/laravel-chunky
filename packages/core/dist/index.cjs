@@ -106,16 +106,25 @@ async function computeChecksum(data) {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-var ChunkUploader = class {
+var ChunkUploader = class _ChunkUploader {
   constructor(options = {}, scope) {
+    /** @deprecated Read via `getState().progress`. The public field will become private in v1.0. */
     this.progress = 0;
+    /** @deprecated Read via `getState().isUploading`. The public field will become private in v1.0. */
     this.isUploading = false;
+    /** @deprecated Read via `getState().isPaused`. The public field will become private in v1.0. */
     this.isPaused = false;
+    /** @deprecated Read via `getState().isComplete`. The public field will become private in v1.0. */
     this.isComplete = false;
+    /** @deprecated Read via `getState().error`. The public field will become private in v1.0. */
     this.error = null;
+    /** @deprecated Read via `getState().uploadId`. The public field will become private in v1.0. */
     this.uploadId = null;
+    /** @deprecated Read via `getState().uploadedChunks`. The public field will become private in v1.0. */
     this.uploadedChunks = 0;
+    /** @deprecated Read via `getState().totalChunks`. The public field will become private in v1.0. */
     this.totalChunks = 0;
+    /** @deprecated Read via `getState().currentFile`. The public field will become private in v1.0. */
     this.currentFile = null;
     this.abortController = null;
     this.pendingChunks = [];
@@ -136,6 +145,15 @@ var ChunkUploader = class {
     this.chunkSizeOverride = merged.chunkSize;
     this.endpoints = { ...DEFAULT_ENDPOINTS, ...defaults.endpoints, ...options.endpoints };
     this.validateEndpoints();
+  }
+  static {
+    /**
+     * HTTP statuses that are inherently non-retryable: client errors that
+     * won't change on retry. Auth (401/403), not found (404, 410),
+     * payload-too-large (413), unsupported media (415), and validation
+     * errors (422). The default retry callback short-circuits on these.
+     */
+    this.FATAL_STATUSES = /* @__PURE__ */ new Set([400, 401, 403, 404, 410, 413, 415, 422]);
   }
   validateEndpoints() {
     if (!this.endpoints.upload.includes("{uploadId}")) {
@@ -272,7 +290,7 @@ var ChunkUploader = class {
       });
       return result;
     } catch (err) {
-      if (this.autoRetry && retriesLeft > 0) {
+      if (retriesLeft > 0 && this.shouldRetry(err, chunkIndex, retriesLeft)) {
         const baseDelay = Math.pow(2, this.maxRetries - retriesLeft) * 1e3;
         const jitter = Math.random() * 250;
         const delay = baseDelay + jitter;
@@ -281,6 +299,19 @@ var ChunkUploader = class {
       }
       throw err;
     }
+  }
+  shouldRetry(err, chunkIndex, retriesLeft) {
+    if (typeof this.autoRetry === "function") {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return this.autoRetry(error, { chunkIndex, retriesLeft });
+    }
+    if (this.autoRetry === false) {
+      return false;
+    }
+    if (err instanceof UploadHttpError && _ChunkUploader.FATAL_STATUSES.has(err.status)) {
+      return false;
+    }
+    return true;
   }
   async uploadChunks(file, id, chunkSize, total) {
     const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
@@ -481,14 +512,23 @@ var DEFAULT_BATCH_ENDPOINTS = {
 };
 var BatchUploader = class {
   constructor(options = {}, scope) {
+    /** @deprecated Read via `getState().batchId`. The public field will become private in v1.0. */
     this.batchId = null;
+    /** @deprecated Read via `getState().totalFiles`. The public field will become private in v1.0. */
     this.totalFiles = 0;
+    /** @deprecated Read via `getState().completedFiles`. The public field will become private in v1.0. */
     this.completedFiles = 0;
+    /** @deprecated Read via `getState().failedFiles`. The public field will become private in v1.0. */
     this.failedFiles = 0;
+    /** @deprecated Read via `getState().progress`. The public field will become private in v1.0. */
     this.progress = 0;
+    /** @deprecated Read via `getState().isUploading`. The public field will become private in v1.0. */
     this.isUploading = false;
+    /** @deprecated Read via `getState().isComplete`. The public field will become private in v1.0. */
     this.isComplete = false;
+    /** @deprecated Read via `getState().error`. The public field will become private in v1.0. */
     this.error = null;
+    /** @deprecated Read via `getState().currentFileName`. The public field will become private in v1.0. */
     this.currentFileName = null;
     this.uploaders = [];
     this.results = [];

@@ -6,5 +6,5 @@ export { setDefaults, getDefaults, createDefaults } from './config';
 export { UploadHttpError } from './types';
 export type { DefaultsScope } from './config';
 export type { CompletionSource, CompletionStatus, BatchStatusResponse, BatchCompletionResult, CompletionWatcherOptions, } from './CompletionWatcher';
-export type { ChunkUploadOptions, ChunkUploaderState, ChunkUploaderEventMap, UploadResult, UploadError, ChunkInfo, ProgressEvent, InitiateResponse, ChunkUploadResponse, StatusResponse, Unsubscribe, BatchUploadOptions, BatchInitiateResponse, BatchCancelEvent, BatchProgressEvent, FileProgressEvent, BatchResult, BatchUploaderState, BatchUploaderEventMap, JsonPrimitive, JsonValue, JsonObject, } from './types';
+export type { ChunkUploadOptions, ChunkUploaderState, ChunkUploaderEventMap, UploadResult, UploadError, ChunkInfo, ProgressEvent, InitiateResponse, ChunkUploadResponse, StatusResponse, Unsubscribe, BatchUploadOptions, BatchInitiateResponse, BatchCancelEvent, BatchProgressEvent, FileProgressEvent, BatchResult, BatchUploaderState, BatchUploaderEventMap, BatchPersistence, JsonPrimitive, JsonValue, JsonObject, } from './types';
 export type { EchoInstance, EchoChannel, UploadCompletedData, UploadFailedData, BatchCompletedData, BatchPartiallyCompletedData, } from './echo';

@@ -31,7 +31,7 @@ module.exports = __toCommonJS(index_exports);
 // src/chunk-upload.ts
 var import_chunky_core = require("@netipar/chunky-core");
 function registerChunkUpload(Alpine) {
-  Alpine.data("chunkUpload", (options = {}) => ({
+  Alpine.data("chunkUpload", ((options = {}) => ({
     progress: 0,
     isUploading: false,
     isPaused: false,
@@ -93,13 +93,13 @@ function registerChunkUpload(Alpine) {
     retry() {
       return this._uploader.retry();
     }
-  }));
+  })));
 }
 
 // src/batch-upload.ts
 var import_chunky_core2 = require("@netipar/chunky-core");
 function registerBatchUpload(Alpine) {
-  Alpine.data("batchUpload", (options = {}) => ({
+  Alpine.data("batchUpload", ((options = {}) => ({
     batchId: null,
     totalFiles: 0,
     completedFiles: 0,
@@ -164,7 +164,7 @@ function registerBatchUpload(Alpine) {
     resume() {
       this._uploader.resume();
     }
-  }));
+  })));
 }
 
 // src/index.ts

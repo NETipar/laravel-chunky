@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-vue3",
-    "version": "0.20.0",
+    "version": "0.21.0",
     "description": "Vue 3 composable and components for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",

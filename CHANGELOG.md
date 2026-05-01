@@ -6,6 +6,35 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.21.0 - 2026-05-02
+
+Last "polish" minor before v1.0 — closes the gaps left over from the
+v0.17 deep audit. Frontend test coverage triples, the README finally
+gets a TOC + a separate config reference, the Alpine factory stops
+using `any`, autoRetry becomes a proper policy, and the BatchUploader
+queue can survive page reloads via a pluggable persistence adapter.
+
+### Added
+- **Vue composable test suite** (5 tests). Covers `useBatchUpload` reactivity, scope teardown, `onComplete` unsub, cancel state, and the polymorphic `useUpload(File | File[])`.
+- **React hook test suite** (6 tests). Powered by `@testing-library/react`. Covers `useBatchUpload` shape after mount, state during a successful upload, unmount cleanup, `onComplete` forwarding, and the `useUpload` polymorphism.
+- **Alpine factory test suite** (10 tests). A fake `Alpine` instance captures the registered factory; tests instantiate the data object with a `$dispatch` spy and verify the lifecycle events fire on a real upload through a mocked fetch.
+- **`AlpineLike` and `AlpineContext` type interfaces** (`@netipar/chunky-alpine`). The factories no longer take `Alpine: any` — they declare the minimal `Alpine.data()` shape, and the `$dispatch` casts go through `as unknown as AlpineContext`. Lets TypeScript catch typos in `chunky:*` event names without dragging Alpine into the package as a peer dep.
+- **`autoRetry` callback form** (`@netipar/chunky-core`). `ChunkUploadOptions.autoRetry` accepts `boolean | (error, { chunkIndex, retriesLeft }) => boolean`. The default policy now refuses to retry HTTP 400/401/403/404/410/413/415/422 — those won't change on retry. Pass a callback to override.
+- **`BatchPersistence<T>` adapter interface** (`@netipar/chunky-core`). Optional `BatchUploadOptions.persistence` lets a host-app IndexedDB / localStorage adapter persist the pending-batch queue across page reloads. Files themselves still need re-resolution by the host app (the type is generic over a serialised representation).
+- **`scripts/bump-version.sh`** in the repo. Bumps the four npm package.json files in lockstep using `node` (preserves formatting). Replaces the previous out-of-repo `bump-version.sh` reference.
+- **`docs/` directory** with `docs/configuration.md` — the full configuration reference + deployment recipes. The README's giant config table moved here, README is back to a TOC + tutorial-shape document.
+- **README table of contents** at the top with anchored links to every major section, plus pointers to UPGRADE / SECURITY / CHANGELOG / docs/configuration.
+
+### Changed
+- **`ChunkUploader` and `BatchUploader` public fields are `@deprecated`** in TypeScript. The replacement is the existing `getState()` method. The fields stay until v1.0 for back-compat; new code should read state through `getState()` or the `stateChange` event so the v1.0 private-state migration is mechanical.
+
+### Documentation
+- **README slimmed by ~80 lines** — the configuration reference moved to `docs/configuration.md`. The README is now intent-shaped (quickstart → install → usage → events) rather than reference-shaped.
+
+### npm packages
+- All packages bumped to `0.21.0` (frontend additions — `BatchPersistence`, autoRetry callback, `AlpineLike`/`AlpineContext`, `@deprecated` field annotations).
+- `@testing-library/react` and `react-dom` added to root devDependencies for the React hook test suite.
+
 ## v0.20.0 - 2026-05-02
 
 Polish minor: cleanup ergonomics, model docblocks, multi-language

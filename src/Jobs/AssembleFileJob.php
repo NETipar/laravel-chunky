@@ -31,7 +31,9 @@ class AssembleFileJob implements ShouldQueue
             return;
         }
 
-        $tracker->updateStatus($this->uploadId, UploadStatus::Assembling);
+        if (! $tracker->claimForAssembly($this->uploadId)) {
+            return;
+        }
 
         $finalPath = $handler->assemble(
             $this->uploadId,

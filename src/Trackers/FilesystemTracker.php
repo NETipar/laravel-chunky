@@ -91,6 +91,24 @@ class FilesystemTracker implements UploadTracker
         $this->writeRawMetadata($uploadId, $data);
     }
 
+    public function claimForAssembly(string $uploadId): bool
+    {
+        if (! $this->disk()->exists($this->metadataPath($uploadId))) {
+            return false;
+        }
+
+        $data = $this->readRawMetadata($uploadId);
+
+        if (($data['status'] ?? UploadStatus::Pending->value) !== UploadStatus::Pending->value) {
+            return false;
+        }
+
+        $data['status'] = UploadStatus::Assembling->value;
+        $this->writeRawMetadata($uploadId, $data);
+
+        return true;
+    }
+
     /**
      * @return array<string, mixed>
      */

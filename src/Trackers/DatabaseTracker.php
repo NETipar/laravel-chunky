@@ -118,6 +118,15 @@ class DatabaseTracker implements UploadTracker
         ChunkedUpload::where('upload_id', $uploadId)->update($data);
     }
 
+    public function claimForAssembly(string $uploadId): bool
+    {
+        $updated = ChunkedUpload::where('upload_id', $uploadId)
+            ->where('status', UploadStatus::Pending)
+            ->update(['status' => UploadStatus::Assembling]);
+
+        return $updated > 0;
+    }
+
     private function findOrFail(string $uploadId): ChunkedUpload
     {
         $upload = ChunkedUpload::where('upload_id', $uploadId)->first();

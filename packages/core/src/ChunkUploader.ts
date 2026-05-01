@@ -406,7 +406,9 @@ export class ChunkUploader {
 
         this.isPaused = false;
         this.emitStateChange();
-        this.upload(this.lastFile, this.lastMetadata);
+        this.upload(this.lastFile, this.lastMetadata).catch(() => {
+            // Already surfaced via the 'error' event listener.
+        });
 
         return true;
     }
@@ -434,7 +436,9 @@ export class ChunkUploader {
 
         this.error = null;
         this.emitStateChange();
-        this.upload(this.lastFile, this.lastMetadata);
+        this.upload(this.lastFile, this.lastMetadata).catch(() => {
+            // Already surfaced via the 'error' event listener.
+        });
 
         return true;
     }

@@ -88,6 +88,17 @@ it('allows chunk without checksum when integrity verification is enabled', funct
     $response->assertOk();
 });
 
+it('rejects a chunk_index above total_chunks', function () {
+    $uploadId = initiateUpload($this, fileSize: 2 * 1024 * 1024);
+
+    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
+        'chunk' => UploadedFile::fake()->create('chunk', 1024),
+        'chunk_index' => 9999,
+    ]);
+
+    $response->assertStatus(422)->assertJsonValidationErrors(['chunk_index']);
+});
+
 it('skips checksum verification when disabled', function () {
     config(['chunky.verify_integrity' => false]);
 

@@ -3,6 +3,7 @@
 namespace NETipar\Chunky\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use NETipar\Chunky\Contracts\UploadTracker;
 
 class UploadChunkRequest extends FormRequest
 {
@@ -16,10 +17,35 @@ class UploadChunkRequest extends FormRequest
      */
     public function rules(): array
     {
+        $maxIndex = $this->resolveMaxChunkIndex();
+
+        $chunkIndexRules = ['required', 'integer', 'min:0'];
+
+        if ($maxIndex !== null) {
+            $chunkIndexRules[] = "max:{$maxIndex}";
+        }
+
         return [
             'chunk' => ['required', 'file'],
-            'chunk_index' => ['required', 'integer', 'min:0'],
+            'chunk_index' => $chunkIndexRules,
             'checksum' => ['nullable', 'string'],
         ];
+    }
+
+    private function resolveMaxChunkIndex(): ?int
+    {
+        $uploadId = $this->route('uploadId');
+
+        if (! $uploadId) {
+            return null;
+        }
+
+        $metadata = app(UploadTracker::class)->getMetadata((string) $uploadId);
+
+        if (! $metadata) {
+            return null;
+        }
+
+        return max(0, $metadata->totalChunks - 1);
     }
 }

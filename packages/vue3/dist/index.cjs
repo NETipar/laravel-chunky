@@ -18,8 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/index.ts
-var src_exports = {};
-__export(src_exports, {
+var index_exports = {};
+__export(index_exports, {
   UploadHttpError: () => import_chunky_core5.UploadHttpError,
   createDefaults: () => import_chunky_core5.createDefaults,
   getDefaults: () => import_chunky_core5.getDefaults,
@@ -32,7 +32,7 @@ __export(src_exports, {
   useUserEcho: () => useUserEcho,
   watchBatchCompletion: () => import_chunky_core5.watchBatchCompletion
 });
-module.exports = __toCommonJS(src_exports);
+module.exports = __toCommonJS(index_exports);
 
 // src/useChunkUpload.ts
 var import_vue = require("vue");

@@ -18,15 +18,15 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/index.ts
-var src_exports = {};
-__export(src_exports, {
+var index_exports = {};
+__export(index_exports, {
   createDefaults: () => import_chunky_core3.createDefaults,
   getDefaults: () => import_chunky_core3.getDefaults,
   registerBatchUpload: () => registerBatchUpload,
   registerChunkUpload: () => registerChunkUpload,
   setDefaults: () => import_chunky_core3.setDefaults
 });
-module.exports = __toCommonJS(src_exports);
+module.exports = __toCommonJS(index_exports);
 
 // src/chunk-upload.ts
 var import_chunky_core = require("@netipar/chunky-core");

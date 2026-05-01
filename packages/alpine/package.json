@@ -42,9 +42,5 @@
     },
     "dependencies": {
         "@netipar/chunky-core": "workspace:^"
-    },
-    "devDependencies": {
-        "typescript": "^5.4",
-        "esbuild": "^0.28"
     }
 }

@@ -39,6 +39,12 @@ updates:
           - "*"
 
   # pnpm workspace - root devDependencies
+  #
+  # Build tools (typescript, esbuild) and test tools (vitest, happy-dom)
+  # live ONLY in the root devDependencies — they're hoisted by pnpm and
+  # available to every workspace package's build script. This means
+  # Dependabot only opens ONE PR for typescript bumps (here), not five
+  # (one per package + root).
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -63,23 +69,9 @@ updates:
         patterns:
           - "esbuild"
 
-  # Per-package npm dependencies — each package's TypeScript / esbuild /
-  # @types bumps land in a single grouped PR per package per week (instead
-  # of the previous 8 separate PRs across the 4 packages).
-  - package-ecosystem: "npm"
-    directory: "/packages/core"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "dependencies"
-      - "package:core"
-    groups:
-      core-dev-dependencies:
-        patterns:
-          - "typescript"
-          - "esbuild"
-          - "@types/*"
-
+  # Per-package configs only watch package-specific deps (the framework
+  # peer / type packages — vue, react, @types/react). The build tools
+  # were moved to root, so these PRs are sparse.
   - package-ecosystem: "npm"
     directory: "/packages/vue3"
     schedule:
@@ -87,13 +79,6 @@ updates:
     labels:
       - "dependencies"
       - "package:vue3"
-    groups:
-      vue3-dev-dependencies:
-        patterns:
-          - "typescript"
-          - "esbuild"
-          - "@types/*"
-          - "vue"
 
   - package-ecosystem: "npm"
     directory: "/packages/react"
@@ -102,24 +87,3 @@ updates:
     labels:
       - "dependencies"
       - "package:react"
-    groups:
-      react-dev-dependencies:
-        patterns:
-          - "typescript"
-          - "esbuild"
-          - "@types/*"
-          - "react"
-
-  - package-ecosystem: "npm"
-    directory: "/packages/alpine"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "dependencies"
-      - "package:alpine"
-    groups:
-      alpine-dev-dependencies:
-        patterns:
-          - "typescript"
-          - "esbuild"
-          - "@types/*"

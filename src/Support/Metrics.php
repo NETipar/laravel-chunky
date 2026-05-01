@@ -5,13 +5,45 @@ namespace NETipar\Chunky\Support;
 /**
  * Observability hook surface. The package fires named metric events at
  * key lifecycle points (chunk uploaded, assembly started/completed, job
- * failed, batch completed). Consumers register a callback in
- * config('chunky.metrics.<event>') and forward to Datadog, Prometheus,
- * StatsD, or whatever else they use.
+ * failed). Consumers register a handler in `config('chunky.metrics.<event>')`
+ * and forward to Datadog, Prometheus, StatsD, or whatever else they use.
  *
- * The callbacks are best-effort: any exception thrown by a metric
- * callback is swallowed so observability bugs cannot break the upload
- * pipeline.
+ * Two handler shapes are supported:
+ *
+ *   1. **Class string** (recommended): `\App\Metrics\ChunkUploaded::class`.
+ *      The class is resolved through the Laravel container, so its
+ *      constructor can typehint dependencies (DatadogClient, Logger, …),
+ *      and the package calls `__invoke(array $payload): void` on it.
+ *      This shape is `config:cache`-compatible — closure handlers are
+ *      not, because PHP cannot serialize closures.
+ *
+ *   2. **Callable** (legacy): a closure or `[$instance, 'method']` pair.
+ *      Kept for backward compatibility with v0.13.0; tells `config:cache`
+ *      to fall over, so prefer class strings in production.
+ *
+ * The handlers are best-effort: any exception they throw is swallowed
+ * so an observability bug cannot break the upload pipeline.
+ *
+ * Example:
+ *
+ * ```php
+ * // config/chunky.php
+ * 'metrics' => [
+ *     'chunk_uploaded' => \App\Metrics\ChunkUploaded::class,
+ *     'assembly_completed' => \App\Metrics\AssemblyCompleted::class,
+ * ],
+ *
+ * // app/Metrics/ChunkUploaded.php
+ * class ChunkUploaded
+ * {
+ *     public function __construct(private DatadogClient $datadog) {}
+ *
+ *     public function __invoke(array $payload): void
+ *     {
+ *         $this->datadog->histogram('chunky.chunk_upload_ms', $payload['duration_ms']);
+ *     }
+ * }
+ * ```
  */
 class Metrics
 {
@@ -20,18 +52,57 @@ class Metrics
      */
     public static function emit(string $event, array $payload = []): void
     {
-        $callback = config("chunky.metrics.{$event}");
+        $handler = config("chunky.metrics.{$event}");
 
-        if (! is_callable($callback)) {
+        if ($handler === null || $handler === '') {
             return;
         }
 
         try {
-            $callback($payload);
+            self::dispatch($handler, $payload);
         } catch (\Throwable) {
             // Swallow: an observability hook must never break the
             // upload pipeline. Configure proper monitoring on the
-            // callback itself if you need visibility into its failures.
+            // handler itself if you need visibility into its failures.
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private static function dispatch(mixed $handler, array $payload): void
+    {
+        // Class string: resolve via the container so the handler's
+        // constructor dependencies are autowired.
+        if (is_string($handler) && class_exists($handler)) {
+            $instance = app($handler);
+
+            if (is_callable($instance)) {
+                $instance($payload);
+
+                return;
+            }
+
+            if (method_exists($instance, 'handle')) {
+                $instance->handle($payload);
+
+                return;
+            }
+
+            throw new \InvalidArgumentException(
+                "Metrics handler {$handler} must be invokable (__invoke) or expose a handle() method.",
+            );
+        }
+
+        // Callable: closure, [obj, 'method'], or 'Class@method'.
+        if (is_callable($handler)) {
+            $handler($payload);
+
+            return;
+        }
+
+        throw new \InvalidArgumentException(
+            'Metrics handler must be a class string or a callable; got '.get_debug_type($handler).'.',
+        );
     }
 }

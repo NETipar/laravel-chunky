@@ -73,18 +73,28 @@ return [
     ],
     'idempotency_ttl_seconds' => 300,
 
-    // Observability hooks. Each entry is an optional callable that
-    // receives an associative payload at the named lifecycle event. Use
-    // these to bridge to Datadog / Prometheus / StatsD / your own
+    // Observability hooks. Each entry is an optional handler that
+    // receives an associative payload at the named lifecycle event.
+    // Use these to bridge to Datadog / Prometheus / StatsD / your own
     // logging without forking the package. Exceptions thrown by the
-    // callbacks are swallowed so a metrics bug cannot break uploads.
+    // handler are swallowed so a metrics bug cannot break uploads.
+    //
+    // Two handler shapes are supported:
+    //
+    //   1. **Class string (recommended):** \App\Metrics\ChunkUploaded::class
+    //      Resolved via the container (constructor DI works), then
+    //      __invoke(array $payload) — or handle(array $payload) — is
+    //      called. Class strings are `config:cache`-compatible.
+    //
+    //   2. **Closure (legacy):** fn (array $p) => …
+    //      Kept for v0.13.0 backward compat. Breaks `config:cache`
+    //      because PHP can't serialize closures — prefer class strings
+    //      in production.
     //
     // Example:
     //   'metrics' => [
-    //       'chunk_uploaded' => fn (array $p) =>
-    //           Datadog::histogram('chunky.chunk_upload_ms', $p['duration_ms']),
-    //       'assembly_completed' => fn (array $p) =>
-    //           Datadog::histogram('chunky.assembly_ms', $p['duration_ms']),
+    //       'chunk_uploaded' => \App\Metrics\ChunkUploaded::class,
+    //       'assembly_completed' => \App\Metrics\AssemblyCompleted::class,
     //   ],
     'metrics' => [
         'chunk_uploaded' => null,

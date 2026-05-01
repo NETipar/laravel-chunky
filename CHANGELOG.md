@@ -2,6 +2,11 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## Unreleased
+
+### Added
+- **Class-based metrics handlers** in `chunky.metrics`. Each event entry now accepts a class string (`\App\Metrics\ChunkUploaded::class`) in addition to the v0.13.0 closure shape. Class-string handlers are resolved through the Laravel container, so the handler's constructor can typehint dependencies (`DatadogClient`, `Logger`, …), and the package calls `__invoke(array $payload)` — falling back to `handle(array $payload)` if the class is not invokable. The optional `NETipar\Chunky\Support\MetricsListener` interface gives static analysers a contract to lock onto. Closures still work for backward compatibility, but class strings are `config:cache`-compatible (closures are not — `config:cache` fails to serialise them) and unlock dependency injection and mockability in tests. `Metrics::emit()` swallows handler exceptions and dispatch errors uniformly so an observability misconfig cannot break the upload pipeline.
+
 ## v0.13.1 - 2026-05-01
 
 Test-coverage and operational hardening pass on top of v0.13.0. No new public API; one new boot-time guard that fails fast on a misconfigured Cache lock driver, and 19 new tests covering the v0.13.0 features.

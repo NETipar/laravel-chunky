@@ -249,10 +249,11 @@ export class ChunkUploader {
         const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
 
         let index = 0;
+        let completed = false;
 
         const next = async (): Promise<void> => {
             while (index < chunks.length) {
-                if (this.isPaused || this.abortController?.signal.aborted) {
+                if (completed || this.isPaused || this.abortController?.signal.aborted) {
                     return;
                 }
 
@@ -266,6 +267,7 @@ export class ChunkUploader {
                 this.pendingChunks = this.pendingChunks.filter((i) => i !== chunkIndex);
 
                 if (result.is_complete) {
+                    completed = true;
                     return;
                 }
             }

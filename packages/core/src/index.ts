@@ -2,6 +2,7 @@ export { ChunkUploader } from './ChunkUploader';
 export { BatchUploader } from './BatchUploader';
 export { listenForUser, listenForUploadComplete, listenForBatchComplete } from './echo';
 export { setDefaults, getDefaults, createDefaults } from './config';
+export { UploadHttpError } from './types';
 export type { DefaultsScope } from './config';
 export type {
     ChunkUploadOptions,
@@ -17,6 +18,7 @@ export type {
     Unsubscribe,
     BatchUploadOptions,
     BatchInitiateResponse,
+    BatchCancelEvent,
     BatchProgressEvent,
     BatchResult,
     BatchUploaderState,

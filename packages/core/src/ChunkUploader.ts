@@ -13,6 +13,7 @@ import type {
     UploadError,
     UploadResult,
 } from './types';
+import { UploadHttpError } from './types';
 
 const DEFAULT_ENDPOINTS = {
     initiate: '/api/chunky/upload',
@@ -185,8 +186,20 @@ export class ChunkUploader {
         });
 
         if (!response.ok) {
-            const body = await response.text();
-            throw new Error(`HTTP ${response.status}: ${body}`);
+            const text = await response.text();
+            let body: unknown = text;
+
+            try {
+                body = JSON.parse(text);
+            } catch {
+                // Non-JSON body — keep the raw text.
+            }
+
+            throw new UploadHttpError(
+                response.status,
+                body,
+                `HTTP ${response.status}: ${text || response.statusText}`,
+            );
         }
 
         return response.json();

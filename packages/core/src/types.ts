@@ -29,6 +29,18 @@ export interface UploadError {
     cause?: unknown;
 }
 
+export class UploadHttpError extends Error {
+    public readonly status: number;
+    public readonly body: unknown;
+
+    constructor(status: number, body: unknown, message: string) {
+        super(message);
+        this.name = 'UploadHttpError';
+        this.status = status;
+        this.body = body;
+    }
+}
+
 export interface ChunkInfo {
     index: number;
     size: number;

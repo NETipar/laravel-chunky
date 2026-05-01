@@ -310,6 +310,8 @@ export class BatchUploader {
     }
 
     cancel(): void {
+        const cancelledBatchId = this.batchId;
+
         this.abortController?.abort();
 
         for (const uploader of this.uploaders) {
@@ -317,7 +319,11 @@ export class BatchUploader {
         }
 
         this.isUploading = false;
+        this.isComplete = false;
         this.currentFileName = null;
+        this.lastComplete = null;
+        this.lastError = null;
+        this.emit('cancel', { batchId: cancelledBatchId });
         this.emitStateChange();
     }
 

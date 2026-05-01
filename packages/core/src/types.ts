@@ -139,11 +139,16 @@ export interface BatchUploaderState {
     currentFileName: string | null;
 }
 
+export interface BatchCancelEvent {
+    batchId: string | null;
+}
+
 export type BatchUploaderEventMap = {
     progress: BatchProgressEvent;
     fileComplete: UploadResult;
     fileError: UploadError;
     complete: BatchResult;
     error: UploadError;
+    cancel: BatchCancelEvent;
     stateChange: BatchUploaderState;
 };

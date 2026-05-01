@@ -134,6 +134,23 @@ class DatabaseTracker implements UploadTracker
         return $updated > 0;
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function expiredUploadIds(): array
+    {
+        return ChunkedUpload::query()
+            ->where('expires_at', '<', now())
+            ->whereNotIn('status', [UploadStatus::Assembling])
+            ->pluck('upload_id')
+            ->all();
+    }
+
+    public function forget(string $uploadId): void
+    {
+        ChunkedUpload::where('upload_id', $uploadId)->delete();
+    }
+
     private function findOrFail(string $uploadId): ChunkedUpload
     {
         $upload = ChunkedUpload::where('upload_id', $uploadId)->first();

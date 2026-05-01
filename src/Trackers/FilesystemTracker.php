@@ -112,6 +112,46 @@ class FilesystemTracker implements UploadTracker
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function expiredUploadIds(): array
+    {
+        $directories = $this->disk()->directories(config('chunky.temp_directory'));
+        $expired = [];
+
+        foreach ($directories as $directory) {
+            $uploadId = basename($directory);
+
+            if ($uploadId === 'batches') {
+                continue;
+            }
+
+            $metadataPath = $this->metadataPath($uploadId);
+
+            if (! $this->disk()->exists($metadataPath)) {
+                continue;
+            }
+
+            $data = json_decode((string) $this->disk()->get($metadataPath), true) ?? [];
+
+            if (($data['status'] ?? null) === UploadStatus::Assembling->value) {
+                continue;
+            }
+
+            if (isset($data['expires_at']) && now()->isAfter($data['expires_at'])) {
+                $expired[] = $uploadId;
+            }
+        }
+
+        return $expired;
+    }
+
+    public function forget(string $uploadId): void
+    {
+        $this->disk()->delete($this->metadataPath($uploadId));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function readRawMetadata(string $uploadId): array

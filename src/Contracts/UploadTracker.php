@@ -34,4 +34,18 @@ interface UploadTracker
      * worker already started assembling this upload.
      */
     public function claimForAssembly(string $uploadId): bool;
+
+    /**
+     * Return the upload IDs that have passed their expiration timestamp and are
+     * still safe to purge (i.e. not currently being assembled).
+     *
+     * @return array<int, string>
+     */
+    public function expiredUploadIds(): array;
+
+    /**
+     * Forget the upload metadata. The handler is responsible for removing the
+     * actual chunk files.
+     */
+    public function forget(string $uploadId): void;
 }

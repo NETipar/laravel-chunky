@@ -2,8 +2,10 @@
 
 namespace NETipar\Chunky;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Component;
+use NETipar\Chunky\Console\CleanupCommand;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Handlers\DefaultChunkHandler;
@@ -56,6 +58,25 @@ class ChunkyServiceProvider extends ServiceProvider
         $this->registerRoutes();
         $this->registerContexts();
         $this->registerLivewireComponents();
+        $this->registerCleanup();
+    }
+
+    private function registerCleanup(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        $this->commands([CleanupCommand::class]);
+
+        if (! config('chunky.auto_cleanup', true)) {
+            return;
+        }
+
+        $this->app->booted(function () {
+            $schedule = $this->app->make(Schedule::class);
+            $schedule->command('chunky:cleanup')->daily()->name('chunky:cleanup')->withoutOverlapping();
+        });
     }
 
     private function registerContexts(): void

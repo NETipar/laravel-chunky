@@ -373,19 +373,34 @@ class ChunkyManager
 
     private function updateFilesystemBatchCounter(string $batchId, string $field): void
     {
-        $data = $this->readBatchJson($batchId);
+        $shouldDispatch = null;
+        $dispatchPayload = null;
 
-        if (! $data) {
-            return;
-        }
+        $this->withBatchLock($batchId, function () use ($batchId, $field, &$shouldDispatch, &$dispatchPayload) {
+            $data = $this->readBatchJson($batchId);
 
-        $data[$field] = ($data[$field] ?? 0) + 1;
+            if (! $data) {
+                return;
+            }
 
-        $completed = $data['completed_files'] ?? 0;
-        $failed = $data['failed_files'] ?? 0;
-        $total = $data['total_files'] ?? 0;
+            $alreadyTerminal = in_array(
+                $data['status'] ?? null,
+                [BatchStatus::Completed->value, BatchStatus::PartiallyCompleted->value],
+                true,
+            );
 
-        if ($completed + $failed >= $total) {
+            $data[$field] = ($data[$field] ?? 0) + 1;
+
+            $completed = $data['completed_files'] ?? 0;
+            $failed = $data['failed_files'] ?? 0;
+            $total = $data['total_files'] ?? 0;
+
+            if ($completed + $failed < $total) {
+                $this->writeBatchJson($batchId, $data);
+
+                return;
+            }
+
             $status = $failed > 0
                 ? BatchStatus::PartiallyCompleted
                 : BatchStatus::Completed;
@@ -394,18 +409,75 @@ class ChunkyManager
             $data['completed_at'] = now()->toIso8601String();
             $this->writeBatchJson($batchId, $data);
 
-            $userId = isset($data['user_id']) ? (int) $data['user_id'] : null;
+            if ($alreadyTerminal) {
+                return;
+            }
 
-            match ($status) {
-                BatchStatus::Completed => BatchCompleted::dispatch($batchId, $total, $userId),
-                BatchStatus::PartiallyCompleted => BatchPartiallyCompleted::dispatch($batchId, $completed, $failed, $total, $userId),
-                default => null,
-            };
+            $shouldDispatch = $status;
+            $dispatchPayload = [
+                'completed' => $completed,
+                'failed' => $failed,
+                'total' => $total,
+                'userId' => isset($data['user_id']) ? (int) $data['user_id'] : null,
+            ];
+        });
+
+        if ($shouldDispatch === BatchStatus::Completed) {
+            BatchCompleted::dispatch($batchId, $dispatchPayload['total'], $dispatchPayload['userId']);
+        } elseif ($shouldDispatch === BatchStatus::PartiallyCompleted) {
+            BatchPartiallyCompleted::dispatch(
+                $batchId,
+                $dispatchPayload['completed'],
+                $dispatchPayload['failed'],
+                $dispatchPayload['total'],
+                $dispatchPayload['userId'],
+            );
+        }
+    }
+
+    private function withBatchLock(string $batchId, \Closure $callback): void
+    {
+        $disk = Storage::disk(config('chunky.disk'));
+        $relativePath = config('chunky.temp_directory')."/batches/{$batchId}/batch.json";
+
+        try {
+            $fullPath = $disk->path($relativePath);
+        } catch (\Throwable) {
+            $callback();
 
             return;
         }
 
-        $this->writeBatchJson($batchId, $data);
+        $directory = dirname($fullPath);
+
+        if (! is_dir($directory)) {
+            @mkdir($directory, 0755, true);
+        }
+
+        $lockPath = $fullPath.'.lock';
+        $handle = @fopen($lockPath, 'c+');
+
+        if ($handle === false) {
+            $callback();
+
+            return;
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                $callback();
+
+                return;
+            }
+
+            try {
+                $callback();
+            } finally {
+                flock($handle, LOCK_UN);
+            }
+        } finally {
+            fclose($handle);
+        }
     }
 
     private function resolveUserId(): ?int

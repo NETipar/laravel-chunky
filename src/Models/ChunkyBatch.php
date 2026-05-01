@@ -76,7 +76,21 @@ class ChunkyBatch extends Model
             ? BatchStatus::PartiallyCompleted
             : BatchStatus::Completed;
 
-        $this->update(['status' => $status, 'completed_at' => now()]);
+        // CAS: only the first finisher flips a non-terminal status to a terminal
+        // one. Without this two AssembleFileJob workers can both refresh() while
+        // the row is in Processing, both decide they completed it, and both
+        // dispatch a BatchCompleted broadcast — duplicate notifications on the
+        // frontend.
+        $updated = static::query()
+            ->where('batch_id', $this->batch_id)
+            ->whereNotIn('status', [BatchStatus::Completed, BatchStatus::PartiallyCompleted])
+            ->update(['status' => $status, 'completed_at' => now()]);
+
+        if ($updated === 0) {
+            return;
+        }
+
+        $this->refresh();
 
         match ($status) {
             BatchStatus::Completed => BatchCompleted::dispatch($this->batch_id, $this->total_files, $this->user_id),

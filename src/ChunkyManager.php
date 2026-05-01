@@ -12,6 +12,7 @@ use NETipar\Chunky\Data\ChunkUploadResult;
 use NETipar\Chunky\Data\InitiateResult;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\BatchStatus;
+use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Events\BatchCompleted;
 use NETipar\Chunky\Events\BatchInitiated;
 use NETipar\Chunky\Events\BatchPartiallyCompleted;
@@ -180,6 +181,29 @@ class ChunkyManager
     public function status(string $uploadId): ?UploadMetadata
     {
         return $this->tracker->getMetadata($uploadId);
+    }
+
+    /**
+     * Cancel an in-progress upload: mark it as Cancelled and remove the temp
+     * chunks. Returns true if an upload was found and cancelled, false if it
+     * never existed or was already completed/cancelled.
+     */
+    public function cancel(string $uploadId): bool
+    {
+        $metadata = $this->tracker->getMetadata($uploadId);
+
+        if (! $metadata) {
+            return false;
+        }
+
+        if (in_array($metadata->status, [UploadStatus::Completed, UploadStatus::Cancelled], true)) {
+            return false;
+        }
+
+        $this->tracker->updateStatus($uploadId, UploadStatus::Cancelled);
+        $this->handler->cleanup($uploadId);
+
+        return true;
     }
 
     /**

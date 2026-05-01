@@ -18,6 +18,7 @@ const DEFAULT_ENDPOINTS = {
     initiate: '/api/chunky/upload',
     upload: '/api/chunky/upload/{uploadId}/chunks',
     status: '/api/chunky/upload/{uploadId}',
+    cancel: '/api/chunky/upload/{uploadId}',
 };
 
 async function computeChecksum(data: Blob): Promise<string | null> {
@@ -86,6 +87,10 @@ export class ChunkUploader {
 
         if (!this.endpoints.status.includes('{uploadId}')) {
             throw new Error('Status endpoint must contain "{uploadId}" placeholder.');
+        }
+
+        if (!this.endpoints.cancel.includes('{uploadId}')) {
+            throw new Error('Cancel endpoint must contain "{uploadId}" placeholder.');
         }
     }
 
@@ -414,6 +419,8 @@ export class ChunkUploader {
     }
 
     cancel(): void {
+        const abandonedId = this.uploadId;
+
         this.abortController?.abort();
         this.isPaused = false;
         this.isUploading = false;
@@ -427,6 +434,22 @@ export class ChunkUploader {
         this.lastComplete = null;
         this.lastError = null;
         this.emitStateChange();
+
+        if (abandonedId) {
+            this.cancelOnServer(abandonedId).catch(() => {
+                // Best-effort: the server cleanup is also driven by the expiration sweep.
+            });
+        }
+    }
+
+    private async cancelOnServer(id: string): Promise<void> {
+        const url = this.endpoints.cancel.replace('{uploadId}', id);
+
+        await fetch(url, {
+            method: 'DELETE',
+            credentials: this.withCredentials ? 'include' : 'same-origin',
+            headers: this.getHeaders(),
+        });
     }
 
     retry(): boolean {

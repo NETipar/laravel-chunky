@@ -11,6 +11,7 @@ export interface ChunkUploadOptions {
         initiate?: string;
         upload?: string;
         status?: string;
+        cancel?: string;
     };
 }
 

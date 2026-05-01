@@ -9,4 +9,5 @@ enum UploadStatus: string
     case Completed = 'completed';
     case Failed = 'failed';
     case Expired = 'expired';
+    case Cancelled = 'cancelled';
 }

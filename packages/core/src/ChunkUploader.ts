@@ -59,6 +59,8 @@ export class ChunkUploader {
     private lastFile: File | null = null;
     private lastMetadata?: Record<string, unknown>;
     private listeners = new Map<string, Set<Function>>();
+    private lastComplete: UploadResult | null = null;
+    private lastError: UploadError | null = null;
 
     constructor(options: ChunkUploadOptions = {}, scope?: DefaultsScope) {
         const defaults = scope ? scope.getDefaults() : getDefaults();
@@ -94,12 +96,27 @@ export class ChunkUploader {
 
         this.listeners.get(event)!.add(callback);
 
+        if (event === 'complete' && this.lastComplete) {
+            const sticky = this.lastComplete;
+            queueMicrotask(() => (callback as (d: UploadResult) => void)(sticky));
+        } else if (event === 'error' && this.lastError) {
+            const sticky = this.lastError;
+            queueMicrotask(() => (callback as (d: UploadError) => void)(sticky));
+        }
+
         return () => {
             this.listeners.get(event)?.delete(callback);
         };
     }
 
     private emit<K extends keyof ChunkUploaderEventMap>(event: K, data: ChunkUploaderEventMap[K]): void {
+        if (event === 'complete') {
+            this.lastComplete = data as UploadResult;
+            this.lastError = null;
+        } else if (event === 'error') {
+            this.lastError = data as UploadError;
+        }
+
         this.listeners.get(event)?.forEach((cb) => cb(data));
     }
 
@@ -302,6 +319,8 @@ export class ChunkUploader {
         this.error = null;
         this.progress = 0;
         this.uploadedChunks = 0;
+        this.lastComplete = null;
+        this.lastError = null;
         this.abortController = new AbortController();
         this.emitStateChange();
 
@@ -403,6 +422,8 @@ export class ChunkUploader {
         this.totalChunks = 0;
         this.currentFile = null;
         this.error = null;
+        this.lastComplete = null;
+        this.lastError = null;
         this.emitStateChange();
     }
 

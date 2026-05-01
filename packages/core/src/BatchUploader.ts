@@ -39,6 +39,8 @@ export class BatchUploader {
     private results: UploadResult[] = [];
     private abortController: AbortController | null = null;
     private listeners = new Map<string, Set<Function>>();
+    private lastComplete: BatchResult | null = null;
+    private lastError: UploadError | null = null;
 
     constructor(options: BatchUploadOptions = {}, scope?: DefaultsScope) {
         this.options = options;
@@ -57,12 +59,27 @@ export class BatchUploader {
 
         this.listeners.get(event)!.add(callback);
 
+        if (event === 'complete' && this.lastComplete) {
+            const sticky = this.lastComplete;
+            queueMicrotask(() => (callback as (d: BatchResult) => void)(sticky));
+        } else if (event === 'error' && this.lastError) {
+            const sticky = this.lastError;
+            queueMicrotask(() => (callback as (d: UploadError) => void)(sticky));
+        }
+
         return () => {
             this.listeners.get(event)?.delete(callback);
         };
     }
 
     private emit<K extends keyof BatchUploaderEventMap>(event: K, data: BatchUploaderEventMap[K]): void {
+        if (event === 'complete') {
+            this.lastComplete = data as BatchResult;
+            this.lastError = null;
+        } else if (event === 'error') {
+            this.lastError = data as UploadError;
+        }
+
         this.listeners.get(event)?.forEach((cb) => cb(data));
     }
 
@@ -148,6 +165,8 @@ export class BatchUploader {
         this.error = null;
         this.results = [];
         this.uploaders = [];
+        this.lastComplete = null;
+        this.lastError = null;
         this.emitStateChange();
 
         try {

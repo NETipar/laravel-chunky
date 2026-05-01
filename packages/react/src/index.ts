@@ -1,5 +1,7 @@
 export { useChunkUpload } from './useChunkUpload';
 export { useBatchUpload } from './useBatchUpload';
+export { useUpload } from './useUpload';
+export type { UploadReturn } from './useUpload';
 export { useUserEcho, useUploadEcho, useBatchEcho } from './useChunkyEcho';
 export {
     setDefaults,

@@ -14,6 +14,8 @@ use Livewire\Component;
 use NETipar\Chunky\Authorization\Authorizer;
 use NETipar\Chunky\Authorization\DefaultAuthorizer;
 use NETipar\Chunky\Console\CleanupCommand;
+use NETipar\Chunky\Console\MakeAuthorizerCommand;
+use NETipar\Chunky\Console\MakeContextCommand;
 use NETipar\Chunky\Contracts\BatchTracker;
 use NETipar\Chunky\Contracts\ChunkHandler;
 use NETipar\Chunky\Contracts\UploadTracker;
@@ -204,7 +206,11 @@ class ChunkyServiceProvider extends ServiceProvider
             return;
         }
 
-        $this->commands([CleanupCommand::class]);
+        $this->commands([
+            CleanupCommand::class,
+            MakeContextCommand::class,
+            MakeAuthorizerCommand::class,
+        ]);
 
         if (! config('chunky.lifecycle.auto_cleanup', true)) {
             return;

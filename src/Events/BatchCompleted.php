@@ -4,40 +4,31 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-
-class BatchCompleted implements ShouldBroadcast
+class BatchCompleted extends AbstractChunkyEvent
 {
-    use Dispatchable, SerializesModels;
-
     public function __construct(
         public readonly string $batchId,
         public readonly int $totalFiles,
         public readonly ?string $userId = null,
     ) {}
 
-    /**
-     * @return array<int, PrivateChannel>
-     */
-    public function broadcastOn(): array
-    {
-        $prefix = config('chunky.broadcasting.channel_prefix', 'chunky');
-
-        $channels = [new PrivateChannel("{$prefix}.batches.{$this->batchId}")];
-
-        if ($this->userId) {
-            $channels[] = new PrivateChannel("{$prefix}.user.{$this->userId}");
-        }
-
-        return $channels;
-    }
-
-    public function broadcastAs(): string
+    protected function broadcastEventKey(): string
     {
         return 'BatchCompleted';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function broadcastChannelSuffixes(): array
+    {
+        $suffixes = ["batches.{$this->batchId}"];
+
+        if ($this->userId) {
+            $suffixes[] = "user.{$this->userId}";
+        }
+
+        return $suffixes;
     }
 
     /**
@@ -49,15 +40,5 @@ class BatchCompleted implements ShouldBroadcast
             'batchId' => $this->batchId,
             'totalFiles' => $this->totalFiles,
         ];
-    }
-
-    public function broadcastQueue(): ?string
-    {
-        return config('chunky.broadcasting.queue');
-    }
-
-    public function broadcastWhen(): bool
-    {
-        return config('chunky.broadcasting.enabled', false);
     }
 }

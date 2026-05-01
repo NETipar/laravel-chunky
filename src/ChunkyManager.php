@@ -16,14 +16,18 @@ use NETipar\Chunky\Data\InitiateResult;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Enums\BatchStatus;
 use NETipar\Chunky\Enums\UploadStatus;
+use NETipar\Chunky\Events\BatchCancelled;
 use NETipar\Chunky\Events\BatchInitiated;
 use NETipar\Chunky\Events\ChunkUploaded;
 use NETipar\Chunky\Events\ChunkUploadFailed;
+use NETipar\Chunky\Events\UploadCancelled;
 use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkyException;
+use NETipar\Chunky\Models\ChunkedUpload;
 use NETipar\Chunky\Support\ChunkCalculator;
 use NETipar\Chunky\Support\ContextRegistry;
 use NETipar\Chunky\Support\Metrics;
+use NETipar\Chunky\Trackers\DatabaseTracker;
 
 /**
  * The package's coordinating service. After the v0.18 refactor it is a
@@ -207,7 +211,9 @@ class ChunkyManager
     /**
      * Cancel an in-progress upload: mark it as Cancelled and remove the temp
      * chunks. Returns true if an upload was found and cancelled, false if it
-     * never existed or was already completed/cancelled.
+     * never existed or was already completed/cancelled. Dispatches the
+     * `UploadCancelled` event so subscribers can react (clear progress
+     * UI, decrement parent batch counters, etc.).
      */
     public function cancel(string $uploadId): bool
     {
@@ -223,6 +229,8 @@ class ChunkyManager
 
         $this->tracker->updateStatus($uploadId, UploadStatus::Cancelled);
         $this->handler->cleanup($uploadId);
+
+        UploadCancelled::dispatch($uploadId, $metadata->batchId, $metadata->userId);
 
         return true;
     }
@@ -316,6 +324,67 @@ class ChunkyManager
     public function markBatchUploadFailed(string $batchId): void
     {
         $this->batchTracker->incrementFailed($batchId);
+    }
+
+    /**
+     * Cancel a batch and every still-active upload inside it.
+     *
+     * Returns true when the batch transitioned to Cancelled, false when
+     * it was missing or already in a terminal state. Each individual
+     * upload is also cancelled (which fires `UploadCancelled` per file)
+     * before `BatchCancelled` is dispatched.
+     */
+    public function cancelBatch(string $batchId): bool
+    {
+        $batch = $this->batchTracker->find($batchId);
+
+        if (! $batch) {
+            return false;
+        }
+
+        if ($batch->status->isTerminal()) {
+            return false;
+        }
+
+        // Cancel each in-flight per-file upload first. The tracker
+        // exposes no "find by batch_id" because the contract is
+        // intentionally backend-agnostic; for the database driver we
+        // could be smarter, but the cancel command iterates batch
+        // members through the events pipeline anyway, so the cost is
+        // small in practice. Errors here are swallowed — the batch
+        // should still flip to Cancelled even if a member upload was
+        // already in a terminal state.
+        $this->cancelBatchUploads($batch);
+
+        if (! $this->batchTracker->markCancelled($batchId)) {
+            return false;
+        }
+
+        BatchCancelled::dispatch($batchId, $batch->userId);
+
+        return true;
+    }
+
+    private function cancelBatchUploads(BatchMetadata $batch): void
+    {
+        // Database driver: enumerate the rows attached to this batch and
+        // cancel each. Filesystem driver: there is no efficient way to
+        // walk batch members without scanning every upload directory,
+        // so we skip the per-member cancel step — abandoned chunks fall
+        // through to the cleanup sweep.
+        if (! $this->tracker instanceof DatabaseTracker) {
+            return;
+        }
+
+        ChunkedUpload::where('batch_id', $batch->batchId)
+            ->whereNotIn('status', [
+                UploadStatus::Completed,
+                UploadStatus::Cancelled,
+                UploadStatus::Failed,
+                UploadStatus::Expired,
+            ])
+            ->pluck('upload_id')
+            ->each(fn (string $uploadId) => $this->cancel($uploadId));
     }
 
     private function assertBatchAcceptsUploads(string $batchId): void

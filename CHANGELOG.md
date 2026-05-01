@@ -6,6 +6,34 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.19.0 - 2026-05-02
+
+Architecture-maturity minor. Gate-aware authorizer, unified event base
+class with per-event broadcast opt-in, full batch cancel API, two new
+artisan generators, and a polymorphic `useUpload` hook on Vue/React.
+
+### Added
+- **`AbstractChunkyEvent`** base class for the entire event pipeline. Every event extends it and gates broadcasting on a per-event `chunky.broadcasting.events.{Key}` flag. The four "completion" events (UploadCompleted, UploadFailed, BatchCompleted, BatchPartiallyCompleted) keep their default-on behaviour; per-chunk and per-init events default to off because broadcasting them is expensive.
+- **Batch cancel API.** New `ChunkyManager::cancelBatch()`, new `BatchStatus::Cancelled` enum case (already shipped in v0.18 carved out for forward-compat), new `BatchCancelled` event, new `DELETE /api/chunky/batch/{batchId}` route via `CancelBatchController`. The DB driver also cascades the cancel to every active per-file upload (each fires `UploadCancelled`); the FS driver leaves the per-file uploads to the cleanup sweep because there's no efficient batch-member walk on disk.
+- **`UploadCancelled` event** now fires from `ChunkyManager::cancel()`. Subscribers can clear progress UI, decrement counters, etc. without polling.
+- **Gate-aware `DefaultAuthorizer`.** When the host application registers Gate abilities `viewChunkyUpload`, `cancelChunkyUpload`, `viewChunkyBatch`, `cancelChunkyBatch`, the authorizer defers to them. Falls back to the existing ownership rule when no Gate is registered. Lets you express admin / team / shared-batch rules from `AuthServiceProvider` without subclassing.
+- **`canCancelUpload()` / `canCancelBatch()` on the `Authorizer` contract.** Defaults to the access answer in `DefaultAuthorizer`; override in custom authorizers when cancel/delete needs tighter rules than read access.
+- **`chunky.authorization.allow_anonymous` config flag** (default true). Set to false to refuse anonymous access even when the upload has no recorded `userId`. Opt-in because flipping it on legacy setups breaks unauthenticated reads.
+- **`make:chunky-context`** artisan generator. Stubs out an `app/Chunky/<Name>Context.php` extending `ChunkyContext`, with placeholders for `name()` / `rules()` / `save()`. Replaces hand-writing the boilerplate from the README.
+- **`make:chunky-authorizer`** artisan generator. Stubs out an `app/Chunky/<Name>Authorizer.php` implementing the full `Authorizer` contract, plus a service-provider binding example in a trailing comment.
+- **`useUpload` polymorphic hook** on Vue 3 (`@netipar/chunky-vue3`) and React (`@netipar/chunky-react`). Accepts a single `File` or `File[]` — internally backed by `useBatchUpload` because every upload is a batch of N. Prefer this over `useChunkUpload` / `useBatchUpload` for new code; the two specific composables remain for back-compat.
+- **`JsonObject` / `JsonValue` / `JsonPrimitive` types** exported from `@netipar/chunky-core`. The `useUpload` metadata signature uses `JsonObject`, narrowing what TypeScript will accept (no `Date`, `Map`, `Set`, class instances) so the wire format actually matches the type.
+
+### Changed (breaking)
+- **`Authorizer` contract gained two methods** (`canCancelUpload`, `canCancelBatch`). Custom implementations need to add them — the default behaviour is "same as access" so simply forwarding to the existing access methods is the minimal migration.
+- **`UploadFailed` / `UploadCompleted` etc. extend `AbstractChunkyEvent`** instead of using their own `Dispatchable + ShouldBroadcast` setup. Behaviour is unchanged for the default broadcast set; custom code that exhaustively `instanceof`-checks individual events still works.
+
+### Documentation
+- Configuration recipes in `examples/en/configuration.md` cover the new `authorization` namespace and the per-event `broadcasting.events` map.
+
+### npm packages
+- All packages bumped to `0.19.0` (frontend additions — `useUpload`, `JsonObject` types).
+
 ## v0.18.0 - 2026-05-02
 
 Structural-cleanup minor. Thinner ChunkyManager, namespaced config,

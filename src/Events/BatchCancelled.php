@@ -4,19 +4,16 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class BatchPartiallyCompleted extends AbstractChunkyEvent
+class BatchCancelled extends AbstractChunkyEvent
 {
     public function __construct(
         public readonly string $batchId,
-        public readonly int $completedFiles,
-        public readonly int $failedFiles,
-        public readonly int $totalFiles,
         public readonly ?string $userId = null,
     ) {}
 
     protected function broadcastEventKey(): string
     {
-        return 'BatchPartiallyCompleted';
+        return 'BatchCancelled';
     }
 
     /**
@@ -40,9 +37,6 @@ class BatchPartiallyCompleted extends AbstractChunkyEvent
     {
         return [
             'batchId' => $this->batchId,
-            'completedFiles' => $this->completedFiles,
-            'failedFiles' => $this->failedFiles,
-            'totalFiles' => $this->totalFiles,
         ];
     }
 }

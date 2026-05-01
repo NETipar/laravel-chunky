@@ -1,3 +1,18 @@
+/**
+ * JSON-serialisable metadata. The shape that survives a round-trip
+ * through `JSON.stringify` / `JSON.parse` — i.e. no Date, Map, Set,
+ * RegExp, function, or class instance. The previous wide
+ * `Record<string, unknown>` accepted those types silently and they
+ * vanished on the wire (`{}` for class instances, ISO string for
+ * Date), which made the client and server disagree.
+ */
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | {
+    [key: string]: JsonValue;
+};
+export type JsonObject = {
+    [key: string]: JsonValue;
+};
 export interface ChunkUploadOptions {
     chunkSize?: number;
     maxConcurrent?: number;

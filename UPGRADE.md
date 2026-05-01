@@ -4,6 +4,64 @@ Migration notes for breaking changes between minor versions while the
 package is in `0.x`. Patch releases (`0.x.y`) never contain breaking
 changes — refer to the [CHANGELOG](CHANGELOG.md) for the full log.
 
+## Upgrading to 0.19 from 0.18
+
+### `Authorizer` contract gained two methods
+
+`canCancelUpload()` and `canCancelBatch()` are now required on the
+`Authorizer` contract. Custom implementations need to add them. The
+minimal migration is to forward to the existing access methods —
+that's the bundled `DefaultAuthorizer` behaviour:
+
+```php
+public function canCancelUpload(?Authenticatable $user, UploadMetadata $upload): bool
+{
+    return $this->canAccessUpload($user, $upload);
+}
+
+public function canCancelBatch(?Authenticatable $user, BatchMetadata $batch): bool
+{
+    return $this->canAccessBatch($user, $batch);
+}
+```
+
+### Per-event broadcast opt-in
+
+Every Chunky event now extends `AbstractChunkyEvent` and gates
+broadcasting on a per-event flag in `chunky.broadcasting.events`. The
+default map (in `config/chunky.php`) keeps the v0.18 set on:
+- `UploadCompleted`, `UploadFailed`, `BatchCompleted`, `BatchPartiallyCompleted`, `BatchCancelled`
+
+…and leaves the rest off:
+- `UploadInitiated`, `UploadCancelled`, `ChunkUploaded`, `ChunkUploadFailed`, `FileAssembled`, `BatchInitiated`
+
+If you want to broadcast one of the off-by-default events (e.g. you
+build a per-chunk progress UI), add it to your published config:
+
+```php
+'broadcasting' => [
+    'events' => [
+        'ChunkUploaded' => true,
+    ],
+],
+```
+
+### Custom `Authorizer` and Gate-aware default
+
+The bundled `DefaultAuthorizer` now defers to Laravel Gates when the
+host application has registered `viewChunkyUpload`,
+`cancelChunkyUpload`, `viewChunkyBatch`, `cancelChunkyBatch`. If you
+already had Gates with these names in your app, Chunky will start
+honouring them — review them to make sure they match the rules you
+expect Chunky to apply. Rename the Gates if you want the previous
+ownership-only behaviour.
+
+### `useChunkUpload` / `useBatchUpload` not deprecated
+
+The two existing composables / hooks remain. The new `useUpload`
+hook is additive — preferred for new code, but the old ones are not
+slated for removal in 0.x.
+
 ## Upgrading to 0.18 from 0.17
 
 v0.18 is the structural-cleanup minor: thinner ChunkyManager, namespaced

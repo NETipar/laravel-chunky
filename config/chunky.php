@@ -182,6 +182,17 @@ return [
     'contexts' => [],
 
     // ------------------------------------------------------------------
+    // Authorization
+    // ------------------------------------------------------------------
+    'authorization' => [
+        // When true (default), uploads / batches that have no recorded
+        // userId are accessible to any caller — backward compatible for
+        // setups without auth middleware. Set to false to require an
+        // authenticated user for every chunky route.
+        'allow_anonymous' => true,
+    ],
+
+    // ------------------------------------------------------------------
     // Routes / rate limiting
     // ------------------------------------------------------------------
     'routes' => [
@@ -217,5 +228,24 @@ return [
         // UploadCompleted/UploadFailed broadcast payloads. Most apps
         // don't need this on the wire.
         'expose_internal_paths' => false,
+
+        // Per-event broadcast opt-in. Every Chunky event extends
+        // AbstractChunkyEvent and gates broadcasting on this map. The
+        // four "completion" events default to true to preserve the
+        // v0.17 behaviour; per-chunk events default to false because
+        // they fire on every chunk write — turning them on is fine for
+        // a low-throughput dashboard but expensive at scale.
+        'events' => [
+            'UploadInitiated' => false,
+            'ChunkUploaded' => false,
+            'ChunkUploadFailed' => false,
+            'FileAssembled' => false,
+            'UploadCompleted' => true,
+            'UploadFailed' => true,
+            'BatchInitiated' => false,
+            'BatchCompleted' => true,
+            'BatchPartiallyCompleted' => true,
+            'BatchCancelled' => true,
+        ],
     ],
 ];

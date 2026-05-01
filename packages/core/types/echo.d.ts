@@ -1,11 +1,20 @@
 export interface EchoInstance {
-    private(channel: string): EchoChannel;
+    private<EventMap = Record<string, any>>(channel: string): EchoChannel<EventMap>;
 }
-export interface EchoChannel {
-    listen(event: string, callback: (data: any) => void): EchoChannel;
-    stopListening(event: string): EchoChannel;
-    subscribed?(callback: () => void): EchoChannel;
-    error?(callback: (err: unknown) => void): EchoChannel;
+/**
+ * Echo channel surface used by the package wrappers. Generic over the
+ * event map of the channel — Laravel Echo wrappers (laravel-echo,
+ * pusher-js) deliver typed payloads, but the channel object
+ * historically had `(data: any)` callbacks. The default
+ * `Record<string, any>` keeps existing untyped wrappers compatible
+ * while letting callers narrow the events when they want by passing
+ * a concrete event map.
+ */
+export interface EchoChannel<EventMap = Record<string, any>> {
+    listen<K extends keyof EventMap & string>(event: K, callback: (data: EventMap[K]) => void): EchoChannel<EventMap>;
+    stopListening<K extends keyof EventMap & string>(event: K): EchoChannel<EventMap>;
+    subscribed?(callback: () => void): EchoChannel<EventMap>;
+    error?(callback: (err: unknown) => void): EchoChannel<EventMap>;
 }
 export interface UploadCompletedData {
     uploadId: string;

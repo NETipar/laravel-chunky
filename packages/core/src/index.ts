@@ -38,6 +38,9 @@ export type {
     BatchUploaderState,
     BatchUploaderEventMap,
     EventCallback,
+    JsonPrimitive,
+    JsonValue,
+    JsonObject,
 } from './types';
 export type {
     EchoInstance,

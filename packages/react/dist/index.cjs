@@ -27,6 +27,7 @@ __export(index_exports, {
   useBatchEcho: () => useBatchEcho,
   useBatchUpload: () => useBatchUpload,
   useChunkUpload: () => useChunkUpload,
+  useUpload: () => useUpload,
   useUploadEcho: () => useUploadEcho,
   useUserEcho: () => useUserEcho,
   watchBatchCompletion: () => import_chunky_core4.watchBatchCompletion
@@ -207,6 +208,17 @@ function useBatchUpload(options = {}) {
     onFileError,
     onComplete,
     onError
+  };
+}
+
+// src/useUpload.ts
+function useUpload(options = {}) {
+  const inner = useBatchUpload(options);
+  const toArray = (input) => Array.isArray(input) ? input : [input];
+  return {
+    ...inner,
+    upload: (input, metadata) => inner.upload(toArray(input), metadata),
+    enqueue: (input, metadata) => inner.enqueue(toArray(input), metadata)
   };
 }
 

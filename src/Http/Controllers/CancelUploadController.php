@@ -19,7 +19,7 @@ class CancelUploadController extends Controller
             return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 
-        if (! $authorizer->canAccessUpload(auth()->user(), $upload)) {
+        if (! $authorizer->canCancelUpload(auth()->user(), $upload)) {
             return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 

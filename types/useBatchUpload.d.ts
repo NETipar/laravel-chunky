@@ -1,24 +1,24 @@
-import { type Ref } from 'vue';
 import type { BatchProgressEvent, BatchResult, BatchUploadOptions, FileProgressEvent, Unsubscribe, UploadError, UploadResult } from '@netipar/chunky-core';
 export interface BatchUploadReturn {
-    batchId: Ref<string | null>;
-    totalFiles: Ref<number>;
-    completedFiles: Ref<number>;
-    failedFiles: Ref<number>;
-    progress: Ref<number>;
-    isUploading: Ref<boolean>;
-    isComplete: Ref<boolean>;
-    error: Ref<string | null>;
-    currentFileName: Ref<string | null>;
+    batchId: string | null;
+    totalFiles: number;
+    completedFiles: number;
+    failedFiles: number;
+    progress: number;
+    isUploading: boolean;
+    isComplete: boolean;
+    error: string | null;
+    currentFileName: string | null;
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;
     resume: () => void;
     /**
-     * Tear down the uploader manually. Required when the composable is used
-     * outside a component scope (e.g. in a Pinia store) where the automatic
-     * `onScopeDispose` cleanup does not fire.
+     * Tear down the uploader manually. The hook's useEffect cleanup
+     * already does this on unmount, but having it on the return value
+     * lets components that hold the uploader in a ref or context cancel
+     * it deterministically (e.g. before navigating away).
      */
     destroy: () => void;
     onProgress: (callback: (event: BatchProgressEvent) => void) => Unsubscribe;

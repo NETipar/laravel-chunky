@@ -4,19 +4,17 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class BatchPartiallyCompleted extends AbstractChunkyEvent
+class UploadCancelled extends AbstractChunkyEvent
 {
     public function __construct(
-        public readonly string $batchId,
-        public readonly int $completedFiles,
-        public readonly int $failedFiles,
-        public readonly int $totalFiles,
+        public readonly string $uploadId,
+        public readonly ?string $batchId = null,
         public readonly ?string $userId = null,
     ) {}
 
     protected function broadcastEventKey(): string
     {
-        return 'BatchPartiallyCompleted';
+        return 'UploadCancelled';
     }
 
     /**
@@ -24,7 +22,7 @@ class BatchPartiallyCompleted extends AbstractChunkyEvent
      */
     protected function broadcastChannelSuffixes(): array
     {
-        $suffixes = ["batches.{$this->batchId}"];
+        $suffixes = ["uploads.{$this->uploadId}"];
 
         if ($this->userId) {
             $suffixes[] = "user.{$this->userId}";
@@ -39,10 +37,8 @@ class BatchPartiallyCompleted extends AbstractChunkyEvent
     public function broadcastWith(): array
     {
         return [
+            'uploadId' => $this->uploadId,
             'batchId' => $this->batchId,
-            'completedFiles' => $this->completedFiles,
-            'failedFiles' => $this->failedFiles,
-            'totalFiles' => $this->totalFiles,
         ];
     }
 }

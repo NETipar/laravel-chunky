@@ -1,0 +1,50 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Illuminate\Contracts\Auth\Authenticatable;
+use NETipar\Chunky\Authorization\Authorizer;
+use NETipar\Chunky\Data\BatchMetadata;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class {{ class }} implements Authorizer
+{
+    public function canAccessUpload(?Authenticatable $user, UploadMetadata $upload): bool
+    {
+        // Default rule: only the upload's owner can access it.
+        return $user !== null
+            && $upload->userId !== null
+            && (string) $user->getAuthIdentifier() === $upload->userId;
+    }
+
+    public function canCancelUpload(?Authenticatable $user, UploadMetadata $upload): bool
+    {
+        return $this->canAccessUpload($user, $upload);
+    }
+
+    public function canAccessBatch(?Authenticatable $user, BatchMetadata $batch): bool
+    {
+        return $user !== null
+            && $batch->userId !== null
+            && (string) $user->getAuthIdentifier() === $batch->userId;
+    }
+
+    public function canCancelBatch(?Authenticatable $user, BatchMetadata $batch): bool
+    {
+        return $this->canAccessBatch($user, $batch);
+    }
+}
+
+/*
+ * Bind this authorizer in your AppServiceProvider:
+ *
+ *  use {{ namespace }}\{{ class }};
+ *  use NETipar\Chunky\Authorization\Authorizer;
+ *
+ *  public function register(): void
+ *  {
+ *      $this->app->singleton(Authorizer::class, {{ class }}::class);
+ *  }
+ */

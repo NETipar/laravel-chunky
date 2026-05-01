@@ -1,0 +1,41 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Illuminate\Support\Facades\Storage;
+use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Data\UploadMetadata;
+
+class {{ class }} extends ChunkyContext
+{
+    public function name(): string
+    {
+        // The context name is referenced by clients via the
+        // `context` field on initiate requests. Pick a stable, URL-safe
+        // identifier — typically the snake_case of this class.
+        return '{{ class }}';
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    public function rules(): array
+    {
+        return [
+            // 'file_size' => ['max:10485760'],         // 10MB
+            // 'mime_type' => ['in:image/jpeg,image/png'],
+        ];
+    }
+
+    public function save(UploadMetadata $metadata): void
+    {
+        // Move the assembled file from chunky/uploads/<id>/<name> to
+        // its final destination, write a DB record, dispatch an event
+        // for downstream processing, etc.
+        //
+        // $disk = Storage::disk($metadata->disk);
+        // $disk->move($metadata->finalPath, "destination/{$metadata->fileName}");
+    }
+}

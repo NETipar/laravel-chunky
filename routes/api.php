@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use NETipar\Chunky\Http\Controllers\BatchStatusController;
+use NETipar\Chunky\Http\Controllers\CancelBatchController;
 use NETipar\Chunky\Http\Controllers\CancelUploadController;
 use NETipar\Chunky\Http\Controllers\InitiateBatchController;
 use NETipar\Chunky\Http\Controllers\InitiateBatchUploadController;
@@ -20,3 +21,4 @@ Route::delete('upload/{uploadId}', CancelUploadController::class)->name('chunky.
 Route::post('batch', InitiateBatchController::class)->name('chunky.batch.initiate');
 Route::post('batch/{batchId}/upload', InitiateBatchUploadController::class)->name('chunky.batch.upload');
 Route::get('batch/{batchId}', BatchStatusController::class)->name('chunky.batch.status');
+Route::delete('batch/{batchId}', CancelBatchController::class)->name('chunky.batch.cancel');

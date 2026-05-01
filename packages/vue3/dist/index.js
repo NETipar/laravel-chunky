@@ -102,6 +102,17 @@ function useBatchUpload(options = {}) {
   };
 }
 
+// src/useUpload.ts
+function useUpload(options = {}) {
+  const inner = useBatchUpload(options);
+  const toArray = (input) => Array.isArray(input) ? input : [input];
+  return {
+    ...inner,
+    upload: (input, metadata) => inner.upload(toArray(input), metadata),
+    enqueue: (input, metadata) => inner.enqueue(toArray(input), metadata)
+  };
+}
+
 // src/useChunkyEcho.ts
 import { watch, getCurrentScope as getCurrentScope3, onScopeDispose as onScopeDispose3 } from "vue";
 import { listenForUser, listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
@@ -255,6 +266,7 @@ export {
   useBatchEcho,
   useBatchUpload,
   useChunkUpload,
+  useUpload,
   useUploadEcho,
   useUserEcho,
   watchBatchCompletion2 as watchBatchCompletion

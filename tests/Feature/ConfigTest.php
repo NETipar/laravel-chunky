@@ -46,5 +46,6 @@ it('registers routes with configured prefix', function () {
 
     $chunkyRoutes = $routes->filter(fn ($route) => str_contains($route->uri(), 'api/chunky'));
 
-    expect($chunkyRoutes)->toHaveCount(7);
+    // 8 routes after the v0.19 batch cancel addition.
+    expect($chunkyRoutes)->toHaveCount(8);
 });

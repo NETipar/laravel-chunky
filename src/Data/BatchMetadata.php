@@ -86,13 +86,24 @@ class BatchMetadata
             totalFiles: (int) $data['total_files'],
             completedFiles: (int) ($data['completed_files'] ?? 0),
             failedFiles: (int) ($data['failed_files'] ?? 0),
-            status: isset($data['status']) && $data['status'] instanceof BatchStatus
-                ? $data['status']
-                : BatchStatus::tryFrom($data['status'] ?? 'pending') ?? BatchStatus::Pending,
+            status: self::resolveStatus($data['status'] ?? null),
             context: $data['context'] ?? null,
             userId: isset($data['user_id']) && $data['user_id'] !== ''
                 ? (string) $data['user_id']
                 : null,
         );
+    }
+
+    private static function resolveStatus(mixed $raw): BatchStatus
+    {
+        if ($raw instanceof BatchStatus) {
+            return $raw;
+        }
+
+        if (! is_string($raw)) {
+            return BatchStatus::Pending;
+        }
+
+        return BatchStatus::tryFrom($raw) ?? BatchStatus::Pending;
     }
 }

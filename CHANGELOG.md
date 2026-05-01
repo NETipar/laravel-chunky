@@ -2,6 +2,27 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
+## v0.16.0 - 2026-05-01
+
+Polish release: localisable HTTP error messages, runtime config validation, fewer magic strings, and a 503 path for Cache-lock contention. No new public features; everything here is hardening or readability.
+
+### Added
+- **`lang/en/chunky.php`** translation file. The HTTP controller `message` payloads (`upload_not_found`, `upload_finalized`, `batch_not_found`, `busy`) now route through `__('chunky::chunky.http.*')`, so non-English Laravel projects can publish and translate them with `php artisan vendor:publish --tag=chunky-lang`. Internal `ChunkyException` messages stay hardcoded by design — they carry dynamic context (upload ids, status values) and are more useful to log than to translate.
+- **`TrackerDriver` enum** (`NETipar\Chunky\Enums\TrackerDriver`) with `Database` / `Filesystem` cases and a `current()` helper. Replaces the inline `config('chunky.tracker') === 'database'` magic-string checks.
+- **`BatchMetadata::resolveStatus()`** factor-out — the previous nested-ternary status fallback is now a small helper with explicit branches for `instanceof BatchStatus`, non-string, and string-with-`tryFrom` paths.
+- **Boot-time config validation.** `chunky.tracker` and `chunky.lock_driver` are checked against their allowed values (`database`/`filesystem` and `flock`/`cache`); a typo (`'datbase'`) now throws a clear `RuntimeException` instead of silently falling through to a default.
+- **`LockTimeoutException` → 503 Service Unavailable** in `UploadChunkController`. When the cache-backed lock times out under contention, the client sees a clear 503 with a "please retry" message instead of an opaque 500. The idempotency-key dedupes safely on retry.
+
+### Changed
+- **HTTP status codes use `Symfony\Component\HttpFoundation\Response` constants** in `UploadChunkController` (`Response::HTTP_GONE`, `HTTP_CONFLICT`, `HTTP_SERVICE_UNAVAILABLE`). Same response codes, more searchable code.
+- **`ChunkyManager::handler()` and `::tracker()`** annotated `@internal` (matching the existing Facade-level `@internal` annotation). Not a behaviour change; just a clearer SemVer signal that these are not part of the public API.
+
+### npm packages
+- All packages bumped to `0.16.0` (no source changes in the JS packages — re-publish for version-sync consistency).
+
+### Migration notes
+- The `lang/en/chunky.php` file is auto-loaded by the service provider. Existing installations don't need to publish it unless they want to override the strings; HTTP responses will pick up the English defaults out of the box.
+
 ## v0.15.0 - 2026-05-01
 
 This release closes the **documentation and developer-experience gap** that v0.10–v0.14 accumulated. No source-code changes to the upload pipeline; the focus is on bringing the README up to date with the v0.12+ feature set, shipping the standard governance documents, exposing the long-undocumented `UploadFailed` event end-to-end, and tightening the package's public metadata for Packagist / npm discoverability.

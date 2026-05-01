@@ -420,11 +420,19 @@ class ChunkyManager
         $this->updateFilesystemBatchCounter($batchId, 'failed_files');
     }
 
+    /**
+     * @internal Used by the package's own internals (cleanup command, jobs).
+     *           Not part of the public API — access ChunkHandler/UploadTracker
+     *           via the service container or DI instead.
+     */
     public function handler(): ChunkHandler
     {
         return $this->handler;
     }
 
+    /**
+     * @internal See handler() above.
+     */
     public function tracker(): UploadTracker
     {
         return $this->tracker;

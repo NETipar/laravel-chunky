@@ -16,13 +16,13 @@ class UploadStatusController extends Controller
         $status = $manager->status($uploadId);
 
         if (! $status) {
-            return response()->json(['message' => 'Upload not found.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.upload_not_found')], 404);
         }
 
         if (! $authorizer->canAccessUpload(auth()->user(), $status)) {
             // Match the not-found response so non-owners can't probe which
             // upload IDs exist.
-            return response()->json(['message' => 'Upload not found.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.upload_not_found')], 404);
         }
 
         return response()->json($status->toPublicArray());

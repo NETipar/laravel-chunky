@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Http\Controllers;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Cache;
@@ -12,6 +13,7 @@ use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;
 use NETipar\Chunky\Http\Requests\UploadChunkRequest;
 use NETipar\Chunky\Jobs\AssembleFileJob;
+use Symfony\Component\HttpFoundation\Response;
 
 class UploadChunkController extends Controller
 {
@@ -39,11 +41,19 @@ class UploadChunkController extends Controller
                 chunk: $request->file('chunk'),
             );
         } catch (UploadExpiredException $e) {
-            return response()->json(['message' => $e->getMessage()], 410);
+            return response()->json(['message' => $e->getMessage()], Response::HTTP_GONE);
+        } catch (LockTimeoutException $e) {
+            // 503 Service Unavailable: too much contention on this upload's
+            // lock. Safe to retry — the idempotency-key dedupes if the
+            // earlier attempt eventually went through.
+            return response()->json(
+                ['message' => __('chunky::chunky.http.busy')],
+                Response::HTTP_SERVICE_UNAVAILABLE,
+            );
         } catch (ChunkyException $e) {
             // 409 Conflict: the upload is no longer in a state where it can
             // accept chunks (cancelled / completed / failed / assembling).
-            return response()->json(['message' => $e->getMessage()], 409);
+            return response()->json(['message' => $e->getMessage()], Response::HTTP_CONFLICT);
         }
 
         if ($result->isComplete) {

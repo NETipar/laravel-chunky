@@ -16,17 +16,17 @@ class CancelUploadController extends Controller
         $upload = $manager->status($uploadId);
 
         if (! $upload) {
-            return response()->json(['message' => 'Upload not found or already finalized.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 
         if (! $authorizer->canAccessUpload(auth()->user(), $upload)) {
-            return response()->json(['message' => 'Upload not found or already finalized.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 
         $cancelled = $manager->cancel($uploadId);
 
         if (! $cancelled) {
-            return response()->json(['message' => 'Upload not found or already finalized.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 
         return response()->json(null, 204);

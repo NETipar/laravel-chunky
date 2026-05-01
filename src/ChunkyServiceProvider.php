@@ -62,12 +62,44 @@ class ChunkyServiceProvider extends ServiceProvider
             __DIR__.'/../resources/views' => resource_path('views/vendor/chunky'),
         ], 'chunky-views');
 
+        $this->loadTranslationsFrom(__DIR__.'/../lang', 'chunky');
+
+        $this->publishes([
+            __DIR__.'/../lang' => $this->app->langPath('vendor/chunky'),
+        ], 'chunky-lang');
+
         $this->registerRoutes();
         $this->registerBroadcastChannels();
         $this->registerContexts();
         $this->registerLivewireComponents();
         $this->registerCleanup();
+        $this->assertConfigurationIsValid();
         $this->assertLockDriverCompatibility();
+    }
+
+    /**
+     * Catch typo'd config values at boot rather than letting them silently
+     * fall through to a default branch. `chunky.tracker = 'datbase'` would
+     * previously match the `default` arm of the singleton resolver and
+     * create a FilesystemTracker — a confusing failure mode.
+     */
+    private function assertConfigurationIsValid(): void
+    {
+        $tracker = config('chunky.tracker', 'database');
+
+        if (! in_array($tracker, ['database', 'filesystem'], true)) {
+            throw new \RuntimeException(
+                "Invalid chunky.tracker value '{$tracker}'. Allowed: 'database', 'filesystem'.",
+            );
+        }
+
+        $lockDriver = config('chunky.lock_driver', 'flock');
+
+        if (! in_array($lockDriver, ['flock', 'cache'], true)) {
+            throw new \RuntimeException(
+                "Invalid chunky.lock_driver value '{$lockDriver}'. Allowed: 'flock', 'cache'.",
+            );
+        }
     }
 
     /**

@@ -16,11 +16,11 @@ class BatchStatusController extends Controller
         $batch = $manager->getBatchStatus($batchId);
 
         if (! $batch) {
-            return response()->json(['message' => 'Batch not found.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.batch_not_found')], 404);
         }
 
         if (! $authorizer->canAccessBatch(auth()->user(), $batch)) {
-            return response()->json(['message' => 'Batch not found.'], 404);
+            return response()->json(['message' => __('chunky::chunky.http.batch_not_found')], 404);
         }
 
         return response()->json($batch->toArray());

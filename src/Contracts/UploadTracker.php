@@ -9,7 +9,11 @@ interface UploadTracker
 {
     public function initiate(string $uploadId, UploadMetadata $metadata): void;
 
-    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): void;
+    /**
+     * Persist a completed chunk and return the freshly updated metadata so callers
+     * do not need a follow-up read to learn the new state.
+     */
+    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata;
 
     /**
      * @return array<int, int>

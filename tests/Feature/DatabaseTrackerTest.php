@@ -55,6 +55,17 @@ it('marks chunks as uploaded', function () {
     expect($chunks)->toBe([0, 1, 2]);
 });
 
+it('returns the freshly updated metadata from markChunkUploaded', function () {
+    $tracker = createTracker();
+    $tracker->initiate('mark-1', createMetadata(totalChunks: 3));
+
+    $metadata = $tracker->markChunkUploaded('mark-1', 1);
+
+    expect($metadata->uploadedChunks)->toBe([1]);
+    expect($metadata->totalChunks)->toBe(3);
+    expect($metadata->uploadId)->toBe('mark-1');
+});
+
 it('does not duplicate chunk indices', function () {
     $tracker = createTracker();
     $tracker->initiate('test-upload', createMetadata());

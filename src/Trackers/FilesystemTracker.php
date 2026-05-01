@@ -27,7 +27,7 @@ class FilesystemTracker implements UploadTracker
         );
     }
 
-    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): void
+    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
     {
         $data = $this->readRawMetadata($uploadId);
         $chunks = $data['uploaded_chunks'] ?? [];
@@ -40,6 +40,8 @@ class FilesystemTracker implements UploadTracker
         $data['uploaded_chunks'] = $chunks;
 
         $this->writeRawMetadata($uploadId, $data);
+
+        return UploadMetadata::fromArray($data);
     }
 
     /**

@@ -163,15 +163,12 @@ class ChunkyManager
     {
         try {
             $this->handler->store($uploadId, $chunkIndex, $chunk);
-            $this->tracker->markChunkUploaded($uploadId, $chunkIndex);
+            $metadata = $this->tracker->markChunkUploaded($uploadId, $chunkIndex);
 
-            $metadata = $this->tracker->getMetadata($uploadId);
-            $totalChunks = $metadata?->totalChunks ?? 0;
-
-            ChunkUploaded::dispatch($uploadId, $chunkIndex, $totalChunks);
+            ChunkUploaded::dispatch($uploadId, $chunkIndex, $metadata->totalChunks);
 
             return new ChunkUploadResult(
-                isComplete: $this->tracker->isComplete($uploadId),
+                isComplete: count($metadata->uploadedChunks) >= $metadata->totalChunks,
                 metadata: $metadata,
             );
         } catch (\Throwable $e) {

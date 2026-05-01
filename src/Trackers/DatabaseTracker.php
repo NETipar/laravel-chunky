@@ -32,9 +32,9 @@ class DatabaseTracker implements UploadTracker
         ]);
     }
 
-    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): void
+    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
     {
-        DB::transaction(function () use ($uploadId, $chunkIndex, $checksum): void {
+        return DB::transaction(function () use ($uploadId, $chunkIndex, $checksum): UploadMetadata {
             $upload = ChunkedUpload::where('upload_id', $uploadId)
                 ->lockForUpdate()
                 ->first();
@@ -50,7 +50,29 @@ class DatabaseTracker implements UploadTracker
             }
 
             $upload->markChunkUploaded($chunkIndex, $checksum);
+
+            return $this->modelToMetadata($upload->refresh());
         });
+    }
+
+    private function modelToMetadata(ChunkedUpload $upload): UploadMetadata
+    {
+        return UploadMetadata::fromArray([
+            'upload_id' => $upload->upload_id,
+            'batch_id' => $upload->batch_id,
+            'user_id' => $upload->user_id,
+            'file_name' => $upload->file_name,
+            'file_size' => $upload->file_size,
+            'mime_type' => $upload->mime_type,
+            'chunk_size' => $upload->chunk_size,
+            'total_chunks' => $upload->total_chunks,
+            'uploaded_chunks' => $upload->uploaded_chunks,
+            'disk' => $upload->disk,
+            'context' => $upload->context,
+            'metadata' => $upload->metadata,
+            'status' => $upload->status,
+            'final_path' => $upload->final_path,
+        ]);
     }
 
     /**
@@ -78,22 +100,7 @@ class DatabaseTracker implements UploadTracker
             return null;
         }
 
-        return UploadMetadata::fromArray([
-            'upload_id' => $upload->upload_id,
-            'batch_id' => $upload->batch_id,
-            'user_id' => $upload->user_id,
-            'file_name' => $upload->file_name,
-            'file_size' => $upload->file_size,
-            'mime_type' => $upload->mime_type,
-            'chunk_size' => $upload->chunk_size,
-            'total_chunks' => $upload->total_chunks,
-            'uploaded_chunks' => $upload->uploaded_chunks,
-            'disk' => $upload->disk,
-            'context' => $upload->context,
-            'metadata' => $upload->metadata,
-            'status' => $upload->status,
-            'final_path' => $upload->final_path,
-        ]);
+        return $this->modelToMetadata($upload);
     }
 
     public function expire(string $uploadId): void

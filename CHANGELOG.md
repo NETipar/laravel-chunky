@@ -4,6 +4,12 @@ All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While in `0.x`, minor releases (`0.x.0`) may contain breaking changes; patch releases (`0.x.y`) are bug-fix only. See [UPGRADE.md](UPGRADE.md) for migration notes.
 
+## Unreleased
+
+### Changed (CI / repo tooling — no published artefact change)
+- **Dependabot auto-merge for patch and minor updates.** New `.github/workflows/dependabot-auto-merge.yml` watches Dependabot PRs and, after the regular CI matrix passes, approves and enables auto-merge (squash) for `version-update:semver-patch` and `version-update:semver-minor` updates. Major bumps get a comment instead and stay open for manual review. The repository's "Allow auto-merge" and "Automatically delete head branches" settings are required and have been enabled.
+- **`dependabot.yml` per-package grouping.** Each `packages/{core,vue3,react,alpine}/` config now defines a single `*-dev-dependencies` group covering `typescript`, `esbuild`, `@types/*`, and the framework peer (`vue` / `react`). Last week's update produced 8 separate PRs for typescript+esbuild across the 4 packages; the same updates would now land as 4 grouped PRs (one per package). The `github-actions` ecosystem also got an `actions` group so all action bumps land in a single PR.
+
 ## v0.17.1 - 2026-05-01
 
 ### Fixed

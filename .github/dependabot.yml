@@ -33,6 +33,10 @@ updates:
       - "ci"
     commit-message:
       prefix: "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   # pnpm workspace - root devDependencies
   - package-ecosystem: "npm"
@@ -55,8 +59,13 @@ updates:
           - "vitest"
           - "@vitest/*"
           - "happy-dom"
+      esbuild:
+        patterns:
+          - "esbuild"
 
-  # Per-package npm dependencies
+  # Per-package npm dependencies — each package's TypeScript / esbuild /
+  # @types bumps land in a single grouped PR per package per week (instead
+  # of the previous 8 separate PRs across the 4 packages).
   - package-ecosystem: "npm"
     directory: "/packages/core"
     schedule:
@@ -64,6 +73,12 @@ updates:
     labels:
       - "dependencies"
       - "package:core"
+    groups:
+      core-dev-dependencies:
+        patterns:
+          - "typescript"
+          - "esbuild"
+          - "@types/*"
 
   - package-ecosystem: "npm"
     directory: "/packages/vue3"
@@ -72,6 +87,13 @@ updates:
     labels:
       - "dependencies"
       - "package:vue3"
+    groups:
+      vue3-dev-dependencies:
+        patterns:
+          - "typescript"
+          - "esbuild"
+          - "@types/*"
+          - "vue"
 
   - package-ecosystem: "npm"
     directory: "/packages/react"
@@ -80,6 +102,13 @@ updates:
     labels:
       - "dependencies"
       - "package:react"
+    groups:
+      react-dev-dependencies:
+        patterns:
+          - "typescript"
+          - "esbuild"
+          - "@types/*"
+          - "react"
 
   - package-ecosystem: "npm"
     directory: "/packages/alpine"
@@ -88,3 +117,9 @@ updates:
     labels:
       - "dependencies"
       - "package:alpine"
+    groups:
+      alpine-dev-dependencies:
+        patterns:
+          - "typescript"
+          - "esbuild"
+          - "@types/*"

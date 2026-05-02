@@ -6,6 +6,12 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.1 - 2026-05-02
+
+### Fixed
+- **`BatchMetadata::__construct()` accepts `CarbonImmutable`.** The `expiresAt` parameter was annotated `?Illuminate\Support\Carbon`, which made the constructor fatally reject `CarbonImmutable` instances. Apps that opt into immutable dates via `Date::use(CarbonImmutable::class)` (Laravel default in newer 11.x boilerplates, explicit in many production apps) hit a `TypeError` on the very first batch upload because `now()` returns `CarbonImmutable` and `ChunkyManager::initiateBatch()` passes it straight through. The parameter is now typed `?\Carbon\CarbonInterface`, the common parent of both `Carbon` and `CarbonImmutable`. Two regression tests cover both shapes.
+- **`ChunkedUpload` and `ChunkyBatch` `@property` annotations** for `completed_at` / `expires_at` / `created_at` / `updated_at` switched from `Carbon` to `CarbonInterface`. PHPStan now infers the right type regardless of the host app's date factory choice.
+
 ## v0.22.0 - 2026-05-02
 
 Closing-the-gaps minor — every remaining item from the v0.17 deep

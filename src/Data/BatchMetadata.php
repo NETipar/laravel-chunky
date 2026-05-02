@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Data;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use NETipar\Chunky\Data\Concerns\HasArrayPayload;
 use NETipar\Chunky\Enums\BatchStatus;
@@ -13,6 +14,13 @@ class BatchMetadata
     use HasArrayPayload;
 
     /**
+     * `expiresAt` is typed as `CarbonInterface` (instead of the
+     * `Illuminate\Support\Carbon` concrete) so the DTO accepts both
+     * `Carbon` and `CarbonImmutable` instances. Apps that opt into
+     * immutable dates via `Date::use(CarbonImmutable::class)` would
+     * otherwise hit a type-error every time `now()` flowed into this
+     * constructor.
+     *
      * @param  array<string, mixed>|null  $metadata
      */
     public function __construct(
@@ -25,7 +33,7 @@ class BatchMetadata
         // See UploadMetadata::$userId for the type rationale.
         public readonly ?string $userId = null,
         public readonly ?array $metadata = null,
-        public readonly ?Carbon $expiresAt = null,
+        public readonly ?CarbonInterface $expiresAt = null,
     ) {}
 
     public function pendingFiles(): int

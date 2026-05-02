@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 use NETipar\Chunky\Enums\BatchStatus;
 use NETipar\Chunky\Events\BatchCompleted;
 use NETipar\Chunky\Events\BatchPartiallyCompleted;
@@ -22,10 +22,10 @@ use NETipar\Chunky\Events\BatchPartiallyCompleted;
  * @property ?string $context
  * @property ?array<string, mixed> $metadata
  * @property BatchStatus $status
- * @property ?Carbon $completed_at
- * @property Carbon $expires_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property ?CarbonInterface $completed_at
+ * @property CarbonInterface $expires_at
+ * @property CarbonInterface $created_at
+ * @property CarbonInterface $updated_at
  */
 class ChunkyBatch extends Model
 {

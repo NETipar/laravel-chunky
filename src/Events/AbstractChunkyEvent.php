@@ -26,6 +26,30 @@ abstract class AbstractChunkyEvent implements ShouldBroadcast
     use Dispatchable, SerializesModels;
 
     /**
+     * Default `broadcasting.events.<key>` flag for events whose
+     * published config doesn't list them. Mirrors the shipped
+     * `config/chunky.php` defaults so apps that upgraded from a
+     * pre-0.18 chunky and never re-published their config still get
+     * the historical broadcast set (the four "completion" events) out
+     * of the box. Without this fallback `mergeConfigFrom` only merges
+     * top-level keys, so the published `broadcasting` array nukes the
+     * `events` sub-map entirely.
+     */
+    private const DEFAULT_BROADCAST_EVENTS = [
+        'UploadCompleted' => true,
+        'UploadFailed' => true,
+        'BatchCompleted' => true,
+        'BatchPartiallyCompleted' => true,
+        'BatchCancelled' => true,
+        'UploadInitiated' => false,
+        'UploadCancelled' => false,
+        'ChunkUploaded' => false,
+        'ChunkUploadFailed' => false,
+        'FileAssembled' => false,
+        'BatchInitiated' => false,
+    ];
+
+    /**
      * The short identifier used in `chunky.broadcasting.events.<key>`
      * lookup. By convention the un-namespaced class basename.
      */
@@ -75,8 +99,15 @@ abstract class AbstractChunkyEvent implements ShouldBroadcast
         // the completion events to true and the high-frequency ones
         // (per-chunk) to false. Operators can re-toggle without
         // changing the source of any event class.
+        //
+        // Fall back to the hard-coded `DEFAULT_BROADCAST_EVENTS` when
+        // the published config has no `events` entry — Laravel's
+        // mergeConfigFrom only merges top-level keys, so apps that
+        // upgraded from pre-0.18 chunky and never re-published their
+        // config would otherwise see every event silently disabled.
         $key = $this->broadcastEventKey();
+        $default = self::DEFAULT_BROADCAST_EVENTS[$key] ?? false;
 
-        return (bool) config("chunky.broadcasting.events.{$key}", false);
+        return (bool) config("chunky.broadcasting.events.{$key}", $default);
     }
 }

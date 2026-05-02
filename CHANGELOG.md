@@ -6,6 +6,11 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.2 - 2026-05-02
+
+### Fixed
+- **`AbstractChunkyEvent::broadcastWhen()` falls back to a hard-coded default map** when the host app's published `config/chunky.php` omits the `broadcasting.events` sub-array. Apps that upgraded from pre-0.18 chunky and never re-published their config still had `broadcasting.enabled = true` plus the old flat keys, but no `events` map — Laravel's `mergeConfigFrom` only merges top-level keys, so the published `broadcasting` array silently nuked the per-event flags shipped with v0.22. Result: every Chunky event silently never broadcast, including `UploadFailed` (the one a media-browser-style frontend relies on to surface validation errors as a visible state instead of hanging on "processing"). The four completion events (`UploadCompleted`, `UploadFailed`, `BatchCompleted`, `BatchPartiallyCompleted`, `BatchCancelled`) are now hard-coded default-on, matching the shipped config; high-frequency events stay default-off. Three regression tests cover the published-config-without-events-map, explicit-override, and globally-disabled paths.
+
 ## v0.22.1 - 2026-05-02
 
 ### Fixed

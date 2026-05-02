@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace NETipar\Chunky\Support;
 
 use Closure;
-use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\ChunkyContext;
+use NETipar\Chunky\Contexts\SimpleDirectoryContext;
 use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Exceptions\ChunkyException;
 
@@ -40,50 +40,22 @@ class ContextRegistry
     }
 
     /**
-     * Quick context registration: validates and moves the file to the given directory.
+     * Quick context registration: validates and moves the file to the
+     * given directory. Backed by `SimpleDirectoryContext` — the class
+     * form is preferred when you need to subclass / customise.
      *
      * @param  array{max_size?: int, mimes?: array<int, string>}  $options
      */
     public function registerSimple(string $name, string $directory, array $options = []): void
     {
-        $rules = null;
-
-        if (! empty($options['max_size']) || ! empty($options['mimes'])) {
-            $rules = function () use ($options) {
-                $r = [];
-
-                if (! empty($options['max_size'])) {
-                    $r['file_size'] = ["max:{$options['max_size']}"];
-                }
-
-                if (! empty($options['mimes'])) {
-                    $r['mime_type'] = ['in:'.implode(',', $options['mimes'])];
-                }
-
-                return $r;
-            };
-        }
+        $context = new SimpleDirectoryContext($name, $directory, $options);
 
         $this->register(
-            name: $name,
-            rules: $rules,
-            save: function (UploadMetadata $metadata) use ($directory): void {
-                $disk = Storage::disk($metadata->disk);
-                // Defence-in-depth: even though InitiateUploadRequest's
-                // file_name regex blocks path-traversal characters and the
-                // assembler applies basename(), guard the destination here
-                // too in case a custom request layer slips one through.
-                $safeName = basename($metadata->fileName);
-
-                if ($safeName === '' || $safeName === '.' || $safeName === '..') {
-                    throw new ChunkyException(
-                        "Refusing to move upload {$metadata->uploadId}: invalid file name."
-                    );
-                }
-
-                $destination = rtrim($directory, '/')."/{$safeName}";
-                $disk->move($metadata->finalPath, $destination);
-            },
+            name: $context->name(),
+            rules: empty($options['max_size']) && empty($options['mimes'])
+                ? null
+                : fn () => $context->rules(),
+            save: fn (UploadMetadata $metadata) => $context->save($metadata),
         );
     }
 

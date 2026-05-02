@@ -33,7 +33,12 @@ class UploadChunkRequest extends FormRequest
         return [
             'chunk' => ['required', 'file'],
             'chunk_index' => $chunkIndexRules,
-            'checksum' => ['nullable', 'string'],
+            // Tighten the format: SHA-256 → exactly 64 lowercase hex
+            // characters. Without the regex any string was accepted,
+            // which would let a hostile caller stuff arbitrary content
+            // (including non-ASCII / SQL-shaped) into the cache key
+            // (`Cache::get('chunky:idem:upid:0:cs:DROP TABLES')`).
+            'checksum' => ['nullable', 'string', 'regex:/^[a-f0-9]{64}$/i'],
         ];
     }
 

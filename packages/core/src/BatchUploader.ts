@@ -72,13 +72,55 @@ export class BatchUploader {
     private cancelledThisRun = false;
 
     constructor(options: BatchUploadOptions = {}, scope?: DefaultsScope) {
-        this.options = options;
+        // Pull defaults from the scope (or the global singleton) and
+        // merge into the call-site options so the BatchUploader's own
+        // fetchJson() respects them too. The previous implementation
+        // forwarded `scope` to the per-file ChunkUploader but the batch
+        // initiate / status calls always read the bare global defaults
+        // — confusing in a multi-scope setup.
+        const defaults = scope ? scope.getDefaults() : getDefaults();
+        const merged: BatchUploadOptions = {
+            ...defaults,
+            ...options,
+            headers: { ...(defaults.headers as Record<string, string> | undefined), ...(options.headers as Record<string, string> | undefined) },
+            endpoints: { ...defaults.endpoints, ...options.endpoints },
+        };
+
+        // Snapshot the options at construction time so a caller mutating
+        // the original object after the fact (common in reactive
+        // frameworks) does not bleed into mid-flight uploads.
+        this.options = merged;
         this.scope = scope;
-        this.maxConcurrentFiles = options.maxConcurrentFiles ?? 2;
+        this.maxConcurrentFiles = merged.maxConcurrentFiles ?? 2;
         this.batchEndpoints = {
             ...DEFAULT_BATCH_ENDPOINTS,
-            ...options.endpoints,
+            // Legacy mixed shape: pull batch-only fields out of
+            // `endpoints` if present.
+            ...(options.endpoints?.batchInitiate ? { batchInitiate: options.endpoints.batchInitiate } : {}),
+            ...(options.endpoints?.batchUpload ? { batchUpload: options.endpoints.batchUpload } : {}),
+            ...(options.endpoints?.batchStatus ? { batchStatus: options.endpoints.batchStatus } : {}),
+            // New explicit batch-only override.
+            ...(options.batchEndpoints ?? {}),
         };
+
+        this.validateBatchEndpoints();
+    }
+
+    /**
+     * Refuse to construct with malformed batch endpoints. Without this
+     * a typo (`/api/chunky/batch/{batch_id}/upload` with the wrong
+     * casing) would leave the `{batchId}` placeholder unsubstituted at
+     * call time, and the server would 404 on a URL containing the
+     * literal `{batchId}` token — extremely confusing to debug.
+     */
+    private validateBatchEndpoints(): void {
+        if (!this.batchEndpoints.batchUpload.includes('{batchId}')) {
+            throw new Error('BatchUploader: batchUpload endpoint must contain a {batchId} placeholder.');
+        }
+
+        if (!this.batchEndpoints.batchStatus.includes('{batchId}')) {
+            throw new Error('BatchUploader: batchStatus endpoint must contain a {batchId} placeholder.');
+        }
     }
 
     on<K extends keyof BatchUploaderEventMap>(event: K, callback: (data: BatchUploaderEventMap[K]) => void): Unsubscribe {

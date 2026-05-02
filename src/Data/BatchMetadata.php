@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace NETipar\Chunky\Data;
 
 use Illuminate\Support\Carbon;
+use NETipar\Chunky\Data\Concerns\HasArrayPayload;
 use NETipar\Chunky\Enums\BatchStatus;
 
 class BatchMetadata
 {
+    use HasArrayPayload;
+
     /**
      * @param  array<string, mixed>|null  $metadata
      */
@@ -87,20 +90,19 @@ class BatchMetadata
      */
     public static function fromArray(array $data): self
     {
+        $expiresAt = self::read($data, 'expires_at');
+        $metadata = self::read($data, 'metadata');
+
         return new self(
-            batchId: $data['batch_id'],
-            totalFiles: (int) $data['total_files'],
-            completedFiles: (int) ($data['completed_files'] ?? 0),
-            failedFiles: (int) ($data['failed_files'] ?? 0),
-            status: self::resolveStatus($data['status'] ?? null),
-            context: $data['context'] ?? null,
-            userId: isset($data['user_id']) && $data['user_id'] !== ''
-                ? (string) $data['user_id']
-                : null,
-            metadata: isset($data['metadata']) && is_array($data['metadata'])
-                ? $data['metadata']
-                : null,
-            expiresAt: isset($data['expires_at']) ? Carbon::parse($data['expires_at']) : null,
+            batchId: self::read($data, 'batch_id'),
+            totalFiles: (int) self::read($data, 'total_files', 0),
+            completedFiles: (int) self::read($data, 'completed_files', 0),
+            failedFiles: (int) self::read($data, 'failed_files', 0),
+            status: self::resolveStatus(self::read($data, 'status')),
+            context: self::read($data, 'context'),
+            userId: self::readUserId(self::read($data, 'user_id')),
+            metadata: is_array($metadata) ? $metadata : null,
+            expiresAt: $expiresAt ? Carbon::parse($expiresAt) : null,
         );
     }
 

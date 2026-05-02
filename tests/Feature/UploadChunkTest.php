@@ -129,10 +129,13 @@ it('skips checksum verification when disabled', function () {
 
     $chunk = UploadedFile::fake()->create('chunk', 1024);
 
+    // The checksum format validator (sha256 = 64 hex chars) runs even
+    // when verify_integrity is off, but a hex string still passes —
+    // verify_integrity gates the *content* check, not the format check.
     $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
         'chunk' => $chunk,
         'chunk_index' => 0,
-        'checksum' => 'this-would-normally-fail',
+        'checksum' => str_repeat('a', 64),
     ]);
 
     $response->assertOk();

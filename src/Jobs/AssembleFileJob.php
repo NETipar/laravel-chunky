@@ -23,18 +23,37 @@ class AssembleFileJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * Allow the queue to retry the assembly if a worker crashed mid-job. The
-     * tracker's `claimForAssembly()` is now able to take over a stale claim
-     * (status is Assembling but the row hasn't been touched in a while), so
-     * a retry actually makes progress instead of hitting the CAS guard.
+     * Allow the queue to retry the assembly if a worker crashed mid-job.
+     * The tracker's `claimForAssembly()` is now able to take over a stale
+     * claim (status is Assembling but the row hasn't been touched in a
+     * while), so a retry actually makes progress instead of hitting the
+     * CAS guard.
+     *
+     * All three (`tries`, `backoff`, `timeout`) are populated from
+     * `config('chunky.assembly.*')` in the constructor so production
+     * setups can tune them without subclassing the job. `timeout` in
+     * particular matters for large uploads — the queue worker default
+     * 60s is far too short for a 50GB assembly.
      */
     public int $tries = 3;
 
     public int $backoff = 30;
 
+    public int $timeout = 600;
+
     public function __construct(
         public readonly string $uploadId,
-    ) {}
+    ) {
+        $this->tries = (int) config('chunky.assembly.tries', 3);
+        $this->backoff = (int) config('chunky.assembly.backoff', 30);
+        $this->timeout = (int) config('chunky.assembly.timeout', 600);
+
+        $queue = config('chunky.assembly.queue');
+
+        if (is_string($queue) && $queue !== '') {
+            $this->onQueue($queue);
+        }
+    }
 
     public function handle(ChunkHandler $handler, UploadTracker $tracker, ChunkyManager $manager): void
     {

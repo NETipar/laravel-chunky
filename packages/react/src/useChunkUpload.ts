@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChunkUploader } from '@netipar/chunky-core';
 import type {
     ChunkInfo,
@@ -34,7 +34,8 @@ export interface ChunkUploadReturn {
 }
 
 export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadReturn {
-    const optionsKey = useMemo(() => JSON.stringify(options), [options]);
+    // See useBatchUpload for the mount-only options snapshot rationale.
+    const optionsRef = useRef(options);
     const uploaderRef = useRef<ChunkUploader | null>(null);
 
     const [progress, setProgress] = useState(0);
@@ -48,7 +49,7 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
     const [currentFile, setCurrentFile] = useState<File | null>(null);
 
     useEffect(() => {
-        const uploader = new ChunkUploader(options);
+        const uploader = new ChunkUploader(optionsRef.current);
         uploaderRef.current = uploader;
 
         const unsub = uploader.on('stateChange', (state) => {
@@ -67,7 +68,8 @@ export function useChunkUpload(options: ChunkUploadOptions = {}): ChunkUploadRet
             unsub();
             uploader.destroy();
         };
-    }, [optionsKey]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const upload = useCallback(
         (file: File, metadata?: Record<string, unknown>) => uploaderRef.current!.upload(file, metadata),

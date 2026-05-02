@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  pint:
-    name: Code style (Pint)
+  quality:
+    name: PHP code quality (Pint + PHPStan + audit)
     runs-on: ubuntu-latest
 
     steps:
@@ -30,80 +30,17 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
-      - name: Check code style
+      - name: Pint (code style)
         run: vendor/bin/pint --test
 
-  phpstan:
-    name: Static analysis (PHPStan)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          coverage: none
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: composer-8.4-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-8.4-
-
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist
-
-      - name: Run PHPStan
+      - name: PHPStan (static analysis)
         run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
-
-  audit:
-    name: Security audit
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          coverage: none
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: composer-8.4-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-8.4-
-
-      - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist
 
       - name: Composer audit
         run: composer audit --format=plain
-        continue-on-error: false
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install npm dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: pnpm audit (production deps, high+)
-        run: pnpm audit --prod --audit-level=high
-        continue-on-error: false
-
-  js-typecheck:
-    name: TypeScript typecheck + tests
+  js-quality:
+    name: Frontend (typecheck + tests + build + audit)
     runs-on: ubuntu-latest
 
     steps:
@@ -121,14 +58,47 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check all packages
+      - name: Typecheck
         run: pnpm typecheck
 
-      - name: Run frontend tests
+      - name: Tests
         run: pnpm test
 
-      - name: Build all packages
+      - name: Build
         run: pnpm -r run build
+
+      - name: pnpm audit (production deps, high+)
+        run: pnpm audit --prod --audit-level=high
+
+  lint-yaml:
+    name: Lint YAML workflows (actionlint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          fail-on-error: true
+
+  lint-md:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          globs: |
+            README.md
+            CHANGELOG.md
+            UPGRADE.md
+            SECURITY.md
+            CONTRIBUTING.md
+            docs/**/*.md
+        continue-on-error: true
 
   tests:
     name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}

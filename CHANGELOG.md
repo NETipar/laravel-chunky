@@ -6,6 +6,170 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.0 - 2026-05-02
+
+Closing-the-gaps minor — every remaining item from the v0.17 deep
+audit, plus React parity, hardened CI, and the long-promised
+release-via-workflow_dispatch automation.
+
+### Added (backend)
+- **`SimpleDirectoryContext`** class form of the registry's "simple"
+  flow (`src/Contexts/SimpleDirectoryContext.php`). The
+  `ContextRegistry::registerSimple()` helper now instantiates it
+  rather than carrying inline closures, which makes the simple flow
+  subclassable and unit-testable in isolation.
+- **`AssembleFileJob` is fully configurable** via the new
+  `chunky.assembly` namespace: `tries`, `backoff`, `timeout`, and
+  `queue`. The previous hard-coded `$tries = 3, $backoff = 30` and
+  the implicit 60s queue timeout are gone — the queue worker default
+  was far too short for multi-GB assemblies.
+- **`HasArrayPayload` trait** on the DTOs (`UploadMetadata`,
+  `BatchMetadata`). Centralises the snake_case ↔ camelCase mapping
+  the tracker storage layer uses, so adding a field touches one
+  place instead of three.
+- **Broadcast channel auth cache** — the `routes/channels.php`
+  callbacks now memoise the upload/batch lookup for
+  `chunky.broadcasting.auth_cache_ttl_seconds` (default 30s). A
+  client disconnect/reconnect storm no longer fans out to the
+  tracker on every subscription auth.
+- **`UploadStatusController`, `BatchStatusController`,
+  `CancelUploadController`, `CancelBatchController` accept
+  `Illuminate\Http\Request` via DI** instead of pulling the user from
+  the `auth()` facade. Mockable from a unit test without booting the
+  auth manager.
+- **Livewire blade fallback markup** — when `chunkUpload` is missing
+  from the global JS scope, the rendered component shows a clear
+  "frontend not loaded" message instead of silently dying with an
+  Alpine console error.
+- **`UploadChunkRequest.checksum` regex validation** (`/^[a-f0-9]{64}$/i`).
+  Prevents arbitrary strings from being stuffed into the cache key
+  via the idempotency lookup path.
+- **`DatabaseTracker::claimForAssembly()` explicit status allowlist**
+  in the CAS query. Makes the legal source statuses declarative —
+  adding a new `UploadStatus` enum case can no longer slip through
+  the orWhere chain unnoticed.
+- **`Metrics` honours the `MetricsListener` contract first** when a
+  class-string handler implements it. The interface stops being
+  vestigial.
+
+### Added (frontend)
+- **Tools subpath export** `@netipar/chunky-core/tools` exposes
+  `EventEmitter` and `RetryPolicy` for advanced consumers building
+  their own orchestrators on the same primitives the package uses.
+  Marked `@internal` until v1.0; pin the package version exactly
+  when importing from this surface.
+- **`mergeDefaults()` + `resetDefaults()`** functions on the core
+  defaults API (and `mergeDefaults` / `reset` on `DefaultsScope`).
+  Replaces the silent-overwrite footgun where back-to-back
+  `setDefaults({ headers: ... })` + `setDefaults({ context: ... })`
+  would drop the headers.
+- **`HeadersInit` accepted everywhere** for the `headers` option
+  (record / array tuple / `Headers` instance). `normalizeHeaders()`
+  flattens internally; the package still stores headers as a flat
+  record so individual keys (`X-XSRF-TOKEN`, `Idempotency-Key`)
+  can be read without `.get()`.
+- **`BatchUploader.validateBatchEndpoints()`** — refuses to
+  construct when `batchUpload`/`batchStatus` lack the `{batchId}`
+  placeholder. Catches typos at construction time instead of at
+  call time with a 404 on a literal `{batchId}` URL.
+- **`BatchUploadOptions.chunkEndpoints` / `batchEndpoints`** split.
+  Lets new code keep the per-chunk and batch endpoints in separate
+  objects. The legacy mixed `endpoints` shape still works.
+- **`useBatchCompletion`** hook on React — parity with the Vue
+  composable. Tracks caller callbacks via `useRef` so a re-render
+  with a new options literal does not trigger re-subscription
+  churn.
+- **`BatchInitiateResponse` is now an open type** (`[extra: string]: unknown`),
+  so server-supplied extras pass through untyped instead of being
+  silently dropped at the type boundary.
+- **Dev-mode warning on unknown event names** in `ChunkUploader.on()`.
+  The compile-time check catches typos in the typed call site, but
+  a `(name as any)` dispatch would silently never fire — this gives
+  a console hint.
+- **`scripts/bump-version.sh`** is now consumed by a new
+  `release.yml` GitHub Actions workflow with a `workflow_dispatch`
+  trigger. Triggering "Run workflow" with a version input bumps
+  the four npm package.json files, commits, tags, and publishes
+  the GitHub Release end-to-end.
+
+### Changed (breaking)
+- **`UploadTracker::markChunkUploaded()` no longer accepts the
+  unused `?string $checksum` parameter.** The signature was
+  defined but never persisted — the contract is now honest.
+- **`ChunkyManager::handler()` and `tracker()` `@internal`
+  accessors removed.** Resolve the underlying services through the
+  container instead.
+- **AWS-style "full jitter" retry delays** in `RetryPolicy` (was
+  `baseDelay + Math.random() * 250`). Many parallel chunk workers
+  now genuinely de-synchronise on retry instead of all hammering
+  the server in lockstep.
+- **`upload()` resume falls through to a fresh initiate on 404**
+  (was: surfaced the 404 as the upload's own error). Lets a
+  client transparently recover when the server's expiration
+  sweep collected the upload between pause and resume.
+- **`ChunkUploader.uploadId!` non-null assertion replaced by a
+  local capture.** A future edit that resets `this.uploadId`
+  earlier in the flow can no longer crash the result-payload
+  build.
+- **`BatchUploader` honours the `scope`-supplied defaults in its
+  own `fetchJson` calls**, not just in the per-file
+  `ChunkUploader`s it creates. Multi-scope setups now behave
+  consistently.
+- **`BatchUploader` clones its `options` snapshot at construction.**
+  Caller-side mutations after the fact (common in reactive
+  frameworks) no longer bleed into in-flight uploads.
+- **React `useBatchUpload` / `useChunkUpload` are mount-only on
+  options.** The old `useMemo(() => JSON.stringify(options))`
+  threw on circular refs (`Headers`, functions) and silently lost
+  data on `Date` / `Map` values — neither edge case is a real
+  use, so the option snapshot is now taken via `useRef` once on
+  mount. Callers that need to change options at runtime should
+  unmount/remount the hook or use the imperative core
+  `BatchUploader` directly.
+- **Vue `useChunkyEcho` / React `useChunkyEcho` track callbacks
+  via ref.** A re-render that creates a fresh `callbacks = { ... }`
+  literal no longer dispatches into stale closures.
+
+### Removed
+- **`broadcasting.user_channel`, `idempotency.enabled`,
+  `skip_local_disk_guard`** flags — already dropped in v0.18; this
+  release deletes the last remaining `?string $checksum` shim from
+  the tracker contract and the `ChunkyManager::handler()`/`tracker()`
+  accessors.
+
+### Tooling / governance
+- **CI quality job consolidation.** Pint, PHPStan, and `composer
+  audit` run in one `quality` job (instead of three identical
+  `composer install` jobs). Frontend gets a single `js-quality`
+  job covering typecheck + tests + build + `pnpm audit`.
+- **`actionlint`** GitHub workflow lints every `.github/workflows/*.yml`
+  on every push. Catches a malformed YAML before the workflow
+  silently dies.
+- **`markdownlint-cli2`** runs against README, CHANGELOG, UPGRADE,
+  SECURITY, CONTRIBUTING, and `docs/**/*.md`. Continue-on-error so
+  a stylistic nit does not block the merge queue.
+- **`release.yml`** workflow_dispatch trigger lets a maintainer
+  release v$X.Y.Z by clicking "Run workflow" — the workflow
+  validates the CHANGELOG entry exists, runs `bump-version.sh`,
+  commits the bumps, and creates the GitHub Release with the
+  CHANGELOG entry as release notes.
+- **TypeScript pre-check on build.** Every package's `build` script
+  now runs `tsc --noEmit -p tsconfig.json` first, so a typo in
+  source surfaces during the build instead of after publish.
+
+### Tests
+- **`mockFetchSequence` helper bumped** to support `delayMs`,
+  `validateRequest`, custom headers / raw body. The previous
+  signature didn't let a test assert what headers a chunk POST
+  carried.
+
+### npm packages
+- All packages bumped to `0.22.0` (frontend changes — tools
+  subpath, mergeDefaults, HeadersInit, useBatchCompletion on React,
+  validateBatchEndpoints, options clone, full jitter retry, resume
+  404 recovery, mount-only React options snapshot, callback-ref
+  tracking).
+
 ## v0.21.0 - 2026-05-02
 
 Last "polish" minor before v1.0 — closes the gaps left over from the

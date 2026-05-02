@@ -2,7 +2,7 @@ export { ChunkUploader } from './ChunkUploader';
 export { BatchUploader } from './BatchUploader';
 export { listenForUser, listenForUploadComplete, listenForUploadEvents, listenForBatchComplete, } from './echo';
 export { watchBatchCompletion } from './CompletionWatcher';
-export { setDefaults, getDefaults, createDefaults } from './config';
+export { setDefaults, mergeDefaults, getDefaults, resetDefaults, createDefaults } from './config';
 export { UploadHttpError } from './types';
 export type { DefaultsScope } from './config';
 export type { CompletionSource, CompletionStatus, BatchStatusResponse, BatchCompletionResult, CompletionWatcherOptions, } from './CompletionWatcher';

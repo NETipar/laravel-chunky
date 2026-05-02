@@ -34,7 +34,7 @@ class DatabaseTracker implements UploadTracker
         ]);
     }
 
-    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
+    public function markChunkUploaded(string $uploadId, int $chunkIndex): UploadMetadata
     {
         return DB::transaction(function () use ($uploadId, $chunkIndex): UploadMetadata {
             $upload = ChunkedUpload::where('upload_id', $uploadId)
@@ -143,13 +143,22 @@ class DatabaseTracker implements UploadTracker
             (int) config('chunky.lifecycle.assembly_stale_after_minutes', 10),
         );
 
-        // The CAS allows two transitions:
+        // Explicit allowlist of source statuses for the CAS, then the
+        // per-status guard. Without the leading whereIn() a future enum
+        // case (e.g. Stalled, Quarantined) would silently slip through
+        // the orWhere chain — the test suite would not catch it because
+        // the bare `where('status', Pending)` short-circuit would still
+        // reject. Whitelisting the source statuses up-front makes the
+        // intent declarative.
+        //
+        // The two transitions allowed:
         //  - Pending → Assembling: the normal first claim.
         //  - Assembling → Assembling (refreshed updated_at) when the row
         //    hasn't been touched in `assembly_stale_after_minutes`. This
-        //    lets a retry recover an upload whose first worker died after
-        //    flipping the status but before persisting Completed.
+        //    lets a retry recover an upload whose first worker died
+        //    after flipping the status but before persisting Completed.
         $updated = ChunkedUpload::where('upload_id', $uploadId)
+            ->whereIn('status', [UploadStatus::Pending, UploadStatus::Assembling])
             ->where(function ($query) use ($staleThreshold) {
                 $query->where('status', UploadStatus::Pending)
                     ->orWhere(function ($query) use ($staleThreshold) {

@@ -153,13 +153,33 @@ function useUpload(options = {}) {
 // src/useChunkyEcho.ts
 var import_vue3 = require("vue");
 var import_chunky_core3 = require("@netipar/chunky-core");
+function trackCallbackRefs(callbacks) {
+  const refs = {};
+  const proxy = {};
+  for (const key of Object.keys(callbacks)) {
+    const r = (0, import_vue3.ref)(callbacks[key]);
+    refs[key] = r;
+    proxy[key] = ((...args) => r.value?.(...args));
+  }
+  return { refs, proxy };
+}
 function useUserEcho(echo, userId, callbacks, channelPrefix) {
   let cleanup = null;
+  const { refs, proxy } = trackCallbackRefs(callbacks);
+  (0, import_vue3.watch)(
+    () => callbacks,
+    (next) => {
+      for (const k of Object.keys(refs)) {
+        refs[k].value = next[k];
+      }
+    },
+    { deep: true, flush: "sync" }
+  );
   (0, import_vue3.watch)(userId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = (0, import_chunky_core3.listenForUser)(echo, id, callbacks, channelPrefix);
+      cleanup = (0, import_chunky_core3.listenForUser)(echo, id, proxy, channelPrefix);
     }
   }, { immediate: true });
   if ((0, import_vue3.getCurrentScope)()) {
@@ -168,11 +188,15 @@ function useUserEcho(echo, userId, callbacks, channelPrefix) {
 }
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   let cleanup = null;
+  const callbackRef = (0, import_vue3.ref)(callback);
+  (0, import_vue3.watch)(() => callback, (next) => {
+    callbackRef.value = next;
+  }, { flush: "sync" });
   (0, import_vue3.watch)(uploadId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = (0, import_chunky_core3.listenForUploadComplete)(echo, id, callback, channelPrefix);
+      cleanup = (0, import_chunky_core3.listenForUploadComplete)(echo, id, (data) => callbackRef.value(data), channelPrefix);
     }
   }, { immediate: true });
   if ((0, import_vue3.getCurrentScope)()) {
@@ -181,11 +205,21 @@ function useUploadEcho(echo, uploadId, callback, channelPrefix) {
 }
 function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
   let cleanup = null;
+  const { refs, proxy } = trackCallbackRefs(callbacks);
+  (0, import_vue3.watch)(
+    () => callbacks,
+    (next) => {
+      for (const k of Object.keys(refs)) {
+        refs[k].value = next[k];
+      }
+    },
+    { deep: true, flush: "sync" }
+  );
   (0, import_vue3.watch)(batchId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = (0, import_chunky_core3.listenForBatchComplete)(echo, id, callbacks, channelPrefix);
+      cleanup = (0, import_chunky_core3.listenForBatchComplete)(echo, id, proxy, channelPrefix);
     }
   }, { immediate: true });
   if ((0, import_vue3.getCurrentScope)()) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use NETipar\Chunky\Authorization\Authorizer;
 use NETipar\Chunky\ChunkyManager;
@@ -12,8 +13,12 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CancelBatchController extends Controller
 {
-    public function __invoke(string $batchId, ChunkyManager $manager, Authorizer $authorizer): JsonResponse
-    {
+    public function __invoke(
+        Request $request,
+        string $batchId,
+        ChunkyManager $manager,
+        Authorizer $authorizer,
+    ): JsonResponse {
         $batch = $manager->getBatchStatus($batchId);
 
         if (! $batch) {
@@ -23,7 +28,7 @@ class CancelBatchController extends Controller
             );
         }
 
-        if (! $authorizer->canCancelBatch(auth()->user(), $batch)) {
+        if (! $authorizer->canCancelBatch($request->user(), $batch)) {
             // Hide the batch's existence from unauthorised callers.
             return response()->json(
                 ['message' => __('chunky::chunky.http.batch_not_found')],

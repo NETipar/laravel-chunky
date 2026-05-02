@@ -53,7 +53,7 @@ class FilesystemTracker implements UploadTracker
         );
     }
 
-    public function markChunkUploaded(string $uploadId, int $chunkIndex, ?string $checksum = null): UploadMetadata
+    public function markChunkUploaded(string $uploadId, int $chunkIndex): UploadMetadata
     {
         return $this->withLock($uploadId, function () use ($uploadId, $chunkIndex): UploadMetadata {
             $data = $this->readRawMetadata($uploadId);

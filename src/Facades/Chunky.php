@@ -6,8 +6,6 @@ namespace NETipar\Chunky\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use NETipar\Chunky\ChunkyManager;
-use NETipar\Chunky\Contracts\ChunkHandler;
-use NETipar\Chunky\Contracts\UploadTracker;
 use NETipar\Chunky\Data\BatchMetadata;
 use NETipar\Chunky\Data\ChunkUploadResult;
 use NETipar\Chunky\Data\InitiateResult;
@@ -29,8 +27,7 @@ use NETipar\Chunky\Data\UploadMetadata;
  * @method static BatchMetadata|null getBatchStatus(string $batchId)
  * @method static void markBatchUploadCompleted(string $batchId)
  * @method static void markBatchUploadFailed(string $batchId)
- * @method static ChunkHandler handler() @internal use through DI rather than the facade
- * @method static UploadTracker tracker() @internal use through DI rather than the facade
+ * @method static bool cancelBatch(string $batchId)
  *
  * @see ChunkyManager
  */

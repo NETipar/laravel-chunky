@@ -114,15 +114,35 @@ function useUpload(options = {}) {
 }
 
 // src/useChunkyEcho.ts
-import { watch, getCurrentScope as getCurrentScope3, onScopeDispose as onScopeDispose3 } from "vue";
+import { watch, getCurrentScope as getCurrentScope3, onScopeDispose as onScopeDispose3, ref as ref3 } from "vue";
 import { listenForUser, listenForUploadComplete, listenForBatchComplete } from "@netipar/chunky-core";
+function trackCallbackRefs(callbacks) {
+  const refs = {};
+  const proxy = {};
+  for (const key of Object.keys(callbacks)) {
+    const r = ref3(callbacks[key]);
+    refs[key] = r;
+    proxy[key] = ((...args) => r.value?.(...args));
+  }
+  return { refs, proxy };
+}
 function useUserEcho(echo, userId, callbacks, channelPrefix) {
   let cleanup = null;
+  const { refs, proxy } = trackCallbackRefs(callbacks);
+  watch(
+    () => callbacks,
+    (next) => {
+      for (const k of Object.keys(refs)) {
+        refs[k].value = next[k];
+      }
+    },
+    { deep: true, flush: "sync" }
+  );
   watch(userId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = listenForUser(echo, id, callbacks, channelPrefix);
+      cleanup = listenForUser(echo, id, proxy, channelPrefix);
     }
   }, { immediate: true });
   if (getCurrentScope3()) {
@@ -131,11 +151,15 @@ function useUserEcho(echo, userId, callbacks, channelPrefix) {
 }
 function useUploadEcho(echo, uploadId, callback, channelPrefix) {
   let cleanup = null;
+  const callbackRef = ref3(callback);
+  watch(() => callback, (next) => {
+    callbackRef.value = next;
+  }, { flush: "sync" });
   watch(uploadId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = listenForUploadComplete(echo, id, callback, channelPrefix);
+      cleanup = listenForUploadComplete(echo, id, (data) => callbackRef.value(data), channelPrefix);
     }
   }, { immediate: true });
   if (getCurrentScope3()) {
@@ -144,11 +168,21 @@ function useUploadEcho(echo, uploadId, callback, channelPrefix) {
 }
 function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
   let cleanup = null;
+  const { refs, proxy } = trackCallbackRefs(callbacks);
+  watch(
+    () => callbacks,
+    (next) => {
+      for (const k of Object.keys(refs)) {
+        refs[k].value = next[k];
+      }
+    },
+    { deep: true, flush: "sync" }
+  );
   watch(batchId, (id) => {
     cleanup?.();
     cleanup = null;
     if (id) {
-      cleanup = listenForBatchComplete(echo, id, callbacks, channelPrefix);
+      cleanup = listenForBatchComplete(echo, id, proxy, channelPrefix);
     }
   }, { immediate: true });
   if (getCurrentScope3()) {
@@ -157,12 +191,12 @@ function useBatchEcho(echo, batchId, callbacks, channelPrefix) {
 }
 
 // src/useBatchCompletion.ts
-import { ref as ref3, watch as watch2, getCurrentScope as getCurrentScope4, onScopeDispose as onScopeDispose4 } from "vue";
+import { ref as ref4, watch as watch2, getCurrentScope as getCurrentScope4, onScopeDispose as onScopeDispose4 } from "vue";
 import { watchBatchCompletion } from "@netipar/chunky-core";
 function useBatchCompletion(batchId, options = {}) {
-  const isWaiting = ref3(false);
-  const receivedVia = ref3(null);
-  const result = ref3(null);
+  const isWaiting = ref4(false);
+  const receivedVia = ref4(null);
+  const result = ref4(null);
   let cleanup = null;
   let debounceTimer = null;
   const stop = () => {

@@ -22,6 +22,12 @@ export interface BatchUploadReturn {
     currentFileName: Ref<string | null>;
 
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
+    /**
+     * Queue a batch for upload after the current one finishes. If no
+     * batch is in flight, behaves like `upload()`. The returned
+     * promise rejects if `cancel()` / `destroy()` is invoked before
+     * the queued batch starts.
+     */
     enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;

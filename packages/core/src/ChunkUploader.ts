@@ -1,6 +1,7 @@
 import { getDefaults } from './config';
 import type { DefaultsScope } from './config';
-import { buildHeaders } from './http';
+import { buildHeaders, normalizeHeaders } from './http';
+import { RetryPolicy } from './internal/RetryPolicy';
 import type {
     ChunkInfo,
     ChunkUploadOptions,
@@ -59,14 +60,20 @@ export class ChunkUploader {
     private readonly maxConcurrent: number;
     private readonly autoRetry: ChunkUploadOptions['autoRetry'];
     private readonly maxRetries: number;
+    private readonly retryPolicy: RetryPolicy;
     /**
-     * HTTP statuses that are inherently non-retryable: client errors that
-     * won't change on retry. Auth (401/403), not found (404, 410),
-     * payload-too-large (413), unsupported media (415), and validation
-     * errors (422). The default retry callback short-circuits on these.
+     * Known event names. The TS overloads guarantee this at compile
+     * time, but a caller using `on(name as any, ...)` would silently
+     * never fire — dev-mode warning catches it.
      */
-    private static readonly FATAL_STATUSES = new Set([400, 401, 403, 404, 410, 413, 415, 422]);
-    private readonly headers: Record<string, string>;
+    private static readonly KNOWN_EVENTS: ReadonlySet<keyof ChunkUploaderEventMap> = new Set<keyof ChunkUploaderEventMap>([
+        'progress',
+        'chunkUploaded',
+        'complete',
+        'error',
+        'stateChange',
+    ]);
+    private readonly headers: Record<string, string>; // normalised from HeadersInit at construction
     private readonly withCredentials: boolean;
     private readonly context?: string;
     private readonly checksumEnabled: boolean;
@@ -89,7 +96,8 @@ export class ChunkUploader {
         this.maxConcurrent = merged.maxConcurrent ?? 3;
         this.autoRetry = merged.autoRetry ?? true;
         this.maxRetries = merged.maxRetries ?? 3;
-        this.headers = { ...defaults.headers, ...options.headers };
+        this.retryPolicy = new RetryPolicy(this.autoRetry, this.maxRetries);
+        this.headers = { ...normalizeHeaders(defaults.headers), ...normalizeHeaders(options.headers) };
         this.withCredentials = merged.withCredentials ?? true;
         this.context = merged.context;
         this.checksumEnabled = merged.checksum ?? true;
@@ -114,6 +122,11 @@ export class ChunkUploader {
     }
 
     on<K extends keyof ChunkUploaderEventMap>(event: K, callback: (data: ChunkUploaderEventMap[K]) => void): Unsubscribe {
+        if (!ChunkUploader.KNOWN_EVENTS.has(event)) {
+            // eslint-disable-next-line no-console
+            console.warn(`ChunkUploader.on(): unknown event '${String(event)}'. Known events: ${[...ChunkUploader.KNOWN_EVENTS].join(', ')}.`);
+        }
+
         if (!this.listeners.has(event)) {
             this.listeners.set(event, new Set());
         }
@@ -278,41 +291,20 @@ export class ChunkUploader {
 
             return result;
         } catch (err) {
-            if (retriesLeft > 0 && this.shouldRetry(err, chunkIndex, retriesLeft)) {
-                // Exponential backoff with full jitter (AWS-style). Without
-                // jitter, N parallel chunk workers retry in lockstep and
-                // hammer a struggling server in a thundering herd.
-                const baseDelay = Math.pow(2, this.maxRetries - retriesLeft) * 1000;
-                const jitter = Math.random() * 250;
-                const delay = baseDelay + jitter;
+            const decision = this.retryPolicy.decide(err, {
+                chunkIndex,
+                retriesLeft,
+                maxRetries: this.maxRetries,
+            });
 
-                await new Promise((resolve) => setTimeout(resolve, delay));
+            if (decision.retry) {
+                await new Promise((resolve) => setTimeout(resolve, decision.delayMs));
 
                 return this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, retriesLeft - 1);
             }
 
             throw err;
         }
-    }
-
-    private shouldRetry(err: unknown, chunkIndex: number, retriesLeft: number): boolean {
-        // Caller-supplied callback always wins.
-        if (typeof this.autoRetry === 'function') {
-            const error = err instanceof Error ? err : new Error(String(err));
-
-            return this.autoRetry(error, { chunkIndex, retriesLeft });
-        }
-
-        if (this.autoRetry === false) {
-            return false;
-        }
-
-        // Default policy: retry transport / 5xx, refuse fatal 4xx.
-        if (err instanceof UploadHttpError && ChunkUploader.FATAL_STATUSES.has(err.status)) {
-            return false;
-        }
-
-        return true;
     }
 
     private async uploadChunks(file: File, id: string, chunkSize: number, total: number): Promise<void> {
@@ -355,8 +347,14 @@ export class ChunkUploader {
             await Promise.all(workers);
         } finally {
             // Sync the public pendingChunks back from the Set so resume()
-            // sees the right list of remaining indices.
-            this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+            // sees the right list of remaining indices. Skip the writeback
+            // when cancel() has aborted in the meantime — its state reset
+            // already cleared `pendingChunks`, and overwriting it here
+            // would resurrect a stale list (silent resume of a cancelled
+            // upload after a retry).
+            if (! this.abortController?.signal.aborted) {
+                this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+            }
         }
     }
 
@@ -407,15 +405,33 @@ export class ChunkUploader {
 
         try {
             if (this.uploadId) {
-                const status = await this.fetchStatus(this.uploadId);
-                const alreadyUploaded = new Set(status.uploaded_chunks);
-                this.serverChunkSize = status.chunk_size;
-                this.totalChunks = status.total_chunks;
-                this.uploadedChunks = status.uploaded_count;
-                this.pendingChunks = Array.from({ length: status.total_chunks }, (_, i) => i).filter(
-                    (i) => !alreadyUploaded.has(i),
-                );
-            } else {
+                try {
+                    const status = await this.fetchStatus(this.uploadId);
+                    const alreadyUploaded = new Set(status.uploaded_chunks);
+                    this.serverChunkSize = status.chunk_size;
+                    this.totalChunks = status.total_chunks;
+                    this.uploadedChunks = status.uploaded_count;
+                    this.pendingChunks = Array.from({ length: status.total_chunks }, (_, i) => i).filter(
+                        (i) => !alreadyUploaded.has(i),
+                    );
+                } catch (statusErr) {
+                    // The server forgot the upload (404 — expiration sweep
+                    // collected it before we could resume). Drop the stale
+                    // resume state and fall through to a fresh initiate
+                    // instead of surfacing a confusing 404 to the caller.
+                    if (statusErr instanceof UploadHttpError && statusErr.status === 404) {
+                        this.uploadId = null;
+                        this.pendingChunks = [];
+                        this.serverChunkSize = null;
+                        this.totalChunks = 0;
+                        this.uploadedChunks = 0;
+                    } else {
+                        throw statusErr;
+                    }
+                }
+            }
+
+            if (!this.uploadId) {
                 const initResult = await this.initiateUpload(file, metadata);
                 this.uploadId = initResult.upload_id;
                 this.serverChunkSize = initResult.chunk_size;
@@ -439,11 +455,18 @@ export class ChunkUploader {
                 );
             }
 
-            await this.uploadChunks(file, this.uploadId!, chunkSize, this.totalChunks);
+            // Capture the uploadId in a local before uploadChunks runs.
+            // The happy-path branch nulls `this.uploadId` after a
+            // successful complete so the next upload() call doesn't
+            // resume against a finished id; we still want the result
+            // payload to carry the *original* id, hence the local.
+            const id = this.uploadId!;
+
+            await this.uploadChunks(file, id, chunkSize, this.totalChunks);
 
             if (!this.isPaused && !this.abortController.signal.aborted) {
                 const result: UploadResult = {
-                    uploadId: this.uploadId!,
+                    uploadId: id,
                     fileName: file.name,
                     fileSize: file.size,
                     totalChunks: this.totalChunks,
@@ -463,7 +486,7 @@ export class ChunkUploader {
             }
 
             return {
-                uploadId: this.uploadId!,
+                uploadId: id,
                 fileName: file.name,
                 fileSize: file.size,
                 totalChunks: this.totalChunks,

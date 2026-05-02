@@ -1,7 +1,20 @@
 <div
-    x-data="chunkUpload({{ json_encode($this->alpineOptions) }})"
+    x-data="(typeof chunkUpload === 'function')
+        ? chunkUpload({{ json_encode($this->alpineOptions) }})
+        : { __chunkyMissing: true }"
     x-on:chunky:complete.window="$wire.set('uploadId', $event.detail.uploadId); $wire.completeUpload()"
 >
+    <template x-if="__chunkyMissing">
+        <div class="chunky-upload chunky-upload--missing"
+             style="padding: 1rem; border: 2px dashed #ef4444; color: #b91c1c; border-radius: 8px;">
+            <strong>Chunky frontend not loaded.</strong>
+            Install and import <code>@netipar/chunky-alpine</code> in your bundler so the
+            <code>chunkUpload()</code> Alpine factory is registered. Without it the
+            Livewire component renders this placeholder instead of silently failing.
+        </div>
+    </template>
+
+
     {{ $slot }}
 
     @if(! $slot->isNotEmpty())

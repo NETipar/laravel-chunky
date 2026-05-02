@@ -35,6 +35,14 @@ export declare class BatchUploader {
     private pendingQueue;
     private cancelledThisRun;
     constructor(options?: BatchUploadOptions, scope?: DefaultsScope);
+    /**
+     * Refuse to construct with malformed batch endpoints. Without this
+     * a typo (`/api/chunky/batch/{batch_id}/upload` with the wrong
+     * casing) would leave the `{batchId}` placeholder unsubstituted at
+     * call time, and the server would 404 on a URL containing the
+     * literal `{batchId}` token — extremely confusing to debug.
+     */
+    private validateBatchEndpoints;
     on<K extends keyof BatchUploaderEventMap>(event: K, callback: (data: BatchUploaderEventMap[K]) => void): Unsubscribe;
     private emit;
     private emitStateChange;

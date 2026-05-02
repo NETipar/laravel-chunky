@@ -29,30 +29,12 @@ __export(index_exports, {
   listenForUploadComplete: () => listenForUploadComplete,
   listenForUploadEvents: () => listenForUploadEvents,
   listenForUser: () => listenForUser,
+  mergeDefaults: () => mergeDefaults,
+  resetDefaults: () => resetDefaults,
   setDefaults: () => setDefaults,
   watchBatchCompletion: () => watchBatchCompletion
 });
 module.exports = __toCommonJS(index_exports);
-
-// src/config.ts
-var globalDefaults = {};
-function setDefaults(options) {
-  globalDefaults = { ...options };
-}
-function getDefaults() {
-  return globalDefaults;
-}
-function createDefaults(initial = {}) {
-  let defaults = { ...initial };
-  return {
-    setDefaults(options) {
-      defaults = { ...options };
-    },
-    getDefaults() {
-      return defaults;
-    }
-  };
-}
 
 // src/http.ts
 function getCsrfFromCookie() {
@@ -65,11 +47,27 @@ function getCsrfFromCookie() {
   }
   return decodeURIComponent(match.split("=")[1]);
 }
+function normalizeHeaders(input) {
+  if (!input) {
+    return {};
+  }
+  if (typeof Headers !== "undefined" && input instanceof Headers) {
+    const out = {};
+    input.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
+  }
+  if (Array.isArray(input)) {
+    return Object.fromEntries(input);
+  }
+  return { ...input };
+}
 function buildHeaders(extra) {
   const headers = {
     Accept: "application/json",
     "X-Requested-With": "XMLHttpRequest",
-    ...extra ?? {}
+    ...normalizeHeaders(extra)
   };
   if (!headers["X-XSRF-TOKEN"]) {
     const token = getCsrfFromCookie();
@@ -80,6 +78,52 @@ function buildHeaders(extra) {
   return headers;
 }
 
+// src/config.ts
+function mergeOptions(base, incoming) {
+  return {
+    ...base,
+    ...incoming,
+    headers: {
+      ...normalizeHeaders(base.headers),
+      ...normalizeHeaders(incoming.headers)
+    },
+    endpoints: {
+      ...base.endpoints,
+      ...incoming.endpoints
+    }
+  };
+}
+var globalDefaults = {};
+function setDefaults(options) {
+  globalDefaults = { ...options };
+}
+function mergeDefaults(options) {
+  globalDefaults = mergeOptions(globalDefaults, options);
+}
+function getDefaults() {
+  return globalDefaults;
+}
+function resetDefaults() {
+  globalDefaults = {};
+}
+function createDefaults(initial = {}) {
+  let defaults = { ...initial };
+  return {
+    setDefaults(options) {
+      defaults = { ...options };
+    },
+    mergeDefaults(options) {
+      defaults = mergeOptions(defaults, options);
+    },
+    getDefaults() {
+      return defaults;
+    },
+    reset() {
+      defaults = {};
+    }
+  };
+}
+
 // src/types.ts
 var UploadHttpError = class extends Error {
   constructor(status, body, message) {
@@ -87,6 +131,42 @@ var UploadHttpError = class extends Error {
     this.name = "UploadHttpError";
     this.status = status;
     this.body = body;
+  }
+};
+
+// src/internal/RetryPolicy.ts
+var DEFAULT_FATAL_STATUSES = /* @__PURE__ */ new Set([400, 401, 403, 404, 410, 413, 415, 422]);
+var RetryPolicy = class {
+  constructor(autoRetry, maxRetries, fatalStatuses = DEFAULT_FATAL_STATUSES) {
+    this.autoRetry = autoRetry;
+    this.maxRetries = maxRetries;
+    this.fatalStatuses = fatalStatuses;
+  }
+  decide(error, context) {
+    if (context.retriesLeft <= 0) {
+      return { retry: false };
+    }
+    if (typeof this.autoRetry === "function") {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (!this.autoRetry(err, { chunkIndex: context.chunkIndex, retriesLeft: context.retriesLeft })) {
+        return { retry: false };
+      }
+    } else if (this.autoRetry === false) {
+      return { retry: false };
+    } else if (error instanceof UploadHttpError && this.fatalStatuses.has(error.status)) {
+      return { retry: false };
+    }
+    return { retry: true, delayMs: this.computeDelay(context.retriesLeft) };
+  }
+  /**
+   * AWS-recommended "full jitter": uniformly-distributed wait in
+   * [0, cap], where cap doubles every attempt. Different from the
+   * naive "base + small jitter" that doesn't actually de-synchronise
+   * many parallel workers.
+   */
+  computeDelay(retriesLeft) {
+    const cap = Math.pow(2, this.maxRetries - retriesLeft) * 1e3;
+    return Math.random() * cap;
   }
 };
 
@@ -138,7 +218,8 @@ var ChunkUploader = class _ChunkUploader {
     this.maxConcurrent = merged.maxConcurrent ?? 3;
     this.autoRetry = merged.autoRetry ?? true;
     this.maxRetries = merged.maxRetries ?? 3;
-    this.headers = { ...defaults.headers, ...options.headers };
+    this.retryPolicy = new RetryPolicy(this.autoRetry, this.maxRetries);
+    this.headers = { ...normalizeHeaders(defaults.headers), ...normalizeHeaders(options.headers) };
     this.withCredentials = merged.withCredentials ?? true;
     this.context = merged.context;
     this.checksumEnabled = merged.checksum ?? true;
@@ -148,12 +229,17 @@ var ChunkUploader = class _ChunkUploader {
   }
   static {
     /**
-     * HTTP statuses that are inherently non-retryable: client errors that
-     * won't change on retry. Auth (401/403), not found (404, 410),
-     * payload-too-large (413), unsupported media (415), and validation
-     * errors (422). The default retry callback short-circuits on these.
+     * Known event names. The TS overloads guarantee this at compile
+     * time, but a caller using `on(name as any, ...)` would silently
+     * never fire — dev-mode warning catches it.
      */
-    this.FATAL_STATUSES = /* @__PURE__ */ new Set([400, 401, 403, 404, 410, 413, 415, 422]);
+    this.KNOWN_EVENTS = /* @__PURE__ */ new Set([
+      "progress",
+      "chunkUploaded",
+      "complete",
+      "error",
+      "stateChange"
+    ]);
   }
   validateEndpoints() {
     if (!this.endpoints.upload.includes("{uploadId}")) {
@@ -167,6 +253,9 @@ var ChunkUploader = class _ChunkUploader {
     }
   }
   on(event, callback) {
+    if (!_ChunkUploader.KNOWN_EVENTS.has(event)) {
+      console.warn(`ChunkUploader.on(): unknown event '${String(event)}'. Known events: ${[..._ChunkUploader.KNOWN_EVENTS].join(", ")}.`);
+    }
     if (!this.listeners.has(event)) {
       this.listeners.set(event, /* @__PURE__ */ new Set());
     }
@@ -290,28 +379,17 @@ var ChunkUploader = class _ChunkUploader {
       });
       return result;
     } catch (err) {
-      if (retriesLeft > 0 && this.shouldRetry(err, chunkIndex, retriesLeft)) {
-        const baseDelay = Math.pow(2, this.maxRetries - retriesLeft) * 1e3;
-        const jitter = Math.random() * 250;
-        const delay = baseDelay + jitter;
-        await new Promise((resolve) => setTimeout(resolve, delay));
+      const decision = this.retryPolicy.decide(err, {
+        chunkIndex,
+        retriesLeft,
+        maxRetries: this.maxRetries
+      });
+      if (decision.retry) {
+        await new Promise((resolve) => setTimeout(resolve, decision.delayMs));
         return this.uploadSingleChunk(id, chunkIndex, chunkBlob, total, retriesLeft - 1);
       }
       throw err;
     }
-  }
-  shouldRetry(err, chunkIndex, retriesLeft) {
-    if (typeof this.autoRetry === "function") {
-      const error = err instanceof Error ? err : new Error(String(err));
-      return this.autoRetry(error, { chunkIndex, retriesLeft });
-    }
-    if (this.autoRetry === false) {
-      return false;
-    }
-    if (err instanceof UploadHttpError && _ChunkUploader.FATAL_STATUSES.has(err.status)) {
-      return false;
-    }
-    return true;
   }
   async uploadChunks(file, id, chunkSize, total) {
     const chunks = this.pendingChunks.length > 0 ? [...this.pendingChunks] : Array.from({ length: total }, (_, i) => i);
@@ -339,7 +417,9 @@ var ChunkUploader = class _ChunkUploader {
     try {
       await Promise.all(workers);
     } finally {
-      this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+      if (!this.abortController?.signal.aborted) {
+        this.pendingChunks = Array.from(pending).sort((a, b) => a - b);
+      }
     }
   }
   async fetchStatus(id) {
@@ -376,15 +456,28 @@ var ChunkUploader = class _ChunkUploader {
     this.emitStateChange();
     try {
       if (this.uploadId) {
-        const status = await this.fetchStatus(this.uploadId);
-        const alreadyUploaded = new Set(status.uploaded_chunks);
-        this.serverChunkSize = status.chunk_size;
-        this.totalChunks = status.total_chunks;
-        this.uploadedChunks = status.uploaded_count;
-        this.pendingChunks = Array.from({ length: status.total_chunks }, (_, i) => i).filter(
-          (i) => !alreadyUploaded.has(i)
-        );
-      } else {
+        try {
+          const status = await this.fetchStatus(this.uploadId);
+          const alreadyUploaded = new Set(status.uploaded_chunks);
+          this.serverChunkSize = status.chunk_size;
+          this.totalChunks = status.total_chunks;
+          this.uploadedChunks = status.uploaded_count;
+          this.pendingChunks = Array.from({ length: status.total_chunks }, (_, i) => i).filter(
+            (i) => !alreadyUploaded.has(i)
+          );
+        } catch (statusErr) {
+          if (statusErr instanceof UploadHttpError && statusErr.status === 404) {
+            this.uploadId = null;
+            this.pendingChunks = [];
+            this.serverChunkSize = null;
+            this.totalChunks = 0;
+            this.uploadedChunks = 0;
+          } else {
+            throw statusErr;
+          }
+        }
+      }
+      if (!this.uploadId) {
         const initResult = await this.initiateUpload(file, metadata);
         this.uploadId = initResult.upload_id;
         this.serverChunkSize = initResult.chunk_size;
@@ -398,10 +491,11 @@ var ChunkUploader = class _ChunkUploader {
           "Server did not return a chunk_size and no chunkSize override was provided. Cannot proceed without an authoritative chunk size."
         );
       }
-      await this.uploadChunks(file, this.uploadId, chunkSize, this.totalChunks);
+      const id = this.uploadId;
+      await this.uploadChunks(file, id, chunkSize, this.totalChunks);
       if (!this.isPaused && !this.abortController.signal.aborted) {
         const result = {
-          uploadId: this.uploadId,
+          uploadId: id,
           fileName: file.name,
           fileSize: file.size,
           totalChunks: this.totalChunks
@@ -417,7 +511,7 @@ var ChunkUploader = class _ChunkUploader {
         return result;
       }
       return {
-        uploadId: this.uploadId,
+        uploadId: id,
         fileName: file.name,
         fileSize: file.size,
         totalChunks: this.totalChunks
@@ -545,13 +639,42 @@ var BatchUploader = class {
     // unrelated error happened" and avoid emitting a redundant `error` event
     // or a late `complete` after a `cancel`.
     this.cancelledThisRun = false;
-    this.options = options;
+    const defaults = scope ? scope.getDefaults() : getDefaults();
+    const merged = {
+      ...defaults,
+      ...options,
+      headers: { ...defaults.headers, ...options.headers },
+      endpoints: { ...defaults.endpoints, ...options.endpoints }
+    };
+    this.options = merged;
     this.scope = scope;
-    this.maxConcurrentFiles = options.maxConcurrentFiles ?? 2;
+    this.maxConcurrentFiles = merged.maxConcurrentFiles ?? 2;
     this.batchEndpoints = {
       ...DEFAULT_BATCH_ENDPOINTS,
-      ...options.endpoints
+      // Legacy mixed shape: pull batch-only fields out of
+      // `endpoints` if present.
+      ...options.endpoints?.batchInitiate ? { batchInitiate: options.endpoints.batchInitiate } : {},
+      ...options.endpoints?.batchUpload ? { batchUpload: options.endpoints.batchUpload } : {},
+      ...options.endpoints?.batchStatus ? { batchStatus: options.endpoints.batchStatus } : {},
+      // New explicit batch-only override.
+      ...options.batchEndpoints ?? {}
     };
+    this.validateBatchEndpoints();
+  }
+  /**
+   * Refuse to construct with malformed batch endpoints. Without this
+   * a typo (`/api/chunky/batch/{batch_id}/upload` with the wrong
+   * casing) would leave the `{batchId}` placeholder unsubstituted at
+   * call time, and the server would 404 on a URL containing the
+   * literal `{batchId}` token — extremely confusing to debug.
+   */
+  validateBatchEndpoints() {
+    if (!this.batchEndpoints.batchUpload.includes("{batchId}")) {
+      throw new Error("BatchUploader: batchUpload endpoint must contain a {batchId} placeholder.");
+    }
+    if (!this.batchEndpoints.batchStatus.includes("{batchId}")) {
+      throw new Error("BatchUploader: batchStatus endpoint must contain a {batchId} placeholder.");
+    }
   }
   on(event, callback) {
     if (!this.listeners.has(event)) {

@@ -46,7 +46,13 @@ export interface ChunkUploadOptions {
         retriesLeft: number;
     }) => boolean);
     maxRetries?: number;
-    headers?: Record<string, string>;
+    /**
+     * Custom headers added to every chunk POST. Accepts the three forms
+     * `HeadersInit` does: `Record<string, string>`, `[string, string][]`,
+     * or a `Headers` instance — buildHeaders() normalises to a flat
+     * record internally.
+     */
+    headers?: HeadersInit;
     withCredentials?: boolean;
     context?: string;
     checksum?: boolean;
@@ -149,13 +155,29 @@ export type Unsubscribe = () => void;
  * for any event payload.
  */
 export type EventCallback<T = unknown> = (data: T) => void;
+/**
+ * Batch-specific endpoints. Split out from the per-chunk endpoints
+ * object so the two surfaces can evolve independently. New code should
+ * prefer `chunkEndpoints` / `batchEndpoints` over the legacy mixed
+ * `endpoints` map.
+ */
+export interface BatchEndpoints {
+    batchInitiate?: string;
+    batchUpload?: string;
+    batchStatus?: string;
+}
 export interface BatchUploadOptions extends ChunkUploadOptions {
     maxConcurrentFiles?: number;
-    endpoints?: ChunkUploadOptions['endpoints'] & {
-        batchInitiate?: string;
-        batchUpload?: string;
-        batchStatus?: string;
-    };
+    /**
+     * Legacy mixed-shape endpoints map (per-chunk + batch fields in one
+     * object). Still accepted for back-compat. New code should use
+     * `chunkEndpoints` / `batchEndpoints` instead.
+     */
+    endpoints?: ChunkUploadOptions['endpoints'] & BatchEndpoints;
+    /** Per-file ChunkUploader endpoints (override the global defaults). */
+    chunkEndpoints?: ChunkUploadOptions['endpoints'];
+    /** Batch-only endpoints. */
+    batchEndpoints?: BatchEndpoints;
     /**
      * Adapter to persist the pending batch queue across page reloads.
      * The adapter is responsible for serialising whatever the host app
@@ -167,6 +189,8 @@ export interface BatchUploadOptions extends ChunkUploadOptions {
 }
 export interface BatchInitiateResponse {
     batch_id: string;
+    /** Server-supplied extras pass through unchecked. */
+    [extra: string]: unknown;
 }
 export interface BatchProgressEvent {
     batchId: string;

@@ -7,7 +7,7 @@ export {
     listenForBatchComplete,
 } from './echo';
 export { watchBatchCompletion } from './CompletionWatcher';
-export { setDefaults, getDefaults, createDefaults } from './config';
+export { setDefaults, mergeDefaults, getDefaults, resetDefaults, createDefaults } from './config';
 export { UploadHttpError } from './types';
 export type { DefaultsScope } from './config';
 export type {

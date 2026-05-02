@@ -22,13 +22,13 @@ export declare class ChunkUploader {
     private readonly maxConcurrent;
     private readonly autoRetry;
     private readonly maxRetries;
+    private readonly retryPolicy;
     /**
-     * HTTP statuses that are inherently non-retryable: client errors that
-     * won't change on retry. Auth (401/403), not found (404, 410),
-     * payload-too-large (413), unsupported media (415), and validation
-     * errors (422). The default retry callback short-circuits on these.
+     * Known event names. The TS overloads guarantee this at compile
+     * time, but a caller using `on(name as any, ...)` would silently
+     * never fire — dev-mode warning catches it.
      */
-    private static readonly FATAL_STATUSES;
+    private static readonly KNOWN_EVENTS;
     private readonly headers;
     private readonly withCredentials;
     private readonly context?;
@@ -53,7 +53,6 @@ export declare class ChunkUploader {
     private fetchJson;
     private initiateUpload;
     private uploadSingleChunk;
-    private shouldRetry;
     private uploadChunks;
     private fetchStatus;
     upload(file: File, metadata?: Record<string, unknown>): Promise<UploadResult>;

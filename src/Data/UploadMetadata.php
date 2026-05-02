@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Data;
 
+use NETipar\Chunky\Data\Concerns\HasArrayPayload;
 use NETipar\Chunky\Enums\UploadStatus;
 use NETipar\Chunky\Support\ChunkCalculator;
 
 class UploadMetadata
 {
+    use HasArrayPayload;
+
     /**
      * @param  array<int, int>  $uploadedChunks
      * @param  array<string, mixed>  $metadata
@@ -62,25 +65,25 @@ class UploadMetadata
      */
     public static function fromArray(array $data): self
     {
+        $rawStatus = self::read($data, 'status', 'pending');
+
         return new self(
-            uploadId: $data['upload_id'],
-            fileName: $data['file_name'],
-            fileSize: (int) $data['file_size'],
-            mimeType: $data['mime_type'] ?? null,
-            chunkSize: (int) $data['chunk_size'],
-            totalChunks: (int) $data['total_chunks'],
-            disk: $data['disk'] ?? config('chunky.disk'),
-            context: $data['context'] ?? null,
-            metadata: $data['metadata'] ?? [],
-            uploadedChunks: $data['uploaded_chunks'] ?? [],
-            status: isset($data['status']) && $data['status'] instanceof UploadStatus
-                ? $data['status']
-                : UploadStatus::tryFrom($data['status'] ?? 'pending') ?? UploadStatus::Pending,
-            finalPath: $data['final_path'] ?? null,
-            batchId: $data['batch_id'] ?? null,
-            userId: isset($data['user_id']) && $data['user_id'] !== ''
-                ? (string) $data['user_id']
-                : null,
+            uploadId: self::read($data, 'upload_id'),
+            fileName: self::read($data, 'file_name'),
+            fileSize: (int) self::read($data, 'file_size', 0),
+            mimeType: self::read($data, 'mime_type'),
+            chunkSize: (int) self::read($data, 'chunk_size', 0),
+            totalChunks: (int) self::read($data, 'total_chunks', 0),
+            disk: self::read($data, 'disk', config('chunky.disk')),
+            context: self::read($data, 'context'),
+            metadata: self::read($data, 'metadata', []) ?? [],
+            uploadedChunks: self::read($data, 'uploaded_chunks', []) ?? [],
+            status: $rawStatus instanceof UploadStatus
+                ? $rawStatus
+                : (UploadStatus::tryFrom((string) $rawStatus) ?? UploadStatus::Pending),
+            finalPath: self::read($data, 'final_path'),
+            batchId: self::read($data, 'batch_id'),
+            userId: self::readUserId(self::read($data, 'user_id')),
         );
     }
 

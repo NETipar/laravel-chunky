@@ -67,6 +67,6 @@ it('reports nothing to remove when no uploads have expired', function () {
     seedExpiredUpload('keep-2');
 
     $this->artisan('chunky:cleanup')
-        ->expectsOutputToContain('No expired uploads found.')
+        ->expectsOutputToContain('No expired uploads or batches found.')
         ->assertExitCode(0);
 });

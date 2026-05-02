@@ -143,6 +143,28 @@ return [
     ],
 
     // ------------------------------------------------------------------
+    // Assembly job
+    // ------------------------------------------------------------------
+    // AssembleFileJob runs after the final chunk lands and stitches
+    // the chunks into the final file. Tuneable for slow disks / large
+    // uploads — the defaults fit a typical 1GB-ish upload on local SSD.
+    'assembly' => [
+        // Queue name for the assemble job. null = default queue.
+        'queue' => env('CHUNKY_ASSEMBLY_QUEUE'),
+
+        // Retry count after a worker crash / save-callback throw.
+        'tries' => 3,
+
+        // Seconds between retry attempts.
+        'backoff' => 30,
+
+        // Per-attempt timeout. The queue worker default (60s) is far
+        // too short for a multi-GB assembly — bump this to fit your
+        // largest expected file.
+        'timeout' => 600,
+    ],
+
+    // ------------------------------------------------------------------
     // Cache
     // ------------------------------------------------------------------
     'cache' => [
@@ -230,6 +252,12 @@ return [
         // UploadCompleted/UploadFailed broadcast payloads. Most apps
         // don't need this on the wire.
         'expose_internal_paths' => false,
+
+        // Cache the upload/batch lookup performed by the broadcast
+        // channel auth callbacks for this many seconds. Without it,
+        // a client disconnect/reconnect storm would fan out to the
+        // tracker on every subscription auth. Set to 0 to disable.
+        'auth_cache_ttl_seconds' => 30,
 
         // Per-event broadcast opt-in. Every Chunky event extends
         // AbstractChunkyEvent and gates broadcasting on this map. The

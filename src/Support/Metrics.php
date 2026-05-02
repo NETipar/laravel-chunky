@@ -79,6 +79,16 @@ class Metrics
         if (is_string($handler) && class_exists($handler)) {
             $instance = app($handler);
 
+            // Prefer the explicit MetricsListener contract — when the
+            // handler implements it the handle() entrypoint is the
+            // documented one, regardless of whether __invoke also
+            // exists.
+            if ($instance instanceof MetricsListener) {
+                $instance->handle($payload);
+
+                return;
+            }
+
             if (is_callable($instance)) {
                 $instance($payload);
 
@@ -92,7 +102,8 @@ class Metrics
             }
 
             throw new \InvalidArgumentException(
-                "Metrics handler {$handler} must be invokable (__invoke) or expose a handle() method.",
+                "Metrics handler {$handler} must implement ".MetricsListener::class
+                .', be invokable (__invoke), or expose a handle() method.',
             );
         }
 

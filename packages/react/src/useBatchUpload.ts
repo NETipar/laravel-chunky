@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { BatchUploader } from '@netipar/chunky-core';
 import type {
     BatchProgressEvent,
@@ -22,6 +22,12 @@ export interface BatchUploadReturn {
     currentFileName: string | null;
 
     upload: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
+    /**
+     * Queue a batch for upload after the current one finishes. If no
+     * batch is in flight, behaves like `upload()`. The returned
+     * promise rejects if `cancel()` / `destroy()` is invoked before
+     * the queued batch starts.
+     */
     enqueue: (files: File[], metadata?: Record<string, unknown>) => Promise<BatchResult>;
     cancel: () => void;
     pause: () => void;
@@ -43,7 +49,14 @@ export interface BatchUploadReturn {
 }
 
 export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadReturn {
-    const optionsKey = useMemo(() => JSON.stringify(options), [options]);
+    // Snapshot the options once on mount via a ref. The previous
+    // implementation depended on `JSON.stringify(options)` to detect
+    // changes, which threw on circular references / Headers /
+    // functions and silently lost data on Date / Map values. Treat
+    // options as a mount-time-only config; callers that need to
+    // change them at runtime should remount the component or use the
+    // imperative core BatchUploader directly.
+    const optionsRef = useRef(options);
     const uploaderRef = useRef<BatchUploader | null>(null);
 
     const [batchId, setBatchId] = useState<string | null>(null);
@@ -57,7 +70,7 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
     const [currentFileName, setCurrentFileName] = useState<string | null>(null);
 
     useEffect(() => {
-        const uploader = new BatchUploader(options);
+        const uploader = new BatchUploader(optionsRef.current);
         uploaderRef.current = uploader;
 
         const unsub = uploader.on('stateChange', (state) => {
@@ -76,7 +89,11 @@ export function useBatchUpload(options: BatchUploadOptions = {}): BatchUploadRet
             unsub();
             uploader.destroy();
         };
-    }, [optionsKey]);
+        // Mount-only: the BatchUploader is constructed once with the
+        // initial options. See optionsRef snapshot above for the
+        // rationale.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const upload = useCallback(
         (files: File[], metadata?: Record<string, unknown>) => uploaderRef.current!.upload(files, metadata),

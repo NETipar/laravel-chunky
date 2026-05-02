@@ -5,21 +5,26 @@ declare(strict_types=1);
 namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use NETipar\Chunky\Authorization\Authorizer;
 use NETipar\Chunky\ChunkyManager;
 
 class CancelUploadController extends Controller
 {
-    public function __invoke(string $uploadId, ChunkyManager $manager, Authorizer $authorizer): JsonResponse
-    {
+    public function __invoke(
+        Request $request,
+        string $uploadId,
+        ChunkyManager $manager,
+        Authorizer $authorizer,
+    ): JsonResponse {
         $upload = $manager->status($uploadId);
 
         if (! $upload) {
             return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 
-        if (! $authorizer->canCancelUpload(auth()->user(), $upload)) {
+        if (! $authorizer->canCancelUpload($request->user(), $upload)) {
             return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
         }
 

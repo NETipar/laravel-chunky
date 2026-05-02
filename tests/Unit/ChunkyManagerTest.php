@@ -143,9 +143,6 @@ it('initiates an upload and dispatches event', function () {
     });
 });
 
-it('returns handler and tracker instances', function () {
-    $manager = app(ChunkyManager::class);
-
-    expect($manager->handler())->toBeInstanceOf(ChunkHandler::class);
-    expect($manager->tracker())->toBeInstanceOf(UploadTracker::class);
-});
+// The previous test asserted the existence of the @internal handler() /
+// tracker() accessors on ChunkyManager. They were removed in v0.22 — the
+// container is the canonical way to obtain ChunkHandler / UploadTracker.

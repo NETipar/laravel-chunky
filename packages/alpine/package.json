@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-alpine",
-    "version": "0.21.0",
+    "version": "0.22.0",
     "description": "Alpine.js data component for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",
@@ -9,7 +9,8 @@
         ".": {
             "types": "./types/index.d.ts",
             "import": "./dist/index.js",
-            "require": "./dist/index.cjs"
+            "require": "./dist/index.cjs",
+            "default": "./dist/index.js"
         }
     },
     "files": [
@@ -18,7 +19,7 @@
         "src"
     ],
     "scripts": {
-        "build": "node build.js && tsc -p tsconfig.build.json"
+        "build": "tsc --noEmit -p tsconfig.json && node build.js && tsc -p tsconfig.build.json"
     },
     "keywords": [
         "chunky",

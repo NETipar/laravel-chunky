@@ -6,6 +6,12 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.3 - 2026-05-03
+
+### Added
+- **`chunky.assembly.connection`** — the assemble job's queue connection is now configurable via `CHUNKY_ASSEMBLY_CONNECTION`, mirroring the existing `chunky.assembly.queue` knob. Set it to `sync` to run assembly in-process (no queue worker required) — useful for dev environments, small uploads, or apps that don't run a worker — without flipping the global `QUEUE_CONNECTION` and forcing every other queued job in the host app onto sync. A named connection from `config/queue.php` (e.g. `redis-uploads`, `sqs-large-files`) routes just the chunky assembly off the default queue. `null` (default) keeps the previous behaviour: the job uses `config('queue.default')`. Six regression tests cover the default / explicit / empty-string / queue + connection combinations and the existing `tries` / `backoff` / `timeout` wiring.
+- **Configuration reference** gained an explicit `Assembly job` section in `docs/configuration.md` documenting the full `chunky.assembly.*` namespace, plus two new recipes: "Synchronous assembly (no queue worker)" and "Dedicated upload queue".
+
 ## v0.22.2 - 2026-05-02
 
 ### Fixed

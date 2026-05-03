@@ -21,6 +21,8 @@ CHUNKY_BROADCASTING=false        # opt-in WebSocket broadcasting
 CHUNKY_LOCK_DRIVER=flock         # flock | cache (cache for cloud disks)
 CHUNKY_STAGING_DIRECTORY=        # null = sys_get_temp_dir()
 CHUNKY_CACHE_PREFIX=chunky:v1:   # versioned cache-key prefix
+CHUNKY_ASSEMBLY_CONNECTION=      # null = default | sync | <named connection>
+CHUNKY_ASSEMBLY_QUEUE=           # null = default queue
 ```
 
 ## Storage
@@ -115,6 +117,21 @@ broadcast payloads:
 | `broadcasting.expose_internal_paths` | `false` | Include `disk` / `finalPath` in `UploadCompleted` / `UploadFailed` broadcast payloads |
 | `broadcasting.events.{Key}` | mixed | Per-event opt-in. `UploadCompleted`, `UploadFailed`, `BatchCompleted`, `BatchPartiallyCompleted`, `BatchCancelled` default to `true`. Per-chunk events default to `false`. |
 
+## Assembly job
+
+After the final chunk lands, an `AssembleFileJob` stitches the chunks
+into the final file. Tune the queue routing and retry envelope to fit
+your workload — the defaults assume a typical 1GB-ish upload on a
+local SSD.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `assembly.connection` | `null` (= `config('queue.default')`) | Queue connection. Set to `sync` to run the assembly in-process (no worker required), or to a named connection from `config/queue.php` to route just the chunky assembly off the default queue. |
+| `assembly.queue` | `null` (= default queue on the chosen connection) | Queue name |
+| `assembly.tries` | `3` | Retry count after a worker crash / save-callback throw |
+| `assembly.backoff` | `30` | Seconds between retry attempts |
+| `assembly.timeout` | `600` | Per-attempt timeout (seconds). The queue worker default 60s is too short for a multi-GB assembly. |
+
 ## Metrics
 
 | Key | Default | Description |
@@ -160,5 +177,35 @@ broadcast payloads:
     'events' => [
         'ChunkUploaded' => true,        // expensive — only enable for low-throughput dashboards
     ],
+],
+```
+
+### Synchronous assembly (no queue worker)
+
+For dev environments, small uploads, or apps that don't run a queue
+worker, route the assembly job to the `sync` connection so it runs
+in-process when the final chunk lands. The rest of your app's queues
+are unaffected.
+
+```php
+'assembly' => [
+    'connection' => 'sync',
+],
+```
+
+Or via `.env`:
+
+```
+CHUNKY_ASSEMBLY_CONNECTION=sync
+```
+
+### Dedicated upload queue
+
+Keep large-file assemblies off the default queue without going sync:
+
+```php
+'assembly' => [
+    'connection' => 'redis',
+    'queue' => 'uploads',
 ],
 ```

@@ -149,6 +149,16 @@ return [
     // the chunks into the final file. Tuneable for slow disks / large
     // uploads — the defaults fit a typical 1GB-ish upload on local SSD.
     'assembly' => [
+        // Queue connection for the assemble job. null = default
+        // connection from config('queue.default'). Set to 'sync' to
+        // run assembly in-process (no queue worker required) — useful
+        // for small uploads, dev environments, or apps that already
+        // run a synchronous request lifecycle. Set to a named
+        // connection from config/queue.php (e.g. 'redis-uploads',
+        // 'sqs-large-files') to route just the chunky assembly off
+        // the default queue without affecting the rest of the app.
+        'connection' => env('CHUNKY_ASSEMBLY_CONNECTION'),
+
         // Queue name for the assemble job. null = default queue.
         'queue' => env('CHUNKY_ASSEMBLY_QUEUE'),
 

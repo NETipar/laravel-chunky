@@ -48,6 +48,12 @@ class AssembleFileJob implements ShouldQueue
         $this->backoff = (int) config('chunky.assembly.backoff', 30);
         $this->timeout = (int) config('chunky.assembly.timeout', 600);
 
+        $connection = config('chunky.assembly.connection');
+
+        if (is_string($connection) && $connection !== '') {
+            $this->onConnection($connection);
+        }
+
         $queue = config('chunky.assembly.queue');
 
         if (is_string($queue) && $queue !== '') {

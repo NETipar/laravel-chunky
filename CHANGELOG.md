@@ -6,6 +6,11 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.4 - 2026-05-16
+
+### Fixed
+- **Migration ordering on FK-enforcing databases (MySQL/PostgreSQL).** `create_chunky_batches_table` and `create_chunked_uploads_table` shipped without date prefixes, so they sorted *after* `2026_05_02_000000_add_chunked_uploads_batch_id_foreign_key` — both under `loadMigrationsFrom()` autoload (database tracker) and after `vendor:publish`, because Laravel's publisher only re-stamps already-dated migrations and leaves undated ones untouched. The foreign-key migration therefore ran before its tables existed and failed with `SQLSTATE[42S02] ... Base table or view not found: 'chunked_uploads'`. The SQLite test suite never caught it because the FK migration early-returns on SQLite. The two create migrations are now dated `2026_05_01_000000` / `2026_05_01_000001`, guaranteeing they run before the `2026_05_02_000000` FK migration in both the autoloaded and the published scenario. The existing `Schema::hasTable()` guards keep the rename idempotent for installs that already ran the old filenames.
+
 ## v0.22.3 - 2026-05-03
 
 ### Added

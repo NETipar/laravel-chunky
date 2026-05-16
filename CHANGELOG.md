@@ -6,6 +6,11 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.5 - 2026-05-16
+
+### Fixed
+- **npm workspace packages re-synced to the release tag.** The v0.22.4 release commit bumped neither the Composer (git-tag versioned) nor the npm workspace packages, so the `Publish npm packages` workflow's "Verify version sync" guard correctly aborted (`packages/*/package.json` still `0.22.3` ≠ tag `0.22.4`) and the `@netipar/chunky-{core,vue3,react,alpine}` clients were never published for 0.22.4. This release bumps all four workspace packages to `0.22.5` so the npm publish goes out and the npm clients are back in lockstep with the Composer package on Packagist. **No functional change** beyond the v0.22.4 migration-ordering fix — purely a release-process correction. The migration fix itself remains correctly published in v0.22.4 on Packagist.
+
 ## v0.22.4 - 2026-05-16
 
 ### Fixed

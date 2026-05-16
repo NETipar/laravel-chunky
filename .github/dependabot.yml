@@ -38,13 +38,16 @@ updates:
         patterns:
           - "*"
 
-  # pnpm workspace - root devDependencies
+  # pnpm workspace — single entry at the workspace root.
   #
-  # Build tools (typescript, esbuild) and test tools (vitest, happy-dom)
-  # live ONLY in the root devDependencies — they're hoisted by pnpm and
-  # available to every workspace package's build script. This means
-  # Dependabot only opens ONE PR for typescript bumps (here), not five
-  # (one per package + root).
+  # The whole repo is one pnpm workspace (pnpm-workspace.yaml → packages/*)
+  # with a single shared pnpm-lock.yaml at the root; the workspace members
+  # have NO lockfile of their own. Dependabot's pnpm workspace support
+  # updates the root devDependencies AND every packages/* member's
+  # package.json from this one root entry. Per-package `directory:` entries
+  # (e.g. /packages/vue3) were removed: Dependabot errors out on a
+  # workspace subdirectory that has no lockfile, which is what broke the
+  # "Dependabot Updates" runs.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -68,22 +71,3 @@ updates:
       esbuild:
         patterns:
           - "esbuild"
-
-  # Per-package configs only watch package-specific deps (the framework
-  # peer / type packages — vue, react, @types/react). The build tools
-  # were moved to root, so these PRs are sparse.
-  - package-ecosystem: "npm"
-    directory: "/packages/vue3"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "dependencies"
-      - "package:vue3"
-
-  - package-ecosystem: "npm"
-    directory: "/packages/react"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "dependencies"
-      - "package:react"

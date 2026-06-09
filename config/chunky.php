@@ -40,7 +40,7 @@ return [
         // networks consider bumping to 4-8MB to reduce round-trips
         // (modern S3 multipart uploads default to 8MB). Must be
         // smaller than PHP's post_max_size.
-        'size' => env('CHUNKY_CHUNK_SIZE', 1024 * 1024),
+        'size' => (int) env('CHUNKY_CHUNK_SIZE', 1024 * 1024),
 
         // SHA-256 chunk integrity verification by the
         // VerifyChunkIntegrity middleware. Set to false to trade

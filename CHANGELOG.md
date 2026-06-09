@@ -6,6 +6,11 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+## v0.22.6 - 2026-06-09
+
+### Fixed
+- **`TypeError` when `CHUNKY_CHUNK_SIZE` is set in `.env`.** `env()` always returns strings, and `ChunkCalculator::chunkSize()` — declared `int` under `strict_types=1` — returned the config value uncast, so any app that set `CHUNKY_CHUNK_SIZE` crashed on the first initiate request with `Return value must be of type int, string returned`. The calculator now casts the config read to `int`, which also fixes apps running an already-published `config/chunky.php` without re-publishing. The shipped config additionally casts `(int) env('CHUNKY_CHUNK_SIZE', ...)` at the source. A regression test covers the string-valued config path.
+
 ## v0.22.5 - 2026-05-16
 
 ### Fixed

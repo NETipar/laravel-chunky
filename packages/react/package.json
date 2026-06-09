@@ -1,6 +1,6 @@
 {
     "name": "@netipar/chunky-react",
-    "version": "0.22.5",
+    "version": "0.22.6",
     "description": "React hook for Laravel Chunky chunk uploads",
     "type": "module",
     "main": "dist/index.js",

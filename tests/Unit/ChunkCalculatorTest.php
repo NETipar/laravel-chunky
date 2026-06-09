@@ -17,6 +17,12 @@ it('returns chunk size from config or override', function () {
     expect(ChunkCalculator::chunkSize(5 * 1024 * 1024))->toBe(5 * 1024 * 1024);
 });
 
+it('casts a string chunk size from env-backed config to int', function () {
+    config(['chunky.chunks.size' => '2097152']);
+
+    expect(ChunkCalculator::chunkSize())->toBe(2097152);
+});
+
 it('calculates progress percentage', function () {
     expect(ChunkCalculator::progress(0, 10))->toBe(0.0);
     expect(ChunkCalculator::progress(5, 10))->toBe(50.0);

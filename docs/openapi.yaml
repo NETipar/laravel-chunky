@@ -1,0 +1,535 @@
+openapi: 3.1.0
+info:
+  title: Laravel Chunky API
+  version: 1.0.0
+  description: >
+    Chunk-based file upload protocol for Laravel Chunky v1.0. This document is
+    the OpenAPI mirror of docs/protocol.md; the two MUST agree field-for-field.
+    All request/response bodies are JSON (snake_case) except chunk upload, which
+    is multipart/form-data.
+  license:
+    name: MIT
+
+servers:
+  - url: "{scheme}://{host}/{prefix}"
+    description: Chunky API root (prefix configurable via chunky.routes.prefix)
+    variables:
+      scheme:
+        default: https
+        enum: [https, http]
+      host:
+        default: localhost
+      prefix:
+        default: api/chunky
+
+tags:
+  - name: Uploads
+    description: Single-file chunked upload lifecycle
+  - name: Batches
+    description: Grouped multi-file uploads
+
+paths:
+  /upload:
+    post:
+      tags: [Uploads]
+      summary: Initiate an upload
+      description: >
+        Starts a chunked upload. With fingerprint resume enabled, an existing
+        live non-terminal upload with the same fingerprint (same user) is
+        returned instead of creating a new record (200, resumed=true).
+      operationId: initiateUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitiateRequest"
+      responses:
+        "201":
+          description: New upload created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InitiateResponse"
+        "200":
+          description: Resumed upload (fingerprint match)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InitiateResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationOrProfile" }
+
+  /upload/{uploadId}/chunks:
+    post:
+      tags: [Uploads]
+      summary: Upload a single chunk
+      description: >
+        Uploads one chunk. On the final chunk the response depends on
+        assembly.mode: a synchronous run returns the completed result inline
+        (status=completed with file+payload); a queued run returns
+        status=assembling. Intermediate chunks return status=uploading. An
+        Idempotency-Key (or checksum fallback) replays the cached response
+        byte-for-byte on retry.
+      operationId: uploadChunk
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional dedupe key; response is cached and replayed on retry.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [chunk, chunk_index]
+              properties:
+                chunk:
+                  type: string
+                  format: binary
+                  description: The chunk bytes.
+                chunk_index:
+                  type: integer
+                  minimum: 0
+                  description: Zero-based index; 0 <= chunk_index < total_chunks.
+                checksum:
+                  type: string
+                  description: Optional SHA-256 hex of the chunk; verified by middleware if present.
+      responses:
+        "200":
+          description: >
+            Chunk accepted. One of: intermediate (uploading), final sync
+            (completed), or final queued (assembling). Idempotent replay reuses
+            the original cached body.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ChunkAcceptedResponse"
+                  - $ref: "#/components/schemas/ChunkCompletedResponse"
+                  - $ref: "#/components/schemas/ChunkAssemblingResponse"
+                discriminator:
+                  propertyName: status
+                  mapping:
+                    uploading: "#/components/schemas/ChunkAcceptedResponse"
+                    completed: "#/components/schemas/ChunkCompletedResponse"
+                    assembling: "#/components/schemas/ChunkAssemblingResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/UploadNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+        "410": { $ref: "#/components/responses/UploadExpired" }
+        "422": { $ref: "#/components/responses/ChunkValidation" }
+        "500": { $ref: "#/components/responses/AssemblyFailed" }
+        "503": { $ref: "#/components/responses/LockTimeout" }
+
+  /upload/{uploadId}:
+    get:
+      tags: [Uploads]
+      summary: Get upload status
+      operationId: getUploadStatus
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current upload status (public projection)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadStatusResponse"
+        "404": { $ref: "#/components/responses/UploadNotFound" }
+    delete:
+      tags: [Uploads]
+      summary: Cancel an upload
+      description: >
+        Cancels a pending/uploading upload. Idempotent when already cancelled.
+        Rejected with 409 while assembling or once terminal (completed/failed).
+      operationId: cancelUpload
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Upload cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelledResponse"
+        "404": { $ref: "#/components/responses/UploadNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+
+  /batch:
+    post:
+      tags: [Batches]
+      summary: Initiate a batch
+      operationId: initiateBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchInitiateRequest"
+      responses:
+        "201":
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchInitiateResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationOrProfile" }
+
+  /batch/{batchId}/upload:
+    post:
+      tags: [Batches]
+      summary: Initiate a batch member upload
+      description: Same as /upload, but the upload is bound to the batch.
+      operationId: initiateBatchUpload
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitiateRequest"
+      responses:
+        "201":
+          description: Batch member upload created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchMemberInitiateResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/BatchNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+        "422": { $ref: "#/components/responses/ValidationOrProfile" }
+
+  /batch/{batchId}:
+    get:
+      tags: [Batches]
+      summary: Get batch status
+      operationId: getBatchStatus
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current batch status with per-member summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchStatusResponse"
+        "404": { $ref: "#/components/responses/BatchNotFound" }
+    delete:
+      tags: [Batches]
+      summary: Cancel a batch
+      description: Cancels the batch and every non-terminal member upload.
+      operationId: cancelBatch
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Batch cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelledResponse"
+        "404": { $ref: "#/components/responses/BatchNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+
+components:
+  schemas:
+    UploadStatus:
+      type: string
+      enum: [pending, uploading, assembling, completed, failed, cancelled]
+    BatchStatus:
+      type: string
+      enum: [pending, in_progress, completed, partially_completed, cancelled]
+    ErrorCode:
+      type: string
+      enum:
+        - validation_failed
+        - profile_not_found
+        - unauthorized
+        - upload_not_found
+        - batch_not_found
+        - upload_expired
+        - invalid_state
+        - chunk_index_out_of_range
+        - checksum_mismatch
+        - lock_timeout
+        - assembly_failed
+
+    InitiateRequest:
+      type: object
+      required: [file_name, file_size]
+      properties:
+        file_name:
+          type: string
+          description: Original filename with extension.
+        file_size:
+          type: integer
+          minimum: 1
+          description: Total file size in bytes.
+        mime_type:
+          type: [string, "null"]
+          description: Client-declared MIME type.
+        profile:
+          type: string
+          description: Registered profile name (chunky.profiles).
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Arbitrary metadata passed to the profile.
+        fingerprint:
+          type: [string, "null"]
+          description: Client file fingerprint for resume detection.
+        batch_id:
+          type: [string, "null"]
+          description: Usually null for direct initiate; set via the batch member endpoint.
+
+    InitiateResponse:
+      type: object
+      required: [upload_id, chunk_size, total_chunks, resumed, uploaded_chunks]
+      properties:
+        upload_id: { type: string }
+        chunk_size:
+          type: integer
+          description: Server-expected chunk size in bytes.
+        total_chunks: { type: integer }
+        resumed:
+          type: boolean
+          description: true when an existing upload was resumed via fingerprint.
+        uploaded_chunks:
+          type: array
+          items: { type: integer }
+          description: Already-received chunk indices (empty for a fresh upload).
+
+    BatchMemberInitiateResponse:
+      allOf:
+        - $ref: "#/components/schemas/InitiateResponse"
+        - type: object
+          required: [batch_id]
+          properties:
+            batch_id: { type: string }
+
+    ChunkAcceptedResponse:
+      type: object
+      required: [status, chunk_index, uploaded_count, total_chunks, progress]
+      properties:
+        status:
+          type: string
+          const: uploading
+        chunk_index: { type: integer }
+        uploaded_count: { type: integer }
+        total_chunks: { type: integer }
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+
+    ChunkCompletedResponse:
+      type: object
+      required: [status, progress, file]
+      properties:
+        status:
+          type: string
+          const: completed
+        progress:
+          type: number
+          const: 100.0
+        file:
+          $ref: "#/components/schemas/CompletedFile"
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Return value of the profile completed() hook.
+
+    ChunkAssemblingResponse:
+      type: object
+      required: [status, progress]
+      properties:
+        status:
+          type: string
+          const: assembling
+        progress:
+          type: number
+          const: 100.0
+
+    CompletedFile:
+      type: object
+      required: [path, size]
+      properties:
+        path:
+          type: string
+          description: Disk-relative path. Never absolute; disk name is not exposed.
+        size:
+          type: integer
+          description: Final file size in bytes.
+        url:
+          type: string
+          format: uri
+          description: Public URL when the disk supports it; omitted otherwise.
+
+    UploadStatusResponse:
+      type: object
+      required: [upload_id, status, progress, uploaded_chunks, total_chunks, file_name, file_size]
+      properties:
+        upload_id: { type: string }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        uploaded_chunks:
+          type: array
+          items: { type: integer }
+        total_chunks: { type: integer }
+        file_name: { type: string }
+        file_size: { type: integer }
+        file:
+          description: Present only when status=completed.
+          oneOf:
+            - $ref: "#/components/schemas/CompletedFile"
+            - type: "null"
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Present only when status=completed; the persisted completed() result.
+
+    CancelledResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: cancelled
+
+    BatchInitiateRequest:
+      type: object
+      required: [total_files]
+      properties:
+        total_files:
+          type: integer
+          minimum: 1
+        profile:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    BatchInitiateResponse:
+      type: object
+      required: [batch_id, total_files]
+      properties:
+        batch_id: { type: string }
+        total_files: { type: integer }
+
+    BatchStatusResponse:
+      type: object
+      required: [batch_id, status, total_files, completed_count, failed_count, uploads]
+      properties:
+        batch_id: { type: string }
+        status: { $ref: "#/components/schemas/BatchStatus" }
+        total_files: { type: integer }
+        completed_count: { type: integer }
+        failed_count: { type: integer }
+        uploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchMemberSummary"
+
+    BatchMemberSummary:
+      type: object
+      required: [upload_id, status, progress]
+      properties:
+        upload_id: { type: string }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            message:
+              type: string
+              description: Human-readable, localized; not machine-stable.
+
+  responses:
+    Unauthorized:
+      description: Not authorized (403 unauthorized)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    UploadNotFound:
+      description: No such upload (404 upload_not_found)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    BatchNotFound:
+      description: No such batch (404 batch_not_found)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    UploadExpired:
+      description: Upload expired (410 upload_expired)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    InvalidState:
+      description: Operation not valid in the current state (409 invalid_state)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    LockTimeout:
+      description: Lock contention; safe to retry (503 lock_timeout)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    AssemblyFailed:
+      description: Sync assembly failed; upload moved to failed (500 assembly_failed)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    ValidationOrProfile:
+      description: Validation failed (422 validation_failed) or unknown profile (422 profile_not_found)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    ChunkValidation:
+      description: >
+        Chunk validation error: 422 validation_failed, chunk_index_out_of_range,
+        or checksum_mismatch.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }

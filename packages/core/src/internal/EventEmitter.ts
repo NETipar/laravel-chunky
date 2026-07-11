@@ -1,73 +1,59 @@
 /**
- * Tiny typed event emitter shared between ChunkUploader and
- * BatchUploader. The two used to duplicate the same `listeners` Map
- * + sticky-replay + late-subscribe-guard logic; this module is the
- * single source of truth.
+ * The single event primitive used by Uploader, Batch, and UploadManager.
  *
- * The emitter is generic over an event-map. Each event name is a key
- * of the map and the payload type is the corresponding value, mirroring
- * the on/emit overloads the public Uploader classes expose.
+ * Sticky replay: the last payload of a "sticky" event is re-delivered to any
+ * listener that subscribes after it fired. This lets a framework wrapper
+ * unmount and resubscribe without missing a terminal event (completed/failed).
  *
- * Sticky replay: when `setSticky(event, payload)` has been called and a
- * new listener subscribes to that event, the cached payload is
- * delivered in a microtask. The microtask first checks that the
- * listener is still registered, so a synchronous unsubscribe before
- * the microtask drains (typical `useEffect` cleanup) does NOT fire
- * the callback after `unsub()` returns.
- *
- * @internal — not part of the public package API.
+ * The constraint keeps `keyof Events` precise (no string index signature) while
+ * requiring every event value to be a listener function.
  */
-type AnyCallback = (payload: unknown) => void;
+export class EventEmitter<Events extends { [K in keyof Events]: (...args: never[]) => void }> {
+    private listeners: { [K in keyof Events]?: Set<Events[K]> } = {};
 
-export class EventEmitter<EventMap extends Record<string, unknown>> {
-    private listeners = new Map<keyof EventMap, Set<AnyCallback>>();
-    private sticky = new Map<keyof EventMap, unknown>();
+    private sticky = new Set<keyof Events>();
 
-    on<K extends keyof EventMap>(
-        event: K,
-        callback: (payload: EventMap[K]) => void,
-    ): () => void {
-        if (!this.listeners.has(event)) {
-            this.listeners.set(event, new Set());
+    private lastPayload: { [K in keyof Events]?: Parameters<Events[K]> } = {};
+
+    constructor(stickyEvents: (keyof Events)[] = []) {
+        for (const event of stickyEvents) {
+            this.sticky.add(event);
         }
+    }
 
-        const set = this.listeners.get(event)!;
-        const stored = callback as AnyCallback;
-        set.add(stored);
+    on<K extends keyof Events>(event: K, listener: Events[K]): () => void {
+        const set = (this.listeners[event] ??= new Set());
+        set.add(listener);
 
-        if (this.sticky.has(event)) {
-            const payload = this.sticky.get(event) as EventMap[K];
-
-            queueMicrotask(() => {
-                if (set.has(stored)) {
-                    callback(payload);
-                }
-            });
+        if (this.sticky.has(event) && event in this.lastPayload) {
+            const payload = this.lastPayload[event];
+            if (payload) {
+                listener(...payload);
+            }
         }
 
         return () => {
-            set.delete(stored);
+            set.delete(listener);
         };
     }
 
-    emit<K extends keyof EventMap>(event: K, payload: EventMap[K]): void {
-        this.listeners.get(event)?.forEach((cb) => cb(payload));
-    }
+    emit<K extends keyof Events>(event: K, ...args: Parameters<Events[K]>): void {
+        if (this.sticky.has(event)) {
+            this.lastPayload[event] = args;
+        }
 
-    setSticky<K extends keyof EventMap>(event: K, payload: EventMap[K]): void {
-        this.sticky.set(event, payload);
-    }
-
-    clearSticky(event?: keyof EventMap): void {
-        if (event === undefined) {
-            this.sticky.clear();
+        const set = this.listeners[event];
+        if (!set) {
             return;
         }
-        this.sticky.delete(event);
+
+        for (const listener of [...set]) {
+            listener(...args);
+        }
     }
 
     clear(): void {
-        this.listeners.clear();
-        this.sticky.clear();
+        this.listeners = {};
+        this.lastPayload = {};
     }
 }

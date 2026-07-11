@@ -1,16 +1,5 @@
-/**
- * Low-level building blocks for advanced consumers who want to
- * orchestrate the upload flow themselves (custom retry policy, custom
- * worker pool, custom event-emitter integration). The high-level
- * `ChunkUploader` and `BatchUploader` classes are built on top of
- * these.
- *
- * Stability: marked `@internal` until v1.0; the API may change between
- * minor releases. Pin the package version exactly if you import from
- * `tools`.
- *
- * @internal
- */
+// Lower-level building blocks for advanced integrations. Unlike 0.x, these are
+// the exact primitives the Uploader/Batch/UploadManager use internally.
 export { EventEmitter } from './internal/EventEmitter';
-export { RetryPolicy, DEFAULT_FATAL_STATUSES } from './internal/RetryPolicy';
-export type { AutoRetryOption, RetryContext, RetryDecision } from './internal/RetryPolicy';
+export { RetryPolicy, type RetryOptions } from './internal/RetryPolicy';
+export { isRetryable, postJson, postForm, getJson, deleteJson, type RequestConfig } from './http';

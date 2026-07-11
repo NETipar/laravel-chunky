@@ -1,8 +1,95 @@
 # Upgrade Guide
 
-Migration notes for breaking changes between minor versions while the
-package is in `0.x`. Patch releases (`0.x.y`) never contain breaking
-changes — refer to the [CHANGELOG](CHANGELOG.md) for the full log.
+Migration notes for breaking changes. The `0.x → 1.0` section below is a
+ground-up rewrite; the earlier `0.x` notes are kept for history.
+
+## Upgrading to 1.0 from 0.x
+
+v1.0 is a complete rewrite with a stable public API. It is a deliberate,
+one-time break. This guide maps every concept across.
+
+### Requirements
+
+- **PHP 8.2 → 8.3+**, **drop Laravel 11** (v1 supports Laravel 12 / 13). Stay on
+  the `0.x` line if you need PHP 8.2 or Laravel 11.
+
+### Contexts → Upload profiles (the biggest change)
+
+The 0.x context registry (`Chunky::register()` / `Chunky::context()` with
+callbacks) is replaced by `UploadProfile` classes. `Chunky::simple()` still
+works unchanged.
+
+```php
+// 0.x
+Chunky::context('avatar', rules: fn () => ['file_size' => ['max:10485760']], save: function ($metadata) {
+    Media::create(['path' => $metadata->finalPath]);
+});
+
+// 1.0 — a class (php artisan make:chunky-profile AvatarProfile)
+class AvatarProfile extends UploadProfile
+{
+    public function rules(): array { return ['file_size' => ['max:10485760']]; }
+    public function directory(UploadContext $context): string { return 'avatars'; }
+    public function completed(CompletedUpload $upload): array
+    {
+        $media = Media::create(['disk' => $upload->disk, 'path' => $upload->path]);
+        return ['media_id' => $media->id]; // returned to the client as `payload`
+    }
+}
+// config/chunky.php: 'profiles' => ['avatar' => AvatarProfile::class],
+```
+
+The request parameter is now `profile` (was `context`).
+
+### Config keys
+
+Re-publish `config/chunky.php` (`php artisan chunky:install`). Key renames:
+
+| 0.x | 1.0 |
+|---|---|
+| `storage.temp_directory` / `storage.final_directory` | `chunks.directory` (+ per-profile `directory()`) |
+| `lifecycle.expiration_minutes` | `limits.expiration_hours` |
+| `lifecycle.assembly_stale_after_minutes` | `assembly.stale_claim_seconds` |
+| `chunks.verify_integrity` | `integrity.required` |
+| `limits.allowed_mimes` | per-profile `rules()` |
+| `metadata.max_keys` | `limits.metadata_max_keys` |
+| `assembly.connection` (`'sync'`) | `assembly.mode` = `sync` \| `queue` \| `auto` |
+| `broadcasting.events` map + `expose_internal_paths` | `broadcasting.except` list (internal paths never exposed) |
+| `metrics.*` | **removed** (use event listeners) |
+
+### HTTP / wire protocol
+
+- The chunk response now uses `status` (`uploading`/`completed`/`assembling`)
+  instead of `is_complete`. In **sync** mode the final chunk returns the full
+  result: `{"status":"completed","file":{…},"payload":{…}}`.
+- Cancel returns **`200 {"status":"cancelled"}`** (was `204`).
+- All errors use the envelope `{"error":{"code","message"}}`. An oversized
+  `file_size` is `422 validation_failed` (was a `422` too, now with a code); a
+  bad checksum is `422 checksum_mismatch` (was `500`).
+- Non-owner status/cancel returns **`404`** (anti-enumeration); non-owner chunk
+  returns **`403`**.
+
+### Frontend
+
+The npm packages are rewritten:
+
+- `ChunkUploader` / `BatchUploader` → **`Uploader`** / **`Batch`**, plus a new
+  navigation-surviving **`UploadManager`** (`import { manager }`).
+- **Mutable public fields are gone** (`uploader.progress`, `uploader.isUploading`, …).
+  Read an immutable snapshot via `uploader.getState()` or `uploader.subscribe()`.
+- `await uploader.upload()` resolves with the `UploadResult` in sync, queue, and
+  resumed modes alike.
+- Errors are a typed `ChunkyError` with a stable `.code`.
+- Framework wrappers: Vue `useUpload()`/`useUploads()`/`useBatch()` + `createChunky()`
+  plugin; React `useUpload()` + `<ChunkyProvider>`; Alpine `registerChunky()`.
+
+### Removed
+
+- The **Metrics** subsystem (`Support\Metrics`) — use ordinary event listeners.
+- The **`Expired`** upload status — expiry is a timestamp; cleanup cancels lapsed uploads.
+- `broadcasting.expose_internal_paths` — the public projection always strips internal fields.
+
+---
 
 ## Upgrading to 0.19 from 0.18
 

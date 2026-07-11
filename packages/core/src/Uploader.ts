@@ -54,6 +54,8 @@ export class Uploader {
 
     private bytesUploaded = 0;
 
+    private runPromise: Promise<UploadResult> | null = null;
+
     constructor(
         private readonly file: File,
         private readonly options: UploadOptions,
@@ -97,7 +99,18 @@ export class Uploader {
         return this.emitter.on(event, listener);
     }
 
-    async upload(): Promise<UploadResult> {
+    /**
+     * Idempotent: the upload runs once. Calling upload() again (e.g. the
+     * UploadManager started it and the caller also awaits it) returns the same
+     * in-flight promise rather than restarting.
+     */
+    upload(): Promise<UploadResult> {
+        this.runPromise ??= this.run();
+
+        return this.runPromise;
+    }
+
+    private async run(): Promise<UploadResult> {
         if (this.state.status === 'completed' && this.state.result) {
             return this.state.result;
         }

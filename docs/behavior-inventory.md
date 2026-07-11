@@ -344,3 +344,32 @@ elhagyjuk a hibakód-enumból. (Ha marad 413, az is védhető — de döntsük e
   `limits.metadata_max_keys=50`, D3 → `broadcasting.except` default a magas-frekvenciájú
   eseményekkel, D4 → 422 (nincs 413). Átvezetve a [protocol.md](protocol.md),
   [openapi.yaml](openapi.yaml) és [v1-implementation-plan.md](v1-implementation-plan.md) fájlokba.
+
+---
+
+## D. Záró-audit (6. fázis) — a KEEP/CHANGED tételek v1 lefedettsége
+
+A KEEP/CHANGED garanciák területenként, a lefedő v1 tesztekkel. Zöld
+(179 PHP + 37 JS teszt).
+
+| Terület (0.x KEEP/CHANGED) | v1 teszt |
+|---|---|
+| Repository CRUD, `markChunk` idempotencia, `transition` CAS, fingerprint/batch/expired lekérdezés | `tests/Contracts/*` mindkét adapteren (`Database*`/`Filesystem*RepositoryTest`) |
+| Versenyhelyzetek: CAS-egy-győztes, chunk-akkumuláció, egyszeri claim, batch finalize-egyszer | `tests/Feature/RepositoryConcurrencyTest` (mindkét driver) |
+| Initiate: validáció, max-size, metadata-cap, path-traversal, unicode, profil, fingerprint-resume | `tests/Feature/InitiateUploadTest` |
+| Chunk: uploading-válasz, index-range, checksum-mismatch, late-chunk 409, idempotencia | `tests/Feature/{UploadChunkTest,IdempotencyTest}` |
+| Sync assembly + `completed()` payload, queue-mód, assembly-hiba → failed | `tests/Feature/AssemblyTest` |
+| Status public-sanitizálás, cancel (200/idempotens/409/404), authz 404/403/anon | `tests/Feature/{UploadStatusTest,CancelUploadTest,AuthorizationTest}` |
+| Batch: initiate/status/cancel, terminális 409, batch-profil validáció, finalizálás | `tests/Feature/BatchTest` |
+| Broadcast sanitizálás + `v:1` + gate | `tests/Feature/BroadcastSanitizationTest` |
+| Cleanup (expired + chunks, dry-run, semmi), config-binding, 8 route, lock-driver compat | `tests/Feature/{CleanupCommandTest,ConfigTest,LockDriverCompatTest}` |
+| Filesystem tracker teljes HTTP-életciklus (paritás) | `tests/Feature/FilesystemTrackerParityTest` |
+| Domain: enum-átmenetek, DTO round-trip, ChunkCalculator (string→int), Fingerprint | `tests/Unit/*` |
+| Frontend: EventEmitter sticky-replay, RetryPolicy, http-envelope, Uploader (sync/queue/resume/pause/cancel/retry), Batch, UploadManager, CompletionWatcher | `packages/core/src/*.test.ts` |
+| Frontend unmount-túlélés (unmount = leiratkozás) | `packages/{vue3,react}/src/useUpload.test.*` |
+
+**DROP-ok (nem igényelnek tesztet, szándékosan eltávolítva):** Metrics alrendszer,
+`Expired` státusz, `broadcasting.expose_internal_paths` opt-in. Plusz a 0.x
+„FS+non-local+flock boot-guard" — a v1-ben a lockolás elvált a tárolástól, így a
+constraint tárgytalan (a `FilesystemTrackerParityTest` igazolja, hogy az FS
+tracker működik).

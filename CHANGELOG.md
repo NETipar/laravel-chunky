@@ -2,9 +2,31 @@
 
 All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
-The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While in `0.x`, minor releases (`0.x.0`) may contain breaking changes; patch releases (`0.x.y`) are bug-fix only. See [UPGRADE.md](UPGRADE.md) for migration notes.
+The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See [UPGRADE.md](UPGRADE.md) for migration notes.
 
 ## Unreleased
+
+## v1.0.0-beta.1 - 2026-07-12
+
+**A ground-up rewrite with a stable public API.** See [UPGRADE.md](UPGRADE.md) for the full `0.x → 1.0` migration.
+
+### Added
+- **Upload profiles** (`UploadProfile` classes + `make:chunky-profile`) replace the context-registry callbacks — validation, destination, authorization, and a `completed()` hook in one testable class. `Chunky::simple()` still works.
+- **Synchronous assembly by default** (`assembly.mode = auto`): files under 256 MB assemble in-request and the final chunk response carries the result (`file` + `payload`) — no queue worker or broadcasting required.
+- **Navigation-surviving `UploadManager`** on the frontend — uploads are owned at module scope, so SPA navigation and component unmounts never cancel them. Immutable `getState()` snapshots + `subscribe()` replace the old mutable fields.
+- **Fingerprint resume** across reloads, speed/ETA in the upload state, and a `chunky:doctor` diagnostic command.
+- Machine-readable error envelope (`{"error":{"code","message"}}`) surfaced as a typed `ChunkyError` on the frontend.
+- `docs/protocol.md` + `docs/openapi.yaml` document the wire protocol.
+
+### Changed
+- Requirements: **PHP 8.3+, Laravel 12/13** (drops PHP 8.2 and Laravel 11).
+- Backend re-architected as ports & adapters: a single upload state machine over `UploadRepository`/`BatchRepository`/`ChunkStore`/`LockProvider`, with database and filesystem drivers verified by one shared contract suite (kills driver drift). The filesystem tracker now works on non-local disks (locking is decoupled from storage).
+- Config validated at boot into a typed `ChunkyConfig`; many keys renamed (see UPGRADE.md).
+- Non-owner status/cancel now returns `404` (anti-enumeration); oversized `file_size` and bad checksums return typed `422`s.
+- Frontend rebuilt: `Uploader`/`Batch` replace `ChunkUploader`/`BatchUploader`; the shared sticky-replay `EventEmitter` is now actually used; packages ship ESM+CJS with bundled type declarations (tsup).
+
+### Removed
+- The Metrics subsystem, the `Expired` upload status, and `broadcasting.expose_internal_paths`.
 
 ## v0.22.6 - 2026-06-09
 

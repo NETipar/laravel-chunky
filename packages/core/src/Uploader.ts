@@ -78,7 +78,10 @@ export class Uploader {
     }
 
     getState(): UploadState {
-        return { ...this.state, file: { ...this.state.file } };
+        // `this.state` is replaced (never mutated) on every patch, so returning
+        // it directly gives a stable reference between changes — required by
+        // React's useSyncExternalStore.
+        return this.state;
     }
 
     subscribe(listener: (state: UploadState) => void): Unsubscribe {

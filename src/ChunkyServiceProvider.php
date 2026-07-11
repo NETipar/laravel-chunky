@@ -14,6 +14,7 @@ use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 use NETipar\Chunky\Adapters\Database\DatabaseBatchRepository;
 use NETipar\Chunky\Adapters\Database\DatabaseUploadRepository;
 use NETipar\Chunky\Adapters\Filesystem\FilesystemBatchRepository;
@@ -29,6 +30,7 @@ use NETipar\Chunky\Console\CleanupCommand;
 use NETipar\Chunky\Console\DoctorCommand;
 use NETipar\Chunky\Console\InstallCommand;
 use NETipar\Chunky\Console\MakeProfileCommand;
+use NETipar\Chunky\Livewire\ChunkUpload;
 use NETipar\Chunky\Ports\BatchRepository;
 use NETipar\Chunky\Ports\ChunkStore;
 use NETipar\Chunky\Ports\Clock;
@@ -126,6 +128,8 @@ class ChunkyServiceProvider extends ServiceProvider
         $this->booted = true;
 
         $this->registerRoutes($config);
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'chunky');
+        $this->registerLivewireComponents();
 
         require __DIR__.'/../routes/channels.php';
 
@@ -147,6 +151,15 @@ class ChunkyServiceProvider extends ServiceProvider
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+    }
+
+    private function registerLivewireComponents(): void
+    {
+        if (! class_exists(Livewire::class)) {
+            return;
+        }
+
+        Livewire::component('chunky-upload', ChunkUpload::class);
     }
 
     private function registerRoutes(ChunkyConfig $config): void

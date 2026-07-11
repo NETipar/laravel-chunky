@@ -21,6 +21,10 @@ export class UploadManager {
 
     private readonly registry: Uploader[] = [];
 
+    // A cached snapshot with a stable reference between changes — required by
+    // React's useSyncExternalStore, and equally correct for Vue.
+    private snapshot: readonly Uploader[] = [];
+
     constructor(private readonly defaults: ChunkyConfig = {}) {}
 
     upload(file: File, options: UploadOptions = {}, config: ChunkyConfig = {}): Uploader {
@@ -44,7 +48,7 @@ export class UploadManager {
     }
 
     uploads(): readonly Uploader[] {
-        return [...this.registry];
+        return this.snapshot;
     }
 
     subscribe(listener: (uploads: readonly Uploader[]) => void): Unsubscribe {
@@ -100,7 +104,8 @@ export class UploadManager {
     }
 
     private notify(): void {
-        this.emitter.emit('change', [...this.registry]);
+        this.snapshot = [...this.registry];
+        this.emitter.emit('change', this.snapshot);
     }
 }
 

@@ -6,5 +6,10 @@ parameters:
         - src
     level: max
     treatPhpDocTypesAsCertain: false
+    stubFiles:
+        - stubs/livewire.stub
     excludePaths:
         - src/Console/stubs/*
+        # Livewire is an optional dependency (composer "suggest"); the Livewire
+        # component is only loaded when livewire/livewire is installed at runtime.
+        - src/Livewire/*

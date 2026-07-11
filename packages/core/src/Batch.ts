@@ -36,11 +36,15 @@ export class Batch {
 
     private batchId = '';
 
+    private stateSnapshot: BatchState;
+
     constructor(
         private readonly files: File[],
         private readonly options: BatchOptions,
         private readonly config: ResolvedConfig,
-    ) {}
+    ) {
+        this.stateSnapshot = { status: 'idle', progress: 0, total: files.length, completed: 0, failed: 0 };
+    }
 
     get id(): string {
         return this.batchId;
@@ -51,6 +55,10 @@ export class Batch {
     }
 
     getState(): BatchState {
+        return this.stateSnapshot;
+    }
+
+    private computeState(): BatchState {
         const states = this.uploaders.map((u) => u.getState());
         const completed = states.filter((s) => s.status === 'completed').length;
         const failed = states.filter((s) => s.status === 'failed').length;
@@ -169,10 +177,10 @@ export class Batch {
     }
 
     private notify(): void {
-        const snapshot = this.getState();
+        this.stateSnapshot = this.computeState();
         for (const listener of [...this.subscribers]) {
-            listener(snapshot);
+            listener(this.stateSnapshot);
         }
-        this.emitter.emit('stateChange', snapshot);
+        this.emitter.emit('stateChange', this.stateSnapshot);
     }
 }

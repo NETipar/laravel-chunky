@@ -8,6 +8,6 @@ class ChunkIntegrityException extends ChunkyException
 {
     public static function checksumMismatch(string $uploadId, int $chunkIndex): self
     {
-        return new self("Checksum mismatch for chunk {$chunkIndex} of upload {$uploadId}.");
+        return new self("Checksum mismatch for chunk {$chunkIndex} of upload '{$uploadId}'.");
     }
 }

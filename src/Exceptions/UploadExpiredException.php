@@ -8,6 +8,6 @@ class UploadExpiredException extends ChunkyException
 {
     public static function forUpload(string $uploadId): self
     {
-        return new self("Upload {$uploadId} has expired.");
+        return new self("Upload '{$uploadId}' has expired and can no longer accept chunks.");
     }
 }

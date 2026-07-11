@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NETipar\Chunky\Exceptions;
+
+use NETipar\Chunky\Domain\BatchStatus;
+use NETipar\Chunky\Domain\UploadStatus;
+
+class InvalidStateException extends ChunkyException
+{
+    public static function upload(UploadStatus $from, UploadStatus $to): self
+    {
+        return new self("Cannot transition upload from '{$from->value}' to '{$to->value}'.");
+    }
+
+    public static function batch(BatchStatus $from, BatchStatus $to): self
+    {
+        return new self("Cannot transition batch from '{$from->value}' to '{$to->value}'.");
+    }
+}

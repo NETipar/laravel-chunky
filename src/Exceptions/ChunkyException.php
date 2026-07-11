@@ -4,6 +4,6 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Exceptions;
 
-use Exception;
+use RuntimeException;
 
-class ChunkyException extends Exception {}
+class ChunkyException extends RuntimeException {}

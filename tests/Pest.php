@@ -12,3 +12,4 @@ uses(TestCase::class)->in('Feature');
 require_once __DIR__.'/Contracts/UploadRepositoryContract.php';
 require_once __DIR__.'/Contracts/BatchRepositoryContract.php';
 require_once __DIR__.'/Support/repositories.php';
+require_once __DIR__.'/Support/uploads.php';

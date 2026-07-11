@@ -64,7 +64,10 @@
         "laravel": {
             "providers": [
                 "NETipar\\Chunky\\ChunkyServiceProvider"
-            ]
+            ],
+            "aliases": {
+                "Chunky": "NETipar\\Chunky\\Facades\\Chunky"
+            }
         }
     },
     "scripts": {

@@ -7,17 +7,17 @@ namespace NETipar\Chunky\Exceptions;
 use NETipar\Chunky\Exceptions\Concerns\RendersErrorEnvelope;
 use NETipar\Chunky\Http\ErrorCode;
 
-class UploadExpiredException extends ChunkyException
+class ProfileNotFoundException extends ChunkyException
 {
     use RendersErrorEnvelope;
 
-    public static function forUpload(string $uploadId): self
+    public static function forName(string $name): self
     {
-        return new self("Upload '{$uploadId}' has expired and can no longer accept chunks.");
+        return new self("Upload profile '{$name}' is not registered.");
     }
 
     public function errorCode(): ErrorCode
     {
-        return ErrorCode::UploadExpired;
+        return ErrorCode::ProfileNotFound;
     }
 }

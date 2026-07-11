@@ -7,17 +7,17 @@ namespace NETipar\Chunky\Exceptions;
 use NETipar\Chunky\Exceptions\Concerns\RendersErrorEnvelope;
 use NETipar\Chunky\Http\ErrorCode;
 
-class UploadExpiredException extends ChunkyException
+class UnauthorizedUploadException extends ChunkyException
 {
     use RendersErrorEnvelope;
 
-    public static function forUpload(string $uploadId): self
+    public static function make(): self
     {
-        return new self("Upload '{$uploadId}' has expired and can no longer accept chunks.");
+        return new self('This action is unauthorized.');
     }
 
     public function errorCode(): ErrorCode
     {
-        return ErrorCode::UploadExpired;
+        return ErrorCode::Unauthorized;
     }
 }

@@ -13,6 +13,8 @@ it('binds a validated ChunkyConfig from the merged config', function () {
     expect($config->metadataMaxKeys)->toBe(50);
 });
 
-it('resolves ChunkyConfig as a singleton', function () {
-    expect(app(ChunkyConfig::class))->toBe(app(ChunkyConfig::class));
+it('rebuilds ChunkyConfig from the current config on each resolution', function () {
+    config(['chunky.chunks.size' => 4096]);
+
+    expect(app(ChunkyConfig::class)->chunkSize)->toBe(4096);
 });

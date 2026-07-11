@@ -23,4 +23,12 @@ class TestCase extends Orchestra
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
+
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('chunky.disk', 'local');
+        $app['config']->set('chunky.chunks.disk', 'local');
+        // Small chunks so tests can drive multi-chunk uploads with tiny payloads.
+        $app['config']->set('chunky.chunks.size', 8);
+    }
 }

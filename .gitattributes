@@ -14,8 +14,6 @@
 /.agents            export-ignore
 /CLAUDE.md          export-ignore
 /AGENTS.md          export-ignore
-/docs               export-ignore
-/examples           export-ignore
 /scripts            export-ignore
 /packages           export-ignore
 /package.json       export-ignore

@@ -11,6 +11,8 @@ export interface AlpineLike {
 export interface ChunkyUploadComponent {
     state: UploadState | null;
     uploader: Uploader | null;
+    /** Object URL preview for image files; null otherwise. */
+    readonly previewUrl: string | null;
     start(file: File): void;
     onFileChange(event: Event): void;
 }
@@ -19,6 +21,9 @@ function chunkyUpload(manager: UploadManager, options: UploadOptions): ChunkyUpl
     return {
         state: null,
         uploader: null,
+        get previewUrl(): string | null {
+            return this.uploader?.previewUrl() ?? null;
+        },
         start(file: File): void {
             const uploader = manager.upload(file, options);
             this.uploader = uploader;

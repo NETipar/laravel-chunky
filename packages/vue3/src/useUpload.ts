@@ -1,4 +1,4 @@
-import { type DeepReadonly, type Ref, onScopeDispose, readonly, shallowRef } from 'vue';
+import { type ComputedRef, type DeepReadonly, type Ref, computed, onScopeDispose, readonly, shallowRef } from 'vue';
 import type { UploadOptions, UploadState, Uploader } from '@netipar/chunky-core';
 import { useManager } from './manager';
 
@@ -6,6 +6,8 @@ export interface UseUpload {
     start(file: File, options?: UploadOptions): Uploader;
     state: DeepReadonly<Ref<UploadState | null>>;
     uploader: Ref<Uploader | null>;
+    /** Object URL preview for image files; null otherwise. */
+    previewUrl: ComputedRef<string | null>;
 }
 
 export function useUpload(): UseUpload {
@@ -25,8 +27,16 @@ export function useUpload(): UseUpload {
         return started;
     }
 
+    // Re-evaluates when the tracked uploader (or its state) changes; the
+    // object URL itself is cached inside the Uploader.
+    const previewUrl = computed(() => {
+        void state.value;
+
+        return uploader.value?.previewUrl() ?? null;
+    });
+
     // Unmount only unsubscribes — the upload keeps running inside the manager.
     onScopeDispose(() => unsubscribe?.());
 
-    return { start, state: readonly(state), uploader };
+    return { start, state: readonly(state), uploader, previewUrl };
 }

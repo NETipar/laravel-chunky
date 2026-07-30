@@ -177,6 +177,8 @@ manager.installUnloadGuard();
 
 `uploader.getState()` returns an immutable snapshot: `{ status, progress, uploadedChunks, totalChunks, bytesPerSecond, etaSeconds, file, result, error }`.
 
+For image uploads, `uploader.previewUrl()` lazily creates a cached object URL you can drop into an `<img>` (null for non-image files); the manager revokes it when the upload is evicted via `manager.remove()`. Need a real downscaled thumbnail instead? `await createThumbnail(file, { maxDimension: 256 })` returns a `Blob` (WebP by default), dependency-free.
+
 ### Vue 3 — `@netipar/chunky-vue3`
 
 ```ts
@@ -189,12 +191,13 @@ app.use(createChunky({ baseUrl: '/api/chunky', headers: { 'X-CSRF-TOKEN': token 
 <script setup lang="ts">
 import { useUpload } from '@netipar/chunky-vue3';
 
-const { start, state } = useUpload();
+const { start, state, previewUrl } = useUpload();
 const onPick = (e: Event) => start((e.target as HTMLInputElement).files![0], { profile: 'avatar' });
 </script>
 
 <template>
   <input type="file" @change="onPick" />
+  <img v-if="previewUrl" :src="previewUrl" alt="" />
   <progress v-if="state" :value="state.progress" max="100" />
 </template>
 ```

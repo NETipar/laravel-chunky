@@ -1,8 +1,10 @@
 {
+    "$schema": "https://getcomposer.org/schema.json",
     "name": "netipar/laravel-chunky",
     "description": "Chunk-based file upload package for Laravel with event-driven architecture, resume support, batch upload, and framework-agnostic frontend clients for Vue 3, React, Alpine.js, and Livewire.",
     "keywords": [
         "laravel",
+        "netipar",
         "chunk",
         "upload",
         "file",
@@ -18,8 +20,8 @@
         "alpine",
         "livewire"
     ],
-    "license": "MIT",
     "homepage": "https://github.com/NETipar/laravel-chunky",
+    "license": "MIT",
     "support": {
         "issues": "https://github.com/NETipar/laravel-chunky/issues",
         "source": "https://github.com/NETipar/laravel-chunky",
@@ -30,25 +32,32 @@
         {
             "name": "NETipar",
             "email": "dev@netipar.hu",
-            "homepage": "https://netipar.hu"
+            "homepage": "https://netipar.hu",
+            "role": "Developer"
         }
     ],
     "require": {
         "php": "^8.3",
-        "illuminate/support": "^12.0|^13.0",
-        "illuminate/http": "^12.0|^13.0",
-        "illuminate/routing": "^12.0|^13.0",
-        "illuminate/database": "^12.0|^13.0",
-        "illuminate/filesystem": "^12.0|^13.0",
-        "illuminate/bus": "^12.0|^13.0",
-        "illuminate/queue": "^12.0|^13.0"
+        "illuminate/bus": "^12.0||^13.0",
+        "illuminate/database": "^12.0||^13.0",
+        "illuminate/filesystem": "^12.0||^13.0",
+        "illuminate/http": "^12.0||^13.0",
+        "illuminate/queue": "^12.0||^13.0",
+        "illuminate/routing": "^12.0||^13.0",
+        "illuminate/support": "^12.0||^13.0"
     },
     "require-dev": {
-        "laravel/pint": "^1.18",
-        "orchestra/testbench": "^10.0|^11.0",
-        "pestphp/pest": "^4.0",
-        "mockery/mockery": "^1.6",
-        "larastan/larastan": "^3.0"
+        "larastan/larastan": "^3.9",
+        "laravel/pao": "^1.0",
+        "laravel/pint": "^1.29",
+        "orchestra/testbench": "^10.0||^11.0",
+        "pestphp/pest": "^4.6",
+        "pestphp/pest-plugin-laravel": "^4.1",
+        "pestphp/pest-plugin-type-coverage": "^4.0",
+        "phpstan/extension-installer": "^1.4"
+    },
+    "suggest": {
+        "livewire/livewire": "Required for the Livewire chunk upload component (^3.0)"
     },
     "autoload": {
         "psr-4": {
@@ -57,8 +66,55 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "NETipar\\Chunky\\Tests\\": "tests/"
+            "NETipar\\Chunky\\Tests\\": "tests/",
+            "Workbench\\App\\": "workbench/app/",
+            "Workbench\\Database\\Factories\\": "workbench/database/factories/",
+            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
         }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@clear",
+            "@prepare"
+        ],
+        "prepare": [
+            "@php vendor/bin/testbench package:discover --ansi"
+        ],
+        "build": [
+            "@php vendor/bin/testbench workbench:build --ansi"
+        ],
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@build",
+            "@php vendor/bin/testbench serve --ansi"
+        ],
+        "lint": [
+            "vendor/bin/pint --parallel"
+        ],
+        "lint:check": [
+            "vendor/bin/pint --parallel --test"
+        ],
+        "analyse": [
+            "vendor/bin/phpstan analyse --memory-limit=2G"
+        ],
+        "test:types": [
+            "vendor/bin/pest --type-coverage --min=100 --memory-limit=2G"
+        ],
+        "test:unit": [
+            "vendor/bin/pest --parallel"
+        ],
+        "test:coverage": [
+            "vendor/bin/pest --coverage"
+        ],
+        "test": [
+            "@analyse",
+            "@lint:check",
+            "@test:types",
+            "@test:unit"
+        ],
+        "clear": [
+            "@php vendor/bin/testbench package:purge-skeleton --ansi"
+        ]
     },
     "extra": {
         "laravel": {
@@ -70,25 +126,13 @@
             }
         }
     },
-    "scripts": {
-        "test": "vendor/bin/pest",
-        "test-coverage": "vendor/bin/pest --coverage",
-        "format": "vendor/bin/pint",
-        "analyse": "vendor/bin/phpstan analyse --memory-limit=2G",
-        "ci": [
-            "@format -- --test",
-            "@analyse",
-            "@test"
-        ]
-    },
-    "suggest": {
-        "livewire/livewire": "Required for the Livewire chunk upload component (^3.0)"
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "config": {
+        "sort-packages": true,
         "allow-plugins": {
-            "pestphp/pest-plugin": true
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
         }
-    }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

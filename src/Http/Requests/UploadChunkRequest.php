@@ -27,6 +27,7 @@ class UploadChunkRequest extends AbstractChunkyRequest
         $upload = app(UploadService::class)->find(Coerce::toString($this->route('uploadId')));
 
         $indexRules = ['required', 'integer', 'min:0'];
+
         if ($upload !== null) {
             $indexRules[] = 'max:'.($upload->totalChunks - 1);
         }

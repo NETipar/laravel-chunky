@@ -300,7 +300,7 @@ The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`vali
 
 - [UPGRADE.md](UPGRADE.md) — migrating from `0.x`
 - [CHANGELOG.md](CHANGELOG.md) — release history
-- [SECURITY.md](SECURITY.md) — supported versions and reporting
-- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup
+- [SECURITY.md](.github/SECURITY.md) — supported versions and reporting
+- [CONTRIBUTING.md](.github/CONTRIBUTING.md) — development setup
 
 Licensed under the [MIT license](LICENSE.md).

@@ -15,7 +15,7 @@ interface ChunkStore
     /**
      * @return resource A readable stream for the chunk.
      */
-    public function readStream(string $uploadId, int $chunkIndex);
+    public function readStream(string $uploadId, int $chunkIndex); // @pest-ignore-type
 
     public function purge(string $uploadId): void;
 }

@@ -21,7 +21,7 @@ final class FlockProvider implements LockProvider
         $timeout = $timeoutSeconds ?? $this->defaultTimeout;
         $this->ensureDirectory();
 
-        $file = $this->lockDirectory.'/'.sha1($key).'.lock';
+        $file = $this->lockDirectory.'/'.hash('sha256', $key).'.lock';
         $handle = fopen($file, 'c');
 
         if ($handle === false) {
@@ -33,6 +33,7 @@ final class FlockProvider implements LockProvider
         while (! flock($handle, LOCK_EX | LOCK_NB)) {
             if (microtime(true) >= $deadline) {
                 fclose($handle);
+
                 throw new LockTimeoutException("Timed out acquiring lock '{$key}'.");
             }
 

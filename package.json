@@ -7,10 +7,10 @@
         "build:react": "pnpm --filter @netipar/chunky-react run build",
         "build:alpine": "pnpm --filter @netipar/chunky-alpine run build",
         "publish:all": "pnpm run build && pnpm -r publish --no-git-checks",
-        "test": "vitest run",
+        "test": "pnpm build:core && vitest run",
         "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage",
-        "typecheck": "pnpm -r exec tsc --noEmit"
+        "test:coverage": "pnpm build:core && vitest run --coverage",
+        "typecheck": "pnpm build:core && pnpm -r exec tsc --noEmit"
     },
     "devDependencies": {
         "@testing-library/react": "^16.3.2",

@@ -90,6 +90,7 @@ final class FilesystemUploadRepository implements UploadRepository
 
             if (isset($guard['claimed_before'])) {
                 $threshold = $guard['claimed_before'];
+
                 if (! $threshold instanceof DateTimeImmutable
                     || $record->claimedAt === null
                     || $record->claimedAt >= $threshold) {
@@ -147,6 +148,7 @@ final class FilesystemUploadRepository implements UploadRepository
 
         foreach ($this->store->list($this->directory) as $path) {
             $data = $this->store->read($path);
+
             if ($data !== null) {
                 $records[] = UploadRecord::fromArray($data);
             }

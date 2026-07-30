@@ -6,6 +6,9 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+### Changed
+- Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
+
 ## v1.0.0-beta.1 - 2026-07-12
 
 **A ground-up rewrite with a stable public API.** See [UPGRADE.md](UPGRADE.md) for the full `0.x → 1.0` migration.

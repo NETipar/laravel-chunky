@@ -143,7 +143,7 @@ initiate ──▶ upload chunks (concurrent, retried) ──▶ assemble ──
 2. The client uploads chunks concurrently, retrying transient failures.
 3. On the final chunk the server **assembles** the file (streaming, never loading it all into memory), runs your profile's `completed()` hook, and — in sync mode — returns the result inline.
 
-The full wire protocol is documented in [`docs/protocol.md`](docs/protocol.md) and [`docs/openapi.yaml`](docs/openapi.yaml).
+The full wire protocol is documented in [`docs/en/protocol.md`](docs/en/protocol.md) ([magyarul](docs/hu/protocol.md)) and [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ## Upload profiles
 
@@ -281,7 +281,7 @@ Every non-2xx response is a machine-readable envelope:
 { "error": { "code": "upload_expired", "message": "The upload has expired." } }
 ```
 
-The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`validation_failed`, `unauthorized`, `upload_not_found`, `invalid_state`, `checksum_mismatch`, `lock_timeout`, …). Retry decisions use the code, never the message. Full table in [`docs/protocol.md`](docs/protocol.md).
+The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`validation_failed`, `unauthorized`, `upload_not_found`, `invalid_state`, `checksum_mismatch`, `lock_timeout`, …). Retry decisions use the code, never the message. Full table in [`docs/en/protocol.md`](docs/en/protocol.md).
 
 ## Console commands
 
@@ -294,13 +294,13 @@ The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`vali
 
 ## Configuration
 
-`config/chunky.php` is validated at boot into a typed `ChunkyConfig` — a bad value fails fast with the offending key. Full reference and deployment recipes in [`docs/configuration.md`](docs/configuration.md).
+`config/chunky.php` is validated at boot into a typed `ChunkyConfig` — a bad value fails fast with the offending key. Full reference and deployment recipes in [`docs/en/configuration.md`](docs/en/configuration.md) ([magyarul](docs/hu/configuration.md)).
 
 ---
 
 - [UPGRADE.md](UPGRADE.md) — migrating from `0.x`
 - [CHANGELOG.md](CHANGELOG.md) — release history
-- [SECURITY.md](SECURITY.md) — supported versions and reporting
-- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup
+- [SECURITY.md](.github/SECURITY.md) — supported versions and reporting
+- [CONTRIBUTING.md](.github/CONTRIBUTING.md) — development setup
 
 Licensed under the [MIT license](LICENSE.md).

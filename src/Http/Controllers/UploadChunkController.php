@@ -33,6 +33,7 @@ final class UploadChunkController
 
         if ($idempotencyKey !== null) {
             $cached = Cache::get($idempotencyKey);
+
             if (is_array($cached)) {
                 return new JsonResponse($cached);
             }
@@ -84,13 +85,13 @@ final class UploadChunkController
     private function idempotencyKey(?string $header, mixed $checksum, string $uploadId, int $chunkIndex): ?string
     {
         if ($header !== null && $header !== '') {
-            return 'chunky:idem:'.sha1($uploadId.':'.$chunkIndex.':'.$header);
+            return 'chunky:idem:'.hash('sha256', $uploadId.':'.$chunkIndex.':'.$header);
         }
 
         $checksumString = Coerce::toNullableString($checksum);
 
         if ($checksumString !== null) {
-            return 'chunky:idem:'.sha1($uploadId.':'.$chunkIndex.':cs:'.$checksumString);
+            return 'chunky:idem:'.hash('sha256', $uploadId.':'.$chunkIndex.':cs:'.$checksumString);
         }
 
         return null;

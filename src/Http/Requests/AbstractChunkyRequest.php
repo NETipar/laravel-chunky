@@ -47,6 +47,7 @@ abstract class AbstractChunkyRequest extends FormRequest
         $maxFileSize = $profile?->maxFileSize() ?? $config->maxFileSize;
 
         $fileSizeRules = ['required', 'integer', 'min:1'];
+
         if ($maxFileSize > 0) {
             $fileSizeRules[] = 'max:'.$maxFileSize;
         }

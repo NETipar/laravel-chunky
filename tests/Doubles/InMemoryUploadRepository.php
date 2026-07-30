@@ -82,6 +82,7 @@ final class InMemoryUploadRepository implements UploadRepository
 
         if (isset($guard['claimed_before'])) {
             $threshold = $guard['claimed_before'];
+
             if (! $threshold instanceof DateTimeImmutable
                 || $record->claimedAt === null
                 || $record->claimedAt >= $threshold) {

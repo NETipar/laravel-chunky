@@ -15,11 +15,17 @@ pnpm install
 
 ```bash
 # PHP
-composer test            # Pest
-composer test-coverage   # Pest + coverage
+composer test            # Full validation: analyse + lint:check + test:types + test:unit
+composer test:unit       # Pest (parallel)
+composer test:types      # Pest type coverage (min 100%)
+composer test:coverage   # Pest + coverage
 composer analyse         # PHPStan / Larastan
-composer format          # Pint (auto-fix)
-composer ci              # All of the above (format-check + analyse + test)
+composer lint            # Pint (auto-fix)
+composer lint:check      # Pint (check only)
+
+# Workbench (Testbench sandbox app)
+composer build           # Build the workbench app
+composer serve           # Serve the workbench app locally
 
 # Frontend
 pnpm test                # Vitest (frontend specs)
@@ -29,7 +35,7 @@ pnpm -r run build        # Build all 4 npm packages
 
 ## Code style
 
-- **PHP**: Laravel Pint (`composer format`). All files declare
+- **PHP**: Laravel Pint (`composer lint`). All files declare
   `declare(strict_types=1);` — keep it on every new file.
 - **TypeScript**: `tsc --noEmit` must pass on the workspace root. Public
   API additions need both an export from the package's `src/index.ts`
@@ -45,7 +51,7 @@ pnpm -r run build        # Build all 4 npm packages
    rejected.
 3. Update `CHANGELOG.md` under "Unreleased" with a brief description in
    the existing prose-rich style — prefer "why" over "what".
-4. Run the local check suite (`composer ci` and `pnpm test`).
+4. Run the local check suite (`composer test` and `pnpm test`).
 5. Open a PR. Fill out the PR template completely.
 6. The CI pipeline must be green: Pint, PHPStan, Pest matrix (all PHP × Laravel
    combinations), TypeScript typecheck, Vitest, audit (composer + pnpm).

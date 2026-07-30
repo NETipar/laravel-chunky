@@ -122,6 +122,7 @@ final readonly class BatchRecord
 
         /** @var array<string, mixed> $normalizedMetadata */
         $normalizedMetadata = [];
+
         if (is_array($metadata)) {
             foreach ($metadata as $k => $v) {
                 $normalizedMetadata[(string) $k] = $v;

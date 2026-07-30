@@ -30,7 +30,10 @@ final class FlysystemChunkStore implements ChunkStore
         return $this->disk->exists($this->chunkPath($uploadId, $chunkIndex));
     }
 
-    public function readStream(string $uploadId, int $chunkIndex)
+    /**
+     * @return resource A readable stream for the chunk.
+     */
+    public function readStream(string $uploadId, int $chunkIndex) // @pest-ignore-type
     {
         $stream = $this->disk->readStream($this->chunkPath($uploadId, $chunkIndex));
 

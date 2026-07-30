@@ -9,6 +9,7 @@ Thumbs.db
 
 # PHP
 /vendor
+/build
 composer.lock
 .phpunit.result.cache
 .phpunit.cache

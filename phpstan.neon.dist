@@ -1,11 +1,16 @@
-includes:
-    - vendor/larastan/larastan/extension.neon
-
 parameters:
+    level: max
     paths:
         - src
-    level: max
+        - config
+        - database
+        - routes
+    tmpDir: build/phpstan
     treatPhpDocTypesAsCertain: false
+    # The package config directory — env() calls there are evaluated when the
+    # host app builds its config cache, which is the supported package pattern.
+    configDirectories:
+        - config
     stubFiles:
         - stubs/livewire.stub
     excludePaths:

@@ -25,7 +25,7 @@
 ### 1.2 Minőségi kapuk — minden fázis végén MIND zöld
 
 ```bash
-composer ci                    # = pint --test + phpstan (level max) + pest
+composer test                  # = phpstan (level max) + pint --test + type coverage + pest
 pnpm -r test                   # vitest minden workspace-ben
 pnpm -r exec tsc --noEmit      # strict typecheck
 npx publint packages/core && npx @arethetypeswrong/cli --pack packages/core   # 4. fázistól
@@ -575,7 +575,7 @@ manageré.
 
 ## 5. Fázisok és ticketek
 
-Minden ticket DoD-ja implicit tartalmazza: `composer ci` zöld, kapcsolódó
+Minden ticket DoD-ja implicit tartalmazza: `composer test` zöld, kapcsolódó
 tesztek megírva és zöldek, commit kész.
 
 ### 0. fázis — Spec-fagyasztás (a kódtörlés ELŐTT!)
@@ -712,7 +712,7 @@ tesztek megírva és zöldek, commit kész.
   a v1 teszt hivatkozása. Hiány = pótlás.
 - **T6.4** CHANGELOG bejegyzés, verziók `1.0.0-beta.1`-re (bump-version.sh),
   CI teljes futás.
-- **DoD:** `composer ci` + `pnpm -r test` + publint/attw zöld; README/UPGRADE
+- **DoD:** `composer test` + `pnpm -r test` + publint/attw zöld; README/UPGRADE
   kész; NEM adsz ki release-t és NEM pusholsz tag-et — a kiadás emberi döntés,
   jelezd, hogy kiadásra kész.
 
@@ -855,7 +855,7 @@ diffje csak additív; verzió `1.1.0`, CHANGELOG-bejegyzéssel.
 ```
 ✅/⚠️/⛔ <fázis neve>
 - Létrehozott/módosított fájlok: ...
-- Futtatott ellenőrzések + eredmény: composer ci ✅, pnpm -r test ✅, ...
+- Futtatott ellenőrzések + eredmény: composer test ✅, pnpm -r test ✅, ...
 - Eltérések a tervtől (ha volt, indokkal): ...
 - Nyitott kérdések / kockázatok: ...
 - Következő lépés: ...

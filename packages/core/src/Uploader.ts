@@ -61,6 +61,10 @@ export class Uploader {
 
     private fileChecksum: string | null = null;
 
+    private preview: string | null = null;
+
+    private previewRevoked = false;
+
     constructor(
         private readonly file: File,
         private readonly options: UploadOptions,
@@ -102,6 +106,46 @@ export class Uploader {
 
     on<K extends keyof UploadEvents>(event: K, listener: UploadEvents[K]): Unsubscribe {
         return this.emitter.on(event, listener);
+    }
+
+    /**
+     * A lazily created object URL for image files, cached after the first call.
+     * Deliberately a method rather than a state field: creating an object URL
+     * is a side effect (it must be revoked), while state snapshots stay pure
+     * data. Returns null for non-image files, in environments without the URL
+     * API (SSR), and after revokePreview().
+     */
+    previewUrl(): string | null {
+        if (this.preview !== null || this.previewRevoked) {
+            return this.preview;
+        }
+
+        if (!this.file.type.startsWith('image/')) {
+            return null;
+        }
+
+        if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+            return null;
+        }
+
+        this.preview = URL.createObjectURL(this.file);
+
+        return this.preview;
+    }
+
+    /**
+     * Releases the preview object URL. Called by the UploadManager when the
+     * upload is evicted; terminal states do NOT revoke on their own — a
+     * completed-screen may still be showing the preview.
+     */
+    revokePreview(): void {
+        if (this.preview === null) {
+            return;
+        }
+
+        URL.revokeObjectURL(this.preview);
+        this.preview = null;
+        this.previewRevoked = true;
     }
 
     /**

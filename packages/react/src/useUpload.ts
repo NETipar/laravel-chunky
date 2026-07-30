@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { UploadOptions, UploadState, Uploader } from '@netipar/chunky-core';
 import { useManager } from './context';
 
@@ -6,6 +6,8 @@ export interface UseUpload {
     start(file: File, options?: UploadOptions): Uploader;
     state: UploadState | null;
     uploader: Uploader | null;
+    /** Object URL preview for image files; null otherwise. */
+    previewUrl: string | null;
 }
 
 export function useUpload(): UseUpload {
@@ -30,5 +32,9 @@ export function useUpload(): UseUpload {
         return started;
     }, [manager]);
 
-    return { start, state, uploader };
+    // Keyed on the uploader reference; the object URL itself is cached inside
+    // the Uploader.
+    const previewUrl = useMemo(() => (uploader ? uploader.previewUrl() : null), [uploader]);
+
+    return { start, state, uploader, previewUrl };
 }

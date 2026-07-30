@@ -147,7 +147,9 @@ deleting.
 - Facade `NETipar\Chunky\Facades\Chunky`: `initiate(InitiateInput)`,
   `uploadChunk()`, `status()`, `cancel()`, `initiateBatch()`, `batchStatus()`,
   `cancelBatch()`, `registerProfile()`, `simple()`.
-- Commands: `chunky:install`, `chunky:doctor`, `chunky:cleanup {--dry-run}`,
+- Commands: `chunky:install`, `chunky:doctor {--wait=5}` (live health checks:
+  disks, queue-worker probe, broadcast driver, locking, tracker; non-zero exit
+  on errors, so it works as a CI/deploy gate), `chunky:cleanup {--dry-run}`,
   `make:chunky-profile`.
 - Publish tags: `chunky-config`, `chunky-migrations` (both covered by
   `chunky:install`).

@@ -66,7 +66,8 @@ export class UploadManager {
             return false;
         }
 
-        this.registry.splice(index, 1);
+        const [removed] = this.registry.splice(index, 1);
+        removed.revokePreview();
         this.notify();
 
         return true;

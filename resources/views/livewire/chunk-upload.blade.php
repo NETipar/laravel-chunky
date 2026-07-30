@@ -16,6 +16,10 @@
 >
     <input type="file" @change="onFileChange($event)" />
 
+    {{-- Optional image preview — uncomment to show a thumbnail while uploading:
+    <img x-show="previewUrl" :src="previewUrl" alt="" class="chunky-upload__preview" />
+    --}}
+
     <template x-if="state">
         <div class="chunky-upload__progress">
             <span x-text="state.status"></span>

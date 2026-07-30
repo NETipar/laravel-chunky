@@ -78,6 +78,11 @@ Controls: `uploader.pause()`, `uploader.resume()`, `await uploader.cancel()`.
 Warn on real page unload while uploads run: `manager.installUnloadGuard()`
 (SPA navigation is unaffected).
 
+Image preview: `uploader.previewUrl()` lazily creates a cached object URL for
+`image/*` files (null otherwise); `manager.remove()` revokes it on eviction.
+Downscaled thumbnail: `await createThumbnail(file, { maxDimension: 256 })`
+returns a Blob (WebP by default), dependency-free.
+
 End-to-end verification: `manager.upload(file, { profile: 'avatar',
 fileChecksum: true })` hashes the whole file (SHA-256, embedded incremental
 hasher — no dependency) in parallel with the upload and sends it as
@@ -93,12 +98,13 @@ Vue 3 (`@netipar/chunky-vue3`):
 <script setup lang="ts">
 import { useUpload } from '@netipar/chunky-vue3';
 
-const { start, state } = useUpload();
+const { start, state, previewUrl } = useUpload();
 const onPick = (e: Event) => start((e.target as HTMLInputElement).files![0], { profile: 'avatar' });
 </script>
 
 <template>
   <input type="file" @change="onPick" />
+  <img v-if="previewUrl" :src="previewUrl" alt="" />
   <progress v-if="state" :value="state.progress" max="100" />
 </template>
 ```
@@ -106,8 +112,8 @@ const onPick = (e: Event) => start((e.target as HTMLInputElement).files![0], { p
 `useUploads()` lists all active uploads (global tray); `useBatch()` for
 batches; `UploadTray` and `ChunkDropzone` are headless, styleable components.
 
-React (`@netipar/chunky-react`): same hook names — `useUpload()`,
-`useUploads()`, `useBatch()` — inside `<ChunkyProvider>`.
+React (`@netipar/chunky-react`): same hook names — `useUpload()` (also returns
+`previewUrl`), `useUploads()`, `useBatch()` — inside `<ChunkyProvider>`.
 
 Alpine (`@netipar/chunky-alpine`):
 

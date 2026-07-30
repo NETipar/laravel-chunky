@@ -6,6 +6,9 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+### Added
+- `chunky:doctor` now runs live health checks instead of only printing config: a queue-worker probe job (`--wait=5` seconds), a broadcast-driver test event (when broadcasting is enabled), a lock acquire/release probe, and a tracker check (database tables exist / filesystem JSON store writable). Any error-level finding makes the command exit non-zero, so it can gate CI and deploy pipelines.
+
 ### Changed
 - Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
 

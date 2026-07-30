@@ -67,6 +67,17 @@ final class InMemoryUploadRepository implements UploadRepository
         return new ChunkProgress(count($record->uploadedChunks), $record->totalChunks);
     }
 
+    public function setFileChecksum(string $uploadId, string $checksum): void
+    {
+        $record = $this->store[$uploadId] ?? null;
+
+        if ($record === null || $record->fileChecksum !== null) {
+            return;
+        }
+
+        $this->store[$uploadId] = $record->with(fileChecksum: $checksum);
+    }
+
     public function transition(
         string $uploadId,
         UploadStatus $from,

@@ -6,6 +6,9 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+### Added
+- **Whole-file checksum verification** end-to-end. The chunk request accepts a new optional `file_checksum` field (the full file's SHA-256, always SHA-256 regardless of `integrity.algorithm`); the server hashes the merged bytes while streaming assembly (no second read) and verifies the result against it — a mismatch fails the upload with `422 checksum_mismatch` on the sync path (queued assemblies transition to `failed`), and the chunks are retained until cleanup for diagnosis. New `integrity.require_full_file` config key (default `false`) rejects completion without a checksum. On the frontend, `UploadOptions.fileChecksum: true` (opt-in) hashes the file in parallel with the upload using an embedded, dependency-free incremental SHA-256 and sends it with the final chunk.
+
 ### Changed
 - Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
 

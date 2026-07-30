@@ -156,6 +156,10 @@ deleting.
   vars: `CHUNKY_TRACKER`, `CHUNKY_DISK`, `CHUNKY_CHUNK_DISK`,
   `CHUNKY_CHUNK_SIZE`, `CHUNKY_MAX_FILE_SIZE`, `CHUNKY_ASSEMBLY_MODE`,
   `CHUNKY_BROADCASTING`.
+- End-to-end integrity: the optional `file_checksum` chunk field carries the
+  whole file's SHA-256; the assembled result is verified against it (mismatch
+  → `422 checksum_mismatch` sync / upload `failed` queued, chunks kept until
+  cleanup). `integrity.require_full_file` makes it mandatory on completion.
 - Errors: every non-2xx response is `{"error":{"code":…,"message":…}}` with a
   stable machine code (`validation_failed`, `profile_not_found`,
   `unauthorized`, `upload_not_found`, `batch_not_found`, `upload_expired`,

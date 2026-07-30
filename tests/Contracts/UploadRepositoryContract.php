@@ -92,6 +92,25 @@ function uploadRepositoryContract(Closure $makeRepository): void
             ->toThrow(ChunkyException::class);
     });
 
+    it('persists the whole-file checksum with first-write-wins semantics', function () use ($makeRepository) {
+        $repo = $makeRepository();
+        $repo->create(contractUploadRecord('up-1'));
+
+        $first = str_repeat('a', 64);
+        $repo->setFileChecksum('up-1', $first);
+        $repo->setFileChecksum('up-1', str_repeat('b', 64));
+
+        expect($repo->find('up-1')->fileChecksum)->toBe($first);
+    });
+
+    it('ignores a checksum write for a missing upload', function () use ($makeRepository) {
+        $repo = $makeRepository();
+
+        $repo->setFileChecksum('missing', str_repeat('a', 64));
+
+        expect($repo->find('missing'))->toBeNull();
+    });
+
     it('transitions atomically only from the expected status', function () use ($makeRepository) {
         $repo = $makeRepository();
         $repo->create(contractUploadRecord('up-1', status: UploadStatus::Pending));

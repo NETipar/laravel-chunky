@@ -33,6 +33,7 @@ final class DatabaseUploadRepository implements UploadRepository
             'batch_id' => $record->batchId,
             'user_id' => $record->userId,
             'fingerprint' => $record->fingerprint,
+            'file_checksum' => $record->fileChecksum,
             'expires_at' => $record->expiresAt,
             'claimed_at' => $record->claimedAt,
             'result_payload' => $record->resultPayload,
@@ -91,6 +92,14 @@ final class DatabaseUploadRepository implements UploadRepository
 
             return new ChunkProgress(count($model->uploaded_chunks ?? []), $model->total_chunks);
         });
+    }
+
+    public function setFileChecksum(string $uploadId, string $checksum): void
+    {
+        ChunkedUpload::query()
+            ->where('upload_id', $uploadId)
+            ->whereNull('file_checksum')
+            ->update(['file_checksum' => $checksum]);
     }
 
     public function transition(
@@ -170,6 +179,7 @@ final class DatabaseUploadRepository implements UploadRepository
             expiresAt: $model->expires_at?->toDateTimeImmutable(),
             claimedAt: $model->claimed_at?->toDateTimeImmutable(),
             resultPayload: $model->result_payload,
+            fileChecksum: $model->file_checksum,
         );
     }
 

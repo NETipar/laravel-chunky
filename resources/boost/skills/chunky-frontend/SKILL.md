@@ -78,6 +78,13 @@ Controls: `uploader.pause()`, `uploader.resume()`, `await uploader.cancel()`.
 Warn on real page unload while uploads run: `manager.installUnloadGuard()`
 (SPA navigation is unaffected).
 
+End-to-end verification: `manager.upload(file, { profile: 'avatar',
+fileChecksum: true })` hashes the whole file (SHA-256, embedded incremental
+hasher — no dependency) in parallel with the upload and sends it as
+`file_checksum` on the final chunk; the server verifies the assembled result
+against it (mismatch → `checksum_mismatch` error, upload `failed`). Off by
+default.
+
 ### 3. Framework wrappers
 
 Vue 3 (`@netipar/chunky-vue3`):

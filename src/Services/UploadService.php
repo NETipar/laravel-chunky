@@ -21,6 +21,7 @@ use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkIndexOutOfRangeException;
 use NETipar\Chunky\Exceptions\ChunkyException;
 use NETipar\Chunky\Exceptions\InvalidStateException;
+use NETipar\Chunky\Exceptions\MissingFileChecksumException;
 use NETipar\Chunky\Exceptions\UnauthorizedUploadException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;
 use NETipar\Chunky\Exceptions\UploadNotFoundException;
@@ -111,7 +112,7 @@ final class UploadService
         return new InitiateResult($uploadId, $chunkSize, $totalChunks, false, [], $input->batchId);
     }
 
-    public function uploadChunk(string $uploadId, int $chunkIndex, UploadedFile $chunk): ChunkUploadOutcome
+    public function uploadChunk(string $uploadId, int $chunkIndex, UploadedFile $chunk, ?string $fileChecksum = null): ChunkUploadOutcome
     {
         $record = $this->uploads->find($uploadId);
 
@@ -133,6 +134,11 @@ final class UploadService
 
         if ($record->status === UploadStatus::Pending) {
             $this->uploads->transition($uploadId, UploadStatus::Pending, UploadStatus::Uploading);
+        }
+
+        // Accepted on any chunk request; the first non-empty value is kept.
+        if ($fileChecksum !== null && $record->fileChecksum === null) {
+            $this->uploads->setFileChecksum($uploadId, strtolower($fileChecksum));
         }
 
         $this->chunks->put($uploadId, $chunkIndex, $chunk);
@@ -195,6 +201,10 @@ final class UploadService
     private function finish(string $uploadId, int $chunkIndex, ChunkProgress $progress): ChunkUploadOutcome
     {
         $record = $this->uploads->find($uploadId) ?? throw UploadNotFoundException::forUpload($uploadId);
+
+        if ($this->config->integrityRequireFullFile && $record->fileChecksum === null) {
+            throw MissingFileChecksumException::forUpload($uploadId);
+        }
 
         if ($this->assemblyMode($record->fileSize) === 'sync') {
             $result = $this->assembler->run($uploadId);

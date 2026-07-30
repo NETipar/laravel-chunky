@@ -102,6 +102,18 @@ paths:
                 checksum:
                   type: string
                   description: Optional SHA-256 hex of the chunk; verified by middleware if present.
+                file_checksum:
+                  type: string
+                  pattern: "^[0-9a-f]{64}$"
+                  description: >
+                    Optional SHA-256 hex of the WHOLE file (always SHA-256,
+                    independent of integrity.algorithm). Accepted on any chunk
+                    request — typically sent with the final one; the first
+                    non-empty value is persisted, repeats are ignored. The
+                    assembled file is verified against it; a mismatch fails the
+                    upload (422 checksum_mismatch on the sync path). With
+                    integrity.require_full_file enabled, completing without it
+                    returns 422 validation_failed.
       responses:
         "200":
           description: >

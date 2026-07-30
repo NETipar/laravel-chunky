@@ -16,6 +16,7 @@ use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
 use NETipar\Chunky\Events\UploadFailed;
 use NETipar\Chunky\Exceptions\AssemblyFailedException;
+use NETipar\Chunky\Exceptions\ChunkIntegrityException;
 use NETipar\Chunky\Exceptions\UploadNotFoundException;
 use NETipar\Chunky\Ports\Clock;
 use NETipar\Chunky\Ports\UploadRepository;
@@ -61,6 +62,13 @@ final class AssemblyRunner
             $this->pipelines->forDisk($claimed->disk)->run($state);
         } catch (Throwable $e) {
             $this->fail($claimed, $e->getMessage());
+
+            // A whole-file checksum mismatch is a client-data problem, not a
+            // server fault: let it render as 422 checksum_mismatch on the sync
+            // path instead of a misleading 500 assembly_failed.
+            if ($e instanceof ChunkIntegrityException) {
+                throw $e;
+            }
 
             throw AssemblyFailedException::forUpload($uploadId, $e);
         }

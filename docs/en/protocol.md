@@ -130,6 +130,7 @@ Uploads a single chunk. The `VerifyChunkIntegrity` middleware runs first.
 | `chunk` | file (binary) | ✔ | The chunk's bytes. |
 | `chunk_index` | integer | ✔ | 0-based index. `0 ≤ index < total_chunks`. |
 | `checksum` | string (hex) | — | The chunk's SHA-256 hex digest. When present, the middleware verifies it. |
+| `file_checksum` | string (hex) | — | The **whole file's** SHA-256 hex digest (64 chars, always SHA-256 regardless of `integrity.algorithm`). Accepted on any chunk request — typically sent with the final one; the server persists the first non-empty value and ignores repeats. After assembly the merged bytes are verified against it. With `integrity.require_full_file = true` the completing chunk fails `422 validation_failed` unless a value was supplied. |
 
 Header:
 
@@ -204,12 +205,21 @@ assemble dispatch).
 
 ### Errors
 
-`422 validation_failed` · `422 chunk_index_out_of_range` · `422 checksum_mismatch` ·
+`422 validation_failed` (including a malformed `file_checksum`, and a missing
+one on completion when `integrity.require_full_file` is enabled) ·
+`422 chunk_index_out_of_range` · `422 checksum_mismatch` (a chunk `checksum`
+rejected by the middleware, or — on the sync final chunk — the assembled file
+not matching the reported `file_checksum`; the upload transitions to `failed`,
+chunks are retained until cleanup for diagnosis) ·
 `403 unauthorized` (the caller does not own the upload — the chunk endpoint
 answers 403, not 404) · `404 upload_not_found` · `410 upload_expired` ·
 `409 invalid_state` (the upload is `cancelled`/`completed`/`failed`/`assembling`) ·
 `503 lock_timeout` · `500 assembly_failed` (sync mode only, when assembly
 fails — the upload transitions to `failed`, chunks are retained until cleanup).
+
+In **queue** assembly a `file_checksum` mismatch cannot surface on the chunk
+response — the upload transitions to `failed` and the status endpoint (or the
+broadcast) reports it.
 
 ---
 

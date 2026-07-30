@@ -128,6 +128,7 @@ Egyetlen chunk feltöltése. A `VerifyChunkIntegrity` middleware fut előtte.
 | `chunk` | file (binary) | ✔ | A chunk bájtjai. |
 | `chunk_index` | integer | ✔ | 0-alapú index. `0 ≤ index < total_chunks`. |
 | `checksum` | string (hex) | — | A chunk SHA-256 hexje. Ha jelen van, a middleware ellenőrzi. |
+| `file_checksum` | string (hex) | — | A **TELJES fájl** SHA-256 hexje (64 karakter; mindig SHA-256, az `integrity.algorithm`-tól függetlenül). Bármely chunk-kérésen elfogadott — tipikusan a zárón érkezik; a szerver az első nem-üres értéket perzisztálja, a többit ignorálja. Az összefűzés után az eredmény ez ellen ellenőrződik. `integrity.require_full_file = true` esetén a záró chunk `file_checksum` nélkül `422 validation_failed`. |
 
 Fejléc:
 
@@ -202,12 +203,20 @@ mellékhatás (event, assemble-dispatch).
 
 ### Hibák
 
-`422 validation_failed` · `422 chunk_index_out_of_range` · `422 checksum_mismatch` ·
+`422 validation_failed` (ideértve a hibás formátumú `file_checksum`-ot, és a
+hiányzót a befejezéskor, ha az `integrity.require_full_file` be van kapcsolva) ·
+`422 chunk_index_out_of_range` · `422 checksum_mismatch` (a middleware által
+elutasított chunk-`checksum`, vagy — sync záró chunkon — az összefűzött fájl
+nem egyezik a bejelentett `file_checksum`-mal; az upload `failed`-re áll, a
+chunkok a cleanupig megőrződnek diagnózishoz) ·
 `403 unauthorized` (nem a hívó az upload tulajdonosa — a chunk végponton 403,
 nem 404) · `404 upload_not_found` · `410 upload_expired` · `409 invalid_state`
 (az upload `cancelled`/`completed`/`failed`/`assembling`) · `503 lock_timeout` ·
 `500 assembly_failed` (csak sync módban, az összefűzés bukásakor — az upload
 `failed`-re áll, a chunkok a cleanupig megőrződnek).
+
+**Queue** módban a `file_checksum`-eltérés nem tud a chunk-válaszon megjelenni
+— az upload `failed`-re áll, és a státusz végpont (vagy a broadcast) mutatja.
 
 ---
 

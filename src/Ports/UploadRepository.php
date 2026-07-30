@@ -29,6 +29,12 @@ interface UploadRepository
     public function markChunk(string $uploadId, int $chunkIndex): ChunkProgress;
 
     /**
+     * Persist the client-reported whole-file checksum. First write wins: a
+     * record that already has a checksum keeps it. No-op for missing records.
+     */
+    public function setFileChecksum(string $uploadId, string $checksum): void;
+
+    /**
      * Atomic compare-and-swap. Returns false if the record's status is not
      * $from at the moment of the swap, or if a guard condition fails. $attrs is
      * written together with $to in the same atomic operation (e.g. final_path,

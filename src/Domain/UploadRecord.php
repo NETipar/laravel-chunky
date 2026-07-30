@@ -35,6 +35,7 @@ final readonly class UploadRecord
         public ?DateTimeImmutable $expiresAt = null,
         public ?DateTimeImmutable $claimedAt = null,
         public ?array $resultPayload = null,
+        public ?string $fileChecksum = null,
     ) {}
 
     public function progress(): float
@@ -66,6 +67,7 @@ final readonly class UploadRecord
         ?DateTimeImmutable $claimedAt = null,
         ?array $resultPayload = null,
         ?array $uploadedChunks = null,
+        ?string $fileChecksum = null,
     ): self {
         return new self(
             uploadId: $this->uploadId,
@@ -86,6 +88,7 @@ final readonly class UploadRecord
             expiresAt: $this->expiresAt,
             claimedAt: $claimedAt ?? $this->claimedAt,
             resultPayload: $resultPayload ?? $this->resultPayload,
+            fileChecksum: $fileChecksum ?? $this->fileChecksum,
         );
     }
 
@@ -113,6 +116,7 @@ final readonly class UploadRecord
             'expires_at' => $this->expiresAt?->format(DateTimeInterface::ATOM),
             'claimed_at' => $this->claimedAt?->format(DateTimeInterface::ATOM),
             'result_payload' => $this->resultPayload,
+            'file_checksum' => $this->fileChecksum,
         ];
     }
 
@@ -135,6 +139,7 @@ final readonly class UploadRecord
             $data['expires_at'],
             $data['result_payload'],
             $data['fingerprint'],
+            $data['file_checksum'],
         );
 
         $data['progress'] = $this->progress();
@@ -168,6 +173,7 @@ final readonly class UploadRecord
             resultPayload: isset($data['result_payload']) && is_array($data['result_payload'])
                 ? self::stringKeyedArray($data['result_payload'])
                 : null,
+            fileChecksum: self::nullableString($data, 'file_checksum'),
         );
     }
 

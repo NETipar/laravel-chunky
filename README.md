@@ -177,6 +177,8 @@ manager.installUnloadGuard();
 
 `uploader.getState()` returns an immutable snapshot: `{ status, progress, uploadedChunks, totalChunks, bytesPerSecond, etaSeconds, file, result, error }`.
 
+Want end-to-end verification? `manager.upload(file, { profile: 'avatar', fileChecksum: true })` hashes the whole file (SHA-256, dependency-free) in parallel with the upload and the server verifies the assembled result against it.
+
 ### Vue 3 — `@netipar/chunky-vue3`
 
 ```ts

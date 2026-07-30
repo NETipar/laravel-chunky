@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: >
     Chunk-based file upload protocol for Laravel Chunky v1.0. This document is
-    the OpenAPI mirror of docs/protocol.md; the two MUST agree field-for-field.
+    the OpenAPI mirror of docs/en/protocol.md (Hungarian: docs/hu/protocol.md);
+    the two MUST agree field-for-field.
     All request/response bodies are JSON (snake_case) except chunk upload, which
     is multipart/form-data.
   license:

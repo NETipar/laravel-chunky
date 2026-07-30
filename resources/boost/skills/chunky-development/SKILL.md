@@ -142,7 +142,8 @@ deleting.
   (initiate), `POST /upload/{uploadId}/chunks` (chunk),
   `GET|DELETE /upload/{uploadId}` (status/cancel), `POST /batch`,
   `POST /batch/{batchId}/upload`, `GET|DELETE /batch/{batchId}`. Wire
-  protocol: `docs/protocol.md`, `docs/openapi.yaml`.
+  protocol: `docs/en/protocol.md` (Hungarian: `docs/hu/protocol.md`),
+  `docs/openapi.yaml`.
 - Facade `NETipar\Chunky\Facades\Chunky`: `initiate(InitiateInput)`,
   `uploadChunk()`, `status()`, `cancel()`, `initiateBatch()`, `batchStatus()`,
   `cancelBatch()`, `registerProfile()`, `simple()`.
@@ -150,7 +151,8 @@ deleting.
   `make:chunky-profile`.
 - Publish tags: `chunky-config`, `chunky-migrations` (both covered by
   `chunky:install`).
-- Config reference and deployment recipes: `docs/configuration.md`. Key env
+- Config reference and deployment recipes: `docs/en/configuration.md`
+  (Hungarian: `docs/hu/configuration.md`). Key env
   vars: `CHUNKY_TRACKER`, `CHUNKY_DISK`, `CHUNKY_CHUNK_DISK`,
   `CHUNKY_CHUNK_SIZE`, `CHUNKY_MAX_FILE_SIZE`, `CHUNKY_ASSEMBLY_MODE`,
   `CHUNKY_BROADCASTING`.

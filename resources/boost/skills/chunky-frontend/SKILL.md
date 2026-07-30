@@ -148,7 +148,8 @@ channels `chunky.upload.{uploadId}` / `chunky.batch.{batchId}`, event names
   `BatchOptions` types.
 - Wrapper packages: `@netipar/chunky-vue3` (Vue 3.4+), `@netipar/chunky-react`
   (React 18+), `@netipar/chunky-alpine` (Alpine 3+). Each depends on core.
-- Wire protocol and error table: `docs/protocol.md` in the Composer package.
+- Wire protocol and error table: `docs/en/protocol.md` in the Composer
+  package (Hungarian: `docs/hu/protocol.md`).
 - Usage recipes (tray, pause/resume, navigation survival): `examples/README.md`
   in the Composer package.
 

@@ -1,5 +1,7 @@
 # Configuration reference
 
+> 🇭🇺 Magyar változat: [docs/hu/configuration.md](../hu/configuration.md)
+
 Every key in `config/chunky.php` is validated at boot into a typed
 `ChunkyConfig` — an out-of-range or wrong-typed value fails fast with the
 offending key. Publish the config with:

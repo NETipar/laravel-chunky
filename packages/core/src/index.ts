@@ -4,6 +4,7 @@ export { UploadManager, manager } from './UploadManager';
 export { CompletionWatcher } from './CompletionWatcher';
 export { configure, type ChunkyConfig, type StorageLike } from './config';
 export { computeFingerprint } from './fingerprint';
+export { createThumbnail, type ThumbnailOptions } from './thumbnail';
 export { ChunkyError } from './types';
 export type {
     UploadState,

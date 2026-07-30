@@ -6,6 +6,9 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## Unreleased
 
+### Added
+- **Image preview hook** on the frontend, framework-independent and dependency-free. `Uploader.previewUrl()` lazily creates a cached object URL for `image/*` files (null for non-images and under SSR); the manager revokes it when the upload is evicted via `manager.remove()`, while terminal states keep it alive for completed-screens. A new `createThumbnail(file, { maxDimension, type, quality })` core util produces a downscaled thumbnail Blob (WebP by default) via `createImageBitmap` + `OffscreenCanvas` with an `HTMLCanvasElement` fallback. Wrappers expose it everywhere: `useUpload()` returns `previewUrl` in vue3 and react, the Alpine component gets a `previewUrl` getter, and the vue3 `UploadTray`/`ChunkDropzone` components accept an opt-in `preview` prop that adds preview URLs to their slot scope.
+
 ### Changed
 - Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
 

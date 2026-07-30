@@ -141,6 +141,93 @@ paths:
         "500": { $ref: "#/components/responses/AssemblyFailed" }
         "503": { $ref: "#/components/responses/LockTimeout" }
 
+  /upload/{uploadId}/part-urls:
+    post:
+      tags: [Uploads]
+      summary: Issue fresh presigned part URLs (direct_s3)
+      description: >
+        direct_s3 transport only. Returns fresh presigned PUT URLs for the
+        requested chunk indexes — for expired URLs, retries, and resume
+        top-ups. Max 100 indexes per request.
+      operationId: partUrls
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [indexes]
+              properties:
+                indexes:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Fresh presigned URLs keyed by chunk index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartUrlsResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/UploadNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+        "410": { $ref: "#/components/responses/UploadExpired" }
+        "422": { $ref: "#/components/responses/ChunkValidation" }
+
+  /upload/{uploadId}/complete:
+    post:
+      tags: [Uploads]
+      summary: Complete a direct_s3 upload
+      description: >
+        direct_s3 transport only. Runs S3 CompleteMultipartUpload from the
+        client-collected part ETags, verifies the remote object size, runs the
+        profile completed() hook, and returns the sync-style completed result.
+        Idempotent for an already-completed upload.
+      operationId: completeDirectUpload
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parts]
+              properties:
+                parts:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items:
+                    type: object
+                    required: [index, etag]
+                    properties:
+                      index: { type: integer, minimum: 0 }
+                      etag: { type: string }
+      responses:
+        "200":
+          description: Upload completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkCompletedResponse"
+        "403": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/UploadNotFound" }
+        "409": { $ref: "#/components/responses/InvalidState" }
+        "410": { $ref: "#/components/responses/UploadExpired" }
+        "422": { $ref: "#/components/responses/ChunkValidation" }
+        "500": { $ref: "#/components/responses/AssemblyFailed" }
+
   /upload/{uploadId}:
     get:
       tags: [Uploads]
@@ -336,6 +423,45 @@ components:
           type: array
           items: { type: integer }
           description: Already-received chunk indices (empty for a fresh upload).
+        transport:
+          $ref: "#/components/schemas/TransportInfo"
+
+    TransportInfo:
+      type: object
+      description: >
+        Present only for direct_s3 profiles. Bootstraps the direct transport:
+        the client PUTs each part to its presigned URL, captures the ETag
+        response header, and finishes via the complete endpoint.
+      required: [mode, part_urls, expires_at]
+      properties:
+        mode:
+          type: string
+          const: direct_s3
+        part_urls:
+          type: object
+          additionalProperties: { type: string }
+          description: Presigned PUT URLs keyed by 0-based chunk index (first batch, max 100).
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiry of the issued URLs (transports.direct_s3.url_ttl).
+        uploaded_parts:
+          type: object
+          additionalProperties: { type: string }
+          description: >
+            Resume only — ETags of parts already on S3 keyed by chunk index,
+            so the client can assemble the full part list for complete.
+
+    PartUrlsResponse:
+      type: object
+      required: [part_urls, expires_at]
+      properties:
+        part_urls:
+          type: object
+          additionalProperties: { type: string }
+        expires_at:
+          type: string
+          format: date-time
 
     BatchMemberInitiateResponse:
       allOf:

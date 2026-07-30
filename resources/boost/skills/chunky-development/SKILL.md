@@ -97,7 +97,11 @@ Register it in `config/chunky.php`:
 ```
 
 Optional overrides: `disk(): ?string`, `fileName(UploadContext, string)`
-(default: UUID + original extension), `maxFileSize(): ?int`.
+(default: UUID + original extension), `maxFileSize(): ?int`,
+`transport(): string` (`'server'` default, or `'direct_s3'` — chunks go
+straight to S3 as presigned multipart parts; requires `aws/aws-sdk-php`,
+`chunky.transports.direct_s3.disk` set to an s3 disk, `chunks.size ≥ 5 MB`,
+and bucket CORS with `ExposeHeaders: ETag`).
 
 ### 3. Pick the assembly mode
 
@@ -140,9 +144,10 @@ deleting.
 
 - HTTP API (prefix `api/chunky`, names `chunky.*`): `POST /upload`
   (initiate), `POST /upload/{uploadId}/chunks` (chunk),
-  `GET|DELETE /upload/{uploadId}` (status/cancel), `POST /batch`,
-  `POST /batch/{batchId}/upload`, `GET|DELETE /batch/{batchId}`. Wire
-  protocol: `docs/en/protocol.md` (Hungarian: `docs/hu/protocol.md`),
+  `POST /upload/{uploadId}/part-urls` + `POST /upload/{uploadId}/complete`
+  (direct_s3 only), `GET|DELETE /upload/{uploadId}` (status/cancel),
+  `POST /batch`, `POST /batch/{batchId}/upload`, `GET|DELETE /batch/{batchId}`.
+  Wire protocol: `docs/en/protocol.md` (Hungarian: `docs/hu/protocol.md`),
   `docs/openapi.yaml`.
 - Facade `NETipar\Chunky\Facades\Chunky`: `initiate(InitiateInput)`,
   `uploadChunk()`, `status()`, `cancel()`, `initiateBatch()`, `batchStatus()`,

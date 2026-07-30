@@ -90,6 +90,23 @@ return [
         'fingerprint' => true,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Transports
+    |--------------------------------------------------------------------------
+    | The direct_s3 transport uploads chunks straight to S3 with presigned
+    | part URLs; Laravel only orchestrates (initiate, URL issuing, complete,
+    | abort). Opt in per profile via UploadProfile::transport(). Requires
+    | aws/aws-sdk-php and an s3 filesystem disk.
+    */
+    'transports' => [
+        'direct_s3' => [
+            'disk' => env('CHUNKY_DIRECT_S3_DISK'),
+            // Presigned part URL lifetime in seconds.
+            'url_ttl' => 3600,
+        ],
+    ],
+
     'authorization' => [
         'authorizer' => DefaultAuthorizer::class,
     ],

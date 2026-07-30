@@ -6,12 +6,25 @@ import { sha256File } from './internal/sha256';
 import { deleteJson, isRetryable, postForm, postJson } from './http';
 import { ChunkyError, type UploadEvents, type UploadOptions, type UploadResult, type UploadState, type Unsubscribe } from './types';
 
+interface TransportInfo {
+    mode: string;
+    part_urls: Record<string, string>;
+    expires_at?: string;
+    uploaded_parts?: Record<string, string>;
+}
+
 interface InitiateResponse {
     upload_id: string;
     chunk_size: number;
     total_chunks: number;
     resumed: boolean;
     uploaded_chunks: number[];
+    transport?: TransportInfo;
+}
+
+interface PartUrlsResponse {
+    part_urls: Record<string, string>;
+    expires_at?: string;
 }
 
 interface ChunkResponse {
@@ -60,6 +73,12 @@ export class Uploader {
     private fileHashPromise: Promise<string> | null = null;
 
     private fileChecksum: string | null = null;
+
+    private transportMode: 'server' | 'direct_s3' = 'server';
+
+    private readonly partUrls = new Map<number, string>();
+
+    private readonly partEtags = new Map<number, string>();
 
     private preview: string | null = null;
 
@@ -167,14 +186,20 @@ export class Uploader {
         this.startedAt = Date.now();
 
         try {
+            await this.initiate();
+
             // Hash in parallel with the upload; the final chunk waits for it.
-            if (this.options.fileChecksum) {
+            // Not applicable to direct_s3 — S3 verifies parts via their ETags.
+            if (this.options.fileChecksum && this.transportMode === 'server') {
                 this.fileHashPromise = sha256File(this.file);
             }
 
-            await this.initiate();
             this.patch({ status: 'uploading', totalChunks: this.totalChunks, uploadedChunks: this.uploaded.size });
             const terminal = await this.uploadChunks();
+
+            if (this.transportMode === 'direct_s3') {
+                return await this.finalize(await this.completeDirect());
+            }
 
             return await this.finalize(terminal);
         } catch (error) {
@@ -262,6 +287,15 @@ export class Uploader {
             this.uploaded.add(index);
         }
 
+        if (response.transport?.mode === 'direct_s3') {
+            this.transportMode = 'direct_s3';
+            this.absorbPartUrls(response.transport.part_urls);
+
+            for (const [index, etag] of Object.entries(response.transport.uploaded_parts ?? {})) {
+                this.partEtags.set(Number(index), etag);
+            }
+        }
+
         if (this.fingerprint) {
             this.fingerprintStore.set(this.fingerprint, this.uploadId);
         }
@@ -294,6 +328,11 @@ export class Uploader {
                 // waits for the hash (local reads normally outpace the network).
                 if (position === pending.length - 1 && this.fileHashPromise !== null) {
                     this.fileChecksum = await this.fileHashPromise;
+                }
+
+                if (this.transportMode === 'direct_s3') {
+                    await this.uploadOnePart(pending[position]);
+                    continue;
                 }
 
                 const response = await this.uploadOneChunk(pending[position]);
@@ -347,6 +386,106 @@ export class Uploader {
                 this.controllers.delete(controller);
             }
         }, isRetryable);
+    }
+
+    private absorbPartUrls(urls: Record<string, string>): void {
+        for (const [index, url] of Object.entries(urls)) {
+            this.partUrls.set(Number(index), url);
+        }
+    }
+
+    /**
+     * Presigned URL for a part, refilling the pool from the part-urls endpoint
+     * in batches when it runs dry (or after an expired URL was dropped).
+     */
+    private async partUrl(index: number): Promise<string> {
+        const cached = this.partUrls.get(index);
+        if (cached !== undefined) {
+            return cached;
+        }
+
+        const need: number[] = [index];
+        for (let i = 0; i < this.totalChunks && need.length < 100; i++) {
+            if (i !== index && !this.uploaded.has(i) && !this.partUrls.has(i)) {
+                need.push(i);
+            }
+        }
+
+        const response = (await postJson(
+            `${this.config.baseUrl}/upload/${this.uploadId}/part-urls`,
+            { indexes: need },
+            this.config,
+        )) as PartUrlsResponse;
+
+        this.absorbPartUrls(response.part_urls);
+
+        const fresh = this.partUrls.get(index);
+        if (fresh === undefined) {
+            throw new ChunkyError('failed', `The server issued no presigned URL for part ${index}.`);
+        }
+
+        return fresh;
+    }
+
+    private uploadOnePart(index: number): Promise<void> {
+        // Any failed part PUT is retried (with a fresh URL — expired presigns
+        // surface as 403); the retry budget comes from the shared policy.
+        const retryable = (error: unknown): boolean =>
+            isRetryable(error) || (error instanceof ChunkyError && error.code === 'part_upload_failed');
+
+        return this.config.retryPolicy.run(async () => {
+            const start = index * this.chunkSize;
+            const blob = this.file.slice(start, Math.min(start + this.chunkSize, this.file.size));
+            const url = await this.partUrl(index);
+
+            const controller = new AbortController();
+            this.controllers.add(controller);
+
+            try {
+                let response: Response;
+                try {
+                    response = await this.config.fetchImpl(url, { method: 'PUT', body: blob, signal: controller.signal });
+                } catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        throw error;
+                    }
+
+                    throw new ChunkyError('network_error', error instanceof Error ? error.message : 'Network error.');
+                }
+
+                if (!response.ok) {
+                    this.partUrls.delete(index);
+                    throw new ChunkyError('part_upload_failed', `S3 rejected part ${index} with status ${response.status}.`, response.status);
+                }
+
+                const etag = response.headers.get('ETag');
+                if (etag === null || etag === '') {
+                    throw new ChunkyError(
+                        'missing_etag',
+                        'S3 did not expose the part ETag — the bucket CORS must include ExposeHeaders: ETag.',
+                    );
+                }
+
+                this.partEtags.set(index, etag);
+                this.uploaded.add(index);
+                this.bytesUploaded += blob.size;
+                this.reportProgress();
+            } finally {
+                this.controllers.delete(controller);
+            }
+        }, retryable);
+    }
+
+    private async completeDirect(): Promise<ChunkResponse> {
+        const parts = [...this.partEtags.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([index, etag]) => ({ index, etag }));
+
+        return (await postJson(
+            `${this.config.baseUrl}/upload/${this.uploadId}/complete`,
+            { parts },
+            this.config,
+        )) as ChunkResponse;
     }
 
     private async finalize(terminal: ChunkResponse | null): Promise<UploadResult> {

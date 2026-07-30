@@ -24,6 +24,7 @@ Works out of the box with **no queue worker and no broadcasting** — the direct
 - [Upload profiles](#upload-profiles)
 - [Frontend](#frontend)
 - [Assembly modes (sync / queue / auto)](#assembly-modes)
+- [Direct-to-S3 uploads](#direct-to-s3-uploads)
 - [Batch uploads](#batch-uploads)
 - [Authorization](#authorization)
 - [Events & broadcasting](#events--broadcasting)
@@ -257,6 +258,24 @@ Alpine.plugin((Alpine) => registerChunky(Alpine, { baseUrl: '/api/chunky' }));
 | `auto` | `sync` under `assembly.sync_threshold` (256 MB), else `queue` | Only for large files |
 
 The frontend `await uploader.upload()` resolves with the final result in **all** modes — it polls automatically when assembly is queued.
+
+## Direct-to-S3 uploads
+
+For the biggest scale win, a profile can opt into the `direct_s3` transport — chunks go straight to S3 as multipart parts via presigned URLs, and Laravel only orchestrates (initiate, URL issuing, complete, abort). PHP never touches the bytes and there is no merge step: assembly *is* the S3 `CompleteMultipartUpload`.
+
+```php
+class VideoProfile extends UploadProfile
+{
+    public function transport(): string
+    {
+        return 'direct_s3';
+    }
+
+    // directory(), completed(), … as usual
+}
+```
+
+Set `chunky.transports.direct_s3.disk` to your s3 disk, require `aws/aws-sdk-php`, and add `ExposeHeaders: ETag` to the bucket CORS ([recipe](docs/en/configuration.md)). The frontend clients pick the transport up automatically from the initiate response — the caller API (`upload`/`pause`/`resume`/`cancel`/`subscribe`) is unchanged. Works with S3-compatible targets (MinIO; Cloudflare R2 best effort). Wire details in [`docs/en/protocol.md`](docs/en/protocol.md).
 
 ## Batch uploads
 

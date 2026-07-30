@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use NETipar\Chunky\Ports\ChunkStore;
 use NETipar\Chunky\Ports\Clock;
 use NETipar\Chunky\Ports\UploadRepository;
+use NETipar\Chunky\Services\DirectUploadService;
 
 final class CleanupCommand extends Command
 {
@@ -15,7 +16,7 @@ final class CleanupCommand extends Command
 
     protected $description = 'Remove expired, unfinished chunk uploads and their temporary chunks.';
 
-    public function handle(UploadRepository $uploads, ChunkStore $chunks, Clock $clock): int
+    public function handle(UploadRepository $uploads, ChunkStore $chunks, Clock $clock, DirectUploadService $direct): int
     {
         $dryRun = (bool) $this->option('dry-run');
         $now = $clock->now();
@@ -33,6 +34,7 @@ final class CleanupCommand extends Command
 
                 if (! $dryRun) {
                     $chunks->purge($upload->uploadId);
+                    $direct->abortRemote($upload);
                     $uploads->delete($upload->uploadId);
                 }
 

@@ -62,6 +62,20 @@ package refuses to boot on `array`/`file`/`null`.
 | `resume.fingerprint` | `true` | Enable fingerprint-based resume across reloads. |
 | `idempotency.ttl` | 300 | Seconds a chunk response is cached for byte-exact retry replay. |
 
+### Transports (direct-to-S3)
+
+| Key | Default | Notes |
+|---|---|---|
+| `transports.direct_s3.disk` | `null` | Name of the s3 filesystem disk that direct uploads target. Must be set to use a `direct_s3` profile; requires `aws/aws-sdk-php`. |
+| `transports.direct_s3.url_ttl` | 3600 | Presigned part URL lifetime in seconds. |
+
+A profile opts in with `UploadProfile::transport(): 'direct_s3'`. Constraints
+(enforced at initiate): `chunks.size ≥ 5 MB`, at most 10000 parts per file.
+S3-compatible targets (MinIO, Cloudflare R2) work through the disk's
+`endpoint` + `use_path_style_endpoint` settings — MinIO is supported, R2 is
+best effort. See the CORS recipe below; the wire details live in
+[protocol.md](protocol.md).
+
 ### Routes & throttling
 
 | Key | Default | Notes |
@@ -97,6 +111,28 @@ multiple app servers.
 Echo/Reverb, and (optionally) remove events from `broadcasting.except` to push
 more granular updates.
 
+**Direct-to-S3 (bucket CORS — critical).** With the `direct_s3` transport the
+browser PUTs parts straight to the bucket, so its CORS configuration must
+allow the PUT **and** expose the `ETag` header — without `ExposeHeaders: ETag`
+the client cannot collect the part ETags and complete will never succeed:
+
+```json
+[
+    {
+        "AllowedOrigins": ["https://app.example.com"],
+        "AllowedMethods": ["PUT"],
+        "AllowedHeaders": ["*"],
+        "ExposeHeaders": ["ETag"],
+        "MaxAgeSeconds": 3600
+    }
+]
+```
+
+Also configure an `AbortIncompleteMultipartUpload` lifecycle rule (e.g. 7
+days) as a safety net for uploads that are never completed or aborted.
+
 **Housekeeping.** Schedule `php artisan chunky:cleanup` (e.g. hourly) to remove
-expired, unfinished uploads and their chunks. Run `php artisan chunky:doctor`
-to sanity-check disks, assembly mode, and broadcasting.
+expired, unfinished uploads and their chunks (for direct uploads it also aborts
+the remote multipart upload). Run `php artisan chunky:doctor` to sanity-check
+disks, the queue worker, broadcasting, locking, the tracker, and — when
+configured — the direct_s3 presigning.

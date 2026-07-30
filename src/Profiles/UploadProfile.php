@@ -70,4 +70,14 @@ abstract class UploadProfile
     {
         return null;
     }
+
+    /**
+     * How the bytes travel: 'server' (chunks through Laravel, the default) or
+     * 'direct_s3' (presigned multipart parts straight to S3; Laravel only
+     * orchestrates). A profile is one or the other — no mixing.
+     */
+    public function transport(): string
+    {
+        return 'server';
+    }
 }

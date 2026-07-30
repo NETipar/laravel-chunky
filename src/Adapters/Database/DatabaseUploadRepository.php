@@ -34,6 +34,8 @@ final class DatabaseUploadRepository implements UploadRepository
             'user_id' => $record->userId,
             'fingerprint' => $record->fingerprint,
             'file_checksum' => $record->fileChecksum,
+            'transport' => $record->transport,
+            'remote_upload_id' => $record->remoteUploadId,
             'expires_at' => $record->expiresAt,
             'claimed_at' => $record->claimedAt,
             'result_payload' => $record->resultPayload,
@@ -180,6 +182,8 @@ final class DatabaseUploadRepository implements UploadRepository
             claimedAt: $model->claimed_at?->toDateTimeImmutable(),
             resultPayload: $model->result_payload,
             fileChecksum: $model->file_checksum,
+            transport: $model->transport,
+            remoteUploadId: $model->remote_upload_id,
         );
     }
 

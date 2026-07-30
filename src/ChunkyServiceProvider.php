@@ -22,6 +22,7 @@ use NETipar\Chunky\Adapters\Filesystem\FilesystemUploadRepository;
 use NETipar\Chunky\Adapters\Filesystem\JsonFileStore;
 use NETipar\Chunky\Adapters\Lock\CacheLockProvider;
 use NETipar\Chunky\Adapters\Lock\FlockProvider;
+use NETipar\Chunky\Adapters\S3\S3DirectTransport;
 use NETipar\Chunky\Adapters\Storage\FlysystemChunkStore;
 use NETipar\Chunky\Adapters\SystemClock;
 use NETipar\Chunky\Authorization\Authorizer;
@@ -30,10 +31,12 @@ use NETipar\Chunky\Console\CleanupCommand;
 use NETipar\Chunky\Console\DoctorCommand;
 use NETipar\Chunky\Console\InstallCommand;
 use NETipar\Chunky\Console\MakeProfileCommand;
+use NETipar\Chunky\Exceptions\InvalidConfigurationException;
 use NETipar\Chunky\Livewire\ChunkUpload;
 use NETipar\Chunky\Ports\BatchRepository;
 use NETipar\Chunky\Ports\ChunkStore;
 use NETipar\Chunky\Ports\Clock;
+use NETipar\Chunky\Ports\DirectUploadTransport;
 use NETipar\Chunky\Ports\LockProvider;
 use NETipar\Chunky\Ports\UploadRepository;
 use NETipar\Chunky\Profiles\ProfileRegistry;
@@ -86,6 +89,18 @@ class ChunkyServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(LockProvider::class, fn (Application $app): LockProvider => $this->makeLockProvider($app));
+
+        $this->app->singleton(DirectUploadTransport::class, function (Application $app): DirectUploadTransport {
+            $config = $app->make(ChunkyConfig::class);
+
+            $disk = $config->directS3Disk
+                ?? throw InvalidConfigurationException::forKey('transports.direct_s3.disk', 'must be set to use the direct_s3 transport.');
+
+            /** @var array<string, mixed> $diskConfig */
+            $diskConfig = $app->make(Repository::class)->get("filesystems.disks.{$disk}", []);
+
+            return S3DirectTransport::fromDiskConfig($diskConfig, $config->directS3UrlTtl);
+        });
 
         $this->app->singleton(UploadRepository::class, function (Application $app): UploadRepository {
             $config = $app->make(ChunkyConfig::class);

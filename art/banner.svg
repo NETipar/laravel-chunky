@@ -101,7 +101,7 @@
 
   <!-- Tagline -->
   <text x="640" y="330" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#8899aa" letter-spacing="1">
-    Chunk-based file uploads with Vue 3, React, Alpine.js &amp; Livewire
+    Resumable chunk uploads with Vue 3, React, Alpine.js &amp; Livewire
   </text>
 
   <!-- Feature pills -->
@@ -126,13 +126,13 @@
     <rect x="68" y="-16" width="100" height="32" rx="16" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
     <text x="118" y="5" fill="#a78bfa">Queued</text>
 
-    <!-- Contexts -->
+    <!-- Profiles -->
     <rect x="188" y="-16" width="110" height="32" rx="16" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="243" y="5" fill="#a78bfa">Contexts</text>
+    <text x="243" y="5" fill="#a78bfa">Profiles</text>
 
-    <!-- Multi-FW -->
+    <!-- Direct-S3 -->
     <rect x="318" y="-16" width="110" height="32" rx="16" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="373" y="5" fill="#a78bfa">Multi-FW</text>
+    <text x="373" y="5" fill="#a78bfa">Direct-S3</text>
   </g>
 
   <!-- Bottom bar -->
@@ -148,7 +148,7 @@
   <!-- Version badge -->
   <g transform="translate(640, 500)" text-anchor="middle" opacity="0.2">
     <text x="0" y="0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#ffffff" letter-spacing="1">
-      Laravel 11+ / Vue 3 / React / Alpine.js / Livewire / TypeScript
+      PHP 8.3+ / Laravel 12+ / Vue 3 / React / Alpine.js / Livewire / TypeScript
     </text>
   </g>
 </svg>

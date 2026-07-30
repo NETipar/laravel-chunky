@@ -291,7 +291,7 @@ The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`vali
 | Command | What it does |
 |---|---|
 | `chunky:install` | Publish config + migrations |
-| `chunky:doctor` | Check disks, assembly mode, and broadcasting setup |
+| `chunky:doctor` | Live health checks: disks, queue worker probe (`--wait=5`), broadcast driver, locking, tracker — exits non-zero on errors (CI/deploy gate) |
 | `chunky:cleanup` | Remove expired, unfinished uploads and their chunks (schedule it) |
 | `make:chunky-profile` | Generate an `UploadProfile` class |
 

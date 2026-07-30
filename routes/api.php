@@ -6,9 +6,11 @@ use Illuminate\Support\Facades\Route;
 use NETipar\Chunky\Http\Controllers\BatchStatusController;
 use NETipar\Chunky\Http\Controllers\CancelBatchController;
 use NETipar\Chunky\Http\Controllers\CancelUploadController;
+use NETipar\Chunky\Http\Controllers\CompleteDirectUploadController;
 use NETipar\Chunky\Http\Controllers\InitiateBatchController;
 use NETipar\Chunky\Http\Controllers\InitiateBatchUploadController;
 use NETipar\Chunky\Http\Controllers\InitiateUploadController;
+use NETipar\Chunky\Http\Controllers\PartUrlsController;
 use NETipar\Chunky\Http\Controllers\UploadChunkController;
 use NETipar\Chunky\Http\Controllers\UploadStatusController;
 use NETipar\Chunky\Http\Middleware\VerifyChunkIntegrity;
@@ -17,6 +19,8 @@ Route::post('upload', InitiateUploadController::class)->name('chunky.initiate');
 Route::post('upload/{uploadId}/chunks', UploadChunkController::class)
     ->middleware(VerifyChunkIntegrity::class)
     ->name('chunky.chunk');
+Route::post('upload/{uploadId}/part-urls', PartUrlsController::class)->name('chunky.partUrls');
+Route::post('upload/{uploadId}/complete', CompleteDirectUploadController::class)->name('chunky.complete');
 Route::get('upload/{uploadId}', UploadStatusController::class)->name('chunky.status');
 Route::delete('upload/{uploadId}', CancelUploadController::class)->name('chunky.cancel');
 

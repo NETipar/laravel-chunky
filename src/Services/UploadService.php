@@ -20,6 +20,7 @@ use NETipar\Chunky\Events\UploadCancelled;
 use NETipar\Chunky\Events\UploadInitiated;
 use NETipar\Chunky\Exceptions\ChunkIndexOutOfRangeException;
 use NETipar\Chunky\Exceptions\ChunkyException;
+use NETipar\Chunky\Exceptions\InvalidConfigurationException;
 use NETipar\Chunky\Exceptions\InvalidStateException;
 use NETipar\Chunky\Exceptions\MissingFileChecksumException;
 use NETipar\Chunky\Exceptions\UnauthorizedUploadException;
@@ -45,6 +46,7 @@ final class UploadService
         private readonly Clock $clock,
         private readonly Dispatcher $events,
         private readonly AssemblyRunner $assembler,
+        private readonly DirectUploadService $direct,
     ) {}
 
     public function initiate(InitiateInput $input): InitiateResult
@@ -71,21 +73,30 @@ final class UploadService
             $existing = $this->uploads->findByFingerprint($fingerprint, $userId);
 
             if ($existing !== null && ! $existing->status->isTerminal()) {
-                return new InitiateResult(
-                    $existing->uploadId,
-                    $existing->chunkSize,
-                    $existing->totalChunks,
-                    true,
-                    $existing->uploadedChunks,
-                    $existing->batchId,
-                );
+                return $this->resumeResult($existing);
             }
+        }
+
+        $transport = $profile?->transport() ?? 'server';
+
+        if (! in_array($transport, ['server', 'direct_s3'], true)) {
+            throw new ChunkyException("Unknown upload transport '{$transport}'.");
         }
 
         $uploadId = (string) Str::uuid();
         $chunkSize = $this->config->chunkSize;
         $totalChunks = ChunkCalculator::totalChunks($input->fileSize, $chunkSize);
+        $finalPath = $this->resolveFinalPath($uploadId, $profile, $context);
+
+        $remoteUploadId = null;
         $disk = $profile?->disk() ?? $this->config->disk;
+
+        if ($transport === 'direct_s3') {
+            $this->direct->assertConstraints($chunkSize, $totalChunks);
+            $disk = $this->config->directS3Disk
+                ?? throw InvalidConfigurationException::forKey('transports.direct_s3.disk', 'must be set to use the direct_s3 transport.');
+            $remoteUploadId = $this->direct->createRemote($finalPath, $input->mimeType);
+        }
 
         $record = new UploadRecord(
             uploadId: $uploadId,
@@ -99,17 +110,56 @@ final class UploadService
             metadata: $input->metadata,
             uploadedChunks: [],
             status: UploadStatus::Pending,
-            finalPath: $this->resolveFinalPath($uploadId, $profile, $context),
+            finalPath: $finalPath,
             batchId: $input->batchId,
             userId: $userId,
             fingerprint: $fingerprint,
             expiresAt: $this->clock->now()->add(new DateInterval('PT'.$this->config->expirationHours.'H')),
+            transport: $transport,
+            remoteUploadId: $remoteUploadId,
         );
 
         $this->uploads->create($record);
         $this->events->dispatch(new UploadInitiated($record));
 
-        return new InitiateResult($uploadId, $chunkSize, $totalChunks, false, [], $input->batchId);
+        return new InitiateResult(
+            $uploadId,
+            $chunkSize,
+            $totalChunks,
+            false,
+            [],
+            $input->batchId,
+            $record->isDirect() ? $this->direct->transportPayload($record, range(0, $totalChunks - 1)) : null,
+        );
+    }
+
+    private function resumeResult(UploadRecord $existing): InitiateResult
+    {
+        if (! $existing->isDirect()) {
+            return new InitiateResult(
+                $existing->uploadId,
+                $existing->chunkSize,
+                $existing->totalChunks,
+                true,
+                $existing->uploadedChunks,
+                $existing->batchId,
+            );
+        }
+
+        // K2: the remote part list is refreshed only here, at resume-initiate.
+        $uploadedParts = $this->direct->uploadedParts($existing);
+        $uploaded = array_keys($uploadedParts);
+        $missing = array_values(array_diff(range(0, $existing->totalChunks - 1), $uploaded));
+
+        return new InitiateResult(
+            $existing->uploadId,
+            $existing->chunkSize,
+            $existing->totalChunks,
+            true,
+            $uploaded,
+            $existing->batchId,
+            $this->direct->transportPayload($existing, $missing, $uploadedParts),
+        );
     }
 
     public function uploadChunk(string $uploadId, int $chunkIndex, UploadedFile $chunk, ?string $fileChecksum = null): ChunkUploadOutcome
@@ -122,6 +172,12 @@ final class UploadService
 
         if (! $record->status->isTerminal() && $record->isExpiredAt($this->clock->now())) {
             throw UploadExpiredException::forUpload($uploadId);
+        }
+
+        // Direct uploads PUT their parts straight to S3 — this endpoint is
+        // not part of their lifecycle.
+        if ($record->isDirect()) {
+            throw InvalidStateException::upload($record->status, UploadStatus::Uploading);
         }
 
         if (! in_array($record->status, [UploadStatus::Pending, UploadStatus::Uploading], true)) {
@@ -183,6 +239,7 @@ final class UploadService
         }
 
         $this->chunks->purge($uploadId);
+        $this->direct->abortRemote($record);
         $fresh = $this->uploads->find($uploadId) ?? $record;
         $this->events->dispatch(new UploadCancelled($fresh));
 

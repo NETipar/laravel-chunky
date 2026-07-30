@@ -88,7 +88,14 @@ fileChecksum: true })` hashes the whole file (SHA-256, embedded incremental
 hasher — no dependency) in parallel with the upload and sends it as
 `file_checksum` on the final chunk; the server verifies the assembled result
 against it (mismatch → `checksum_mismatch` error, upload `failed`). Off by
-default.
+default. Not applicable to `direct_s3` profiles (S3 validates parts via
+ETags).
+
+Direct-to-S3 profiles need no client change: the Uploader detects
+`transport.mode === 'direct_s3'` in the initiate response and PUTs presigned
+multipart parts straight to S3 (URL pool refills, ETag capture, `complete`
+call) behind the same `upload`/`pause`/`resume`/`cancel`/`subscribe` API. A
+`missing_etag` failure means the bucket CORS lacks `ExposeHeaders: ETag`.
 
 ### 3. Framework wrappers
 

@@ -36,7 +36,14 @@ final readonly class UploadRecord
         public ?DateTimeImmutable $claimedAt = null,
         public ?array $resultPayload = null,
         public ?string $fileChecksum = null,
+        public string $transport = 'server',
+        public ?string $remoteUploadId = null,
     ) {}
+
+    public function isDirect(): bool
+    {
+        return $this->transport === 'direct_s3';
+    }
 
     public function progress(): float
     {
@@ -89,6 +96,8 @@ final readonly class UploadRecord
             claimedAt: $claimedAt ?? $this->claimedAt,
             resultPayload: $resultPayload ?? $this->resultPayload,
             fileChecksum: $fileChecksum ?? $this->fileChecksum,
+            transport: $this->transport,
+            remoteUploadId: $this->remoteUploadId,
         );
     }
 
@@ -117,6 +126,8 @@ final readonly class UploadRecord
             'claimed_at' => $this->claimedAt?->format(DateTimeInterface::ATOM),
             'result_payload' => $this->resultPayload,
             'file_checksum' => $this->fileChecksum,
+            'transport' => $this->transport,
+            'remote_upload_id' => $this->remoteUploadId,
         ];
     }
 
@@ -140,6 +151,7 @@ final readonly class UploadRecord
             $data['result_payload'],
             $data['fingerprint'],
             $data['file_checksum'],
+            $data['remote_upload_id'],
         );
 
         $data['progress'] = $this->progress();
@@ -174,6 +186,8 @@ final readonly class UploadRecord
                 ? self::stringKeyedArray($data['result_payload'])
                 : null,
             fileChecksum: self::nullableString($data, 'file_checksum'),
+            transport: self::nullableString($data, 'transport') ?? 'server',
+            remoteUploadId: self::nullableString($data, 'remote_upload_id'),
         );
     }
 

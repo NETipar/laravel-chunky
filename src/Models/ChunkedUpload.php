@@ -25,6 +25,8 @@ use NETipar\Chunky\Domain\UploadStatus;
  * @property string|null $user_id
  * @property string|null $fingerprint
  * @property string|null $file_checksum
+ * @property string $transport
+ * @property string|null $remote_upload_id
  * @property Carbon|null $expires_at
  * @property Carbon|null $claimed_at
  * @property array<string, mixed>|null $result_payload

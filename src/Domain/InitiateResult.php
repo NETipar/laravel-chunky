@@ -8,6 +8,7 @@ final readonly class InitiateResult
 {
     /**
      * @param  list<int>  $uploadedChunks
+     * @param  array<string, mixed>|null  $transport  Direct-transport bootstrap (mode, part_urls, expires_at); null for server transport.
      */
     public function __construct(
         public string $uploadId,
@@ -16,6 +17,7 @@ final readonly class InitiateResult
         public bool $resumed,
         public array $uploadedChunks,
         public ?string $batchId = null,
+        public ?array $transport = null,
     ) {}
 
     /**
@@ -33,6 +35,10 @@ final readonly class InitiateResult
 
         if ($this->batchId !== null) {
             $data['batch_id'] = $this->batchId;
+        }
+
+        if ($this->transport !== null) {
+            $data['transport'] = $this->transport;
         }
 
         return $data;

@@ -53,6 +53,8 @@ final readonly class ChunkyConfig
         public ?string $broadcastingQueue,
         public array $profiles,
         public bool $cleanupEnabled,
+        public ?string $directS3Disk,
+        public int $directS3UrlTtl,
     ) {}
 
     /**
@@ -72,6 +74,7 @@ final readonly class ChunkyConfig
         $throttle = self::section($config, 'throttle');
         $broadcasting = self::section($config, 'broadcasting');
         $cleanup = self::section($config, 'cleanup');
+        $directS3 = self::section(self::section($config, 'transports'), 'direct_s3');
 
         return new self(
             tracker: self::enum($config, 'tracker', ['database', 'filesystem']),
@@ -108,6 +111,8 @@ final readonly class ChunkyConfig
             broadcastingQueue: self::nullableStr($broadcasting, 'queue'),
             profiles: self::classStringMap($config, 'profiles'),
             cleanupEnabled: self::bool($cleanup, 'enabled'),
+            directS3Disk: self::nullableStr($directS3, 'disk'),
+            directS3UrlTtl: self::positiveInt($directS3, 'transports.direct_s3.url_ttl'),
         );
     }
 

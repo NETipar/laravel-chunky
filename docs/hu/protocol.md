@@ -379,6 +379,97 @@ sniffelve).
 
 ---
 
+## 9. Direct-to-S3 transport (`direct_s3`)
+
+Profilonkénti opt-in (`UploadProfile::transport(): 'direct_s3'`). A chunkok
+presigned URL-ekkel, multipart partokként közvetlenül S3-ba mennek — a Laravel
+csak orchesztrál (initiate, URL-kiadás, complete, abort). A fenti szerveres
+transport-folyam érintetlen; itt minden additív.
+
+### Initiate-válasz bővítés
+
+Direct profilnál az initiate-válasz (friss és folytatott is) egy extra
+`transport` objektumot hordoz:
+
+```json
+{
+  "upload_id": "9b2c...uuid",
+  "chunk_size": 8388608,
+  "total_chunks": 120,
+  "resumed": false,
+  "uploaded_chunks": [],
+  "transport": {
+    "mode": "direct_s3",
+    "part_urls": { "0": "https://s3...&X-Amz-Signature=...", "1": "..." },
+    "expires_at": "2026-07-30T12:00:00Z"
+  }
+}
+```
+
+| Mező | Típus | Leírás |
+|---|---|---|
+| `mode` | string | `"direct_s3"`. Ismeretlen mode esetén a kliens NEM eshet vissza a chunk végpontra (az `409`-et ad). |
+| `part_urls` | object | Presigned PUT URL-ek 0-alapú chunk-index kulccsal — az első adag (max 100). Továbbiak a part-urls végponton kérhetők. |
+| `expires_at` | string | A kiadott URL-ek lejárata (`transports.direct_s3.url_ttl`). |
+| `uploaded_parts` | object | **Csak resume-nál:** index → a már S3-on lévő partok ETagje (ListParts-ból), hogy a kliens a teljes part-listát tudja küldeni a complete-nek. |
+
+A kliens minden partot a saját URL-jére PUT-ol, és KÖTELEZŐEN elmenti az
+`ETag` válasz-fejlécet (a bucket CORS-ban kell az `ExposeHeaders: ETag`).
+
+Kényszerek, initiate-kor `422 validation_failed`-del kikényszerítve:
+`chunk_size ≥ 5 MB` (S3 part-minimum) és `total_chunks ≤ 10000`.
+
+### `POST {prefix}/upload/{uploadId}/part-urls` — friss presigned URL-ek
+
+Lejárt URL-ekhez, retry-hoz és resume-utántöltéshez.
+
+Kérés: `{ "indexes": [100, 101, ...] }` — 1–100 index kérésenként.
+
+Válasz `200 OK`: `{ "part_urls": { "100": "https://..." }, "expires_at": "..." }`
+
+Hibák: `422 validation_failed` · `422 chunk_index_out_of_range` ·
+`403 unauthorized` · `404 upload_not_found` · `410 upload_expired` ·
+`409 invalid_state` (nem-direct upload vagy terminális állapot).
+
+### `POST {prefix}/upload/{uploadId}/complete` — a feltöltés lezárása
+
+Kérés — minden part a hozzá elmentett ETaggel:
+
+```json
+{ "parts": [ { "index": 0, "etag": "\"abc\"" }, { "index": 1, "etag": "\"def\"" } ] }
+```
+
+A szerver `CompleteMultipartUpload`-ot futtat, majd a "remote assembly"
+pipeline-t: állapot-átmenet (`pending/uploading → assembling`), integritás (a
+távoli objektum mérete vs `file_size`; a partok ETagjét maga az S3 validálja a
+complete során — a direct út end-to-end integritás-mechanizmusa ez, a
+`file_checksum` itt nem játszik), a profil `completed()` hookja, terminális
+állapot + eventek. A válasz megegyezik a sync záró-chunk válasszal:
+
+```json
+{ "status": "completed", "progress": 100.0, "file": { "path": "...", "size": 1 }, "payload": null }
+```
+
+Idempotens: egy már `completed` upload complete-je az eredményt játssza vissza.
+
+Hibák: `422 validation_failed` (hiányzó/felesleges partok) ·
+`422 chunk_index_out_of_range` · `403 unauthorized` · `404 upload_not_found` ·
+`410 upload_expired` · `409 invalid_state` · `500 assembly_failed` (az S3
+complete bukott vagy méret-eltérés — az upload `failed`-re áll).
+
+### Direct-specifikus viselkedés máshol
+
+- `POST .../chunks` direct uploadra → `409 invalid_state`.
+- `DELETE .../{uploadId}` (cancel) `AbortMultipartUpload`-ot is hív.
+- `GET .../{uploadId}` (státusz) a tracker utolsó ismert állapotát adja, és
+  NEM hív ListParts-ot; a távoli part-lista csak resume-initiate-kor frissül.
+  A feltöltő kliens lokálisan pontos.
+- A `chunky:cleanup` a lejárt direct uploadok távoli multipart feltöltését
+  abortálja. Védőhálónak állíts be S3 `AbortIncompleteMultipartUpload`
+  lifecycle rule-t.
+
+---
+
 ## Fingerprint resume
 
 Cél: reload/újrakiválasztás után a feltöltés a már feltöltött chunkok

@@ -62,6 +62,20 @@ Redis); `array`/`file`/`null` store-ral a csomag bootolni sem hajlandó.
 | `resume.fingerprint` | `true` | Fingerprint-alapú folytatás reload után. |
 | `idempotency.ttl` | 300 | Ennyi másodpercig cache-elődik a chunk-válasz a byte-pontos retry-visszajátszáshoz. |
 
+### Transportok (direct-to-S3)
+
+| Kulcs | Alapérték | Megjegyzés |
+|---|---|---|
+| `transports.direct_s3.disk` | `null` | Az s3 filesystem disk neve, ahová a direct uploadok mennek. `direct_s3` profil használatához kötelező; `aws/aws-sdk-php` szükséges. |
+| `transports.direct_s3.url_ttl` | 3600 | A presigned part URL-ek élettartama másodpercben. |
+
+A profil az `UploadProfile::transport(): 'direct_s3'`-mal kapcsol be.
+Kényszerek (initiate-kor kikényszerítve): `chunks.size ≥ 5 MB`, legfeljebb
+10000 part fájlonként. S3-kompatibilis célok (MinIO, Cloudflare R2) a disk
+`endpoint` + `use_path_style_endpoint` beállításain át működnek — a MinIO
+támogatott, az R2 best effort. Lásd a CORS-receptet lent; a wire-részletek a
+[protocol.md](protocol.md)-ben.
+
 ### Route-ok és rate limit
 
 | Kulcs | Alapérték | Megjegyzés |
@@ -98,7 +112,29 @@ használj `locking.driver=cache`-t Redis-szel.
 kösd be az Echo/Reverb-et, és (opcionálisan) vegyél ki eseményeket a
 `broadcasting.except`-ből, ha finomabb felbontású frissítést akarsz pusholni.
 
+**Direct-to-S3 (bucket CORS — kritikus).** A `direct_s3` transportnál a
+böngésző közvetlenül a bucketbe PUT-olja a partokat, ezért a CORS-nak
+engednie kell a PUT-ot ÉS ki kell tennie az `ETag` fejlécet — az
+`ExposeHeaders: ETag` nélkül a kliens nem tudja összegyűjteni a
+part-ETageket, és a complete sosem sikerül:
+
+```json
+[
+    {
+        "AllowedOrigins": ["https://app.example.com"],
+        "AllowedMethods": ["PUT"],
+        "AllowedHeaders": ["*"],
+        "ExposeHeaders": ["ETag"],
+        "MaxAgeSeconds": 3600
+    }
+]
+```
+
+Állíts be `AbortIncompleteMultipartUpload` lifecycle rule-t is (pl. 7 nap)
+védőhálóként a soha le nem zárt/abortált feltöltésekre.
+
 **Karbantartás.** Ütemezd a `php artisan chunky:cleanup`-ot (pl. óránként) a
-lejárt, befejezetlen uploadok és chunkjaik törlésére. A `php artisan
-chunky:doctor` átvizsgálja a diskeket, az assembly-módot és a
-broadcast-beállítást.
+lejárt, befejezetlen uploadok és chunkjaik törlésére (direct uploadnál a
+távoli multipart feltöltést is abortálja). A `php artisan chunky:doctor`
+átvizsgálja a diskeket, a queue workert, a broadcastot, a zárolást, a
+trackert, és — ha be van állítva — a direct_s3 presigninget.

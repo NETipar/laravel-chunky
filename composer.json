@@ -47,6 +47,7 @@
         "illuminate/support": "^12.0||^13.0"
     },
     "require-dev": {
+        "aws/aws-sdk-php": "^3.389",
         "larastan/larastan": "^3.9",
         "laravel/pao": "^1.0",
         "laravel/pint": "^1.29",
@@ -57,7 +58,8 @@
         "phpstan/extension-installer": "^1.4"
     },
     "suggest": {
-        "livewire/livewire": "Required for the Livewire chunk upload component (^3.0)"
+        "livewire/livewire": "Required for the Livewire chunk upload component (^3.0)",
+        "aws/aws-sdk-php": "Required for the direct_s3 upload transport (^3.300)"
     },
     "autoload": {
         "psr-4": {

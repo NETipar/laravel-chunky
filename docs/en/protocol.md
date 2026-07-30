@@ -383,6 +383,97 @@ through the `findByBatch` port, not by sniffing a concrete adapter).
 
 ---
 
+## 9. Direct-to-S3 transport (`direct_s3`)
+
+Opt-in per profile (`UploadProfile::transport(): 'direct_s3'`). Chunks travel
+straight to S3 as multipart parts via presigned URLs — Laravel only
+orchestrates (initiate, URL issuing, complete, abort). The server transport
+flow above is completely untouched; everything here is additive.
+
+### Initiate response extension
+
+For a direct profile the initiate response (fresh and resumed) carries an
+extra `transport` object:
+
+```json
+{
+  "upload_id": "9b2c...uuid",
+  "chunk_size": 8388608,
+  "total_chunks": 120,
+  "resumed": false,
+  "uploaded_chunks": [],
+  "transport": {
+    "mode": "direct_s3",
+    "part_urls": { "0": "https://s3...&X-Amz-Signature=...", "1": "..." },
+    "expires_at": "2026-07-30T12:00:00Z"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `mode` | string | `"direct_s3"`. A client that does not recognize the mode must not fall back to the chunk endpoint (it answers `409`). |
+| `part_urls` | object | Presigned PUT URLs keyed by 0-based chunk index — the first batch (max 100). Request more via the part-urls endpoint. |
+| `expires_at` | string | When the issued URLs expire (`transports.direct_s3.url_ttl`). |
+| `uploaded_parts` | object | **Resume only:** index → ETag of parts already on S3 (from ListParts), so the client can still send the full part list to complete. |
+
+The client PUTs each part to its URL and MUST capture the `ETag` response
+header (bucket CORS must include `ExposeHeaders: ETag`).
+
+Constraints, enforced at initiate with `422 validation_failed`:
+`chunk_size ≥ 5 MB` (S3 part minimum) and `total_chunks ≤ 10000`.
+
+### `POST {prefix}/upload/{uploadId}/part-urls` — fresh presigned URLs
+
+For expired URLs, retries, and resume top-ups.
+
+Request: `{ "indexes": [100, 101, ...] }` — 1–100 indexes per request.
+
+Response `200 OK`: `{ "part_urls": { "100": "https://..." }, "expires_at": "..." }`
+
+Errors: `422 validation_failed` · `422 chunk_index_out_of_range` ·
+`403 unauthorized` · `404 upload_not_found` · `410 upload_expired` ·
+`409 invalid_state` (non-direct upload or terminal state).
+
+### `POST {prefix}/upload/{uploadId}/complete` — finish the upload
+
+Request — every part with its captured ETag:
+
+```json
+{ "parts": [ { "index": 0, "etag": "\"abc\"" }, { "index": 1, "etag": "\"def\"" } ] }
+```
+
+The server runs `CompleteMultipartUpload`, then the remote assembly pipeline:
+state transition (`pending/uploading → assembling`), integrity (remote object
+size vs `file_size`; S3 itself validates each part's ETag during complete —
+this is the end-to-end integrity mechanism of the direct path, `file_checksum`
+does not apply), the profile's `completed()` hook, terminal state + events.
+The response equals the sync final-chunk response:
+
+```json
+{ "status": "completed", "progress": 100.0, "file": { "path": "...", "size": 1 }, "payload": null }
+```
+
+Idempotent: completing an already-`completed` upload replays the result.
+
+Errors: `422 validation_failed` (missing/extra parts) ·
+`422 chunk_index_out_of_range` · `403 unauthorized` · `404 upload_not_found` ·
+`410 upload_expired` · `409 invalid_state` · `500 assembly_failed` (S3
+complete failed or size mismatch — the upload transitions to `failed`).
+
+### Direct-specific behavior elsewhere
+
+- `POST .../chunks` on a direct upload → `409 invalid_state`.
+- `DELETE .../{uploadId}` (cancel) also calls `AbortMultipartUpload`.
+- `GET .../{uploadId}` (status) returns the tracker's last known state and
+  does **not** call ListParts; the remote part list refreshes only at
+  resume-initiate. The uploading client is locally accurate.
+- `chunky:cleanup` aborts the remote multipart upload of expired direct
+  uploads. Configure an S3 `AbortIncompleteMultipartUpload` lifecycle rule as
+  a safety net.
+
+---
+
 ## Fingerprint resume
 
 Goal: after a reload or re-selection, the upload continues without re-sending

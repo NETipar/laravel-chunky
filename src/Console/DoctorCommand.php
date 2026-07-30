@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use NETipar\Chunky\Adapters\Filesystem\JsonFileStore;
 use NETipar\Chunky\Config\ChunkyConfig;
 use NETipar\Chunky\Jobs\DoctorProbeJob;
+use NETipar\Chunky\Ports\DirectUploadTransport;
 use NETipar\Chunky\Ports\LockProvider;
 use NETipar\Chunky\Support\Coerce;
 use Throwable;
@@ -49,8 +50,26 @@ final class DoctorCommand extends Command
         $this->checkBroadcasting($config, $broadcast, $appConfig);
         $this->checkLocking($locks);
         $this->checkTracker($config, $filesystem);
+        $this->checkDirectTransport($config);
 
         return $this->failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function checkDirectTransport(ChunkyConfig $config): void
+    {
+        if ($config->directS3Disk === null) {
+            return;
+        }
+
+        try {
+            $transport = $this->laravel->make(DirectUploadTransport::class);
+            // Presigning signs locally — this proves the AWS SDK is installed
+            // and the disk config carries a bucket + credentials shape.
+            $transport->presignParts('chunky/.doctor-probe', 'doctor-probe', [0]);
+            $this->info("direct_s3 transport can presign part URLs on disk '{$config->directS3Disk}'.");
+        } catch (Throwable $e) {
+            $this->reportError("direct_s3 transport is not usable: {$e->getMessage()}");
+        }
     }
 
     private function checkDiskWritable(FilesystemFactory $filesystem, string $disk, string $label): void

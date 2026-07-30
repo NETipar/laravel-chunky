@@ -19,7 +19,9 @@ final class MakeProfileCommand extends GeneratorCommand
         return __DIR__.'/stubs/profile.stub';
     }
 
-    protected function getDefaultNamespace($rootNamespace): string
+    // The parameter mirrors the untyped GeneratorCommand signature — typing it
+    // would violate LSP on older framework releases.
+    protected function getDefaultNamespace($rootNamespace): string // @pest-ignore-type
     {
         return $rootNamespace.'\\Chunky\\Profiles';
     }

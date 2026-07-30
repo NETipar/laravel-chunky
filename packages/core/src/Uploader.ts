@@ -2,6 +2,7 @@ import type { ResolvedConfig } from './config';
 import { CompletionWatcher } from './CompletionWatcher';
 import { FingerprintStore, computeFingerprint } from './fingerprint';
 import { EventEmitter } from './internal/EventEmitter';
+import { sha256File } from './internal/sha256';
 import { deleteJson, isRetryable, postForm, postJson } from './http';
 import { ChunkyError, type UploadEvents, type UploadOptions, type UploadResult, type UploadState, type Unsubscribe } from './types';
 
@@ -55,6 +56,10 @@ export class Uploader {
     private bytesUploaded = 0;
 
     private runPromise: Promise<UploadResult> | null = null;
+
+    private fileHashPromise: Promise<string> | null = null;
+
+    private fileChecksum: string | null = null;
 
     private preview: string | null = null;
 
@@ -162,6 +167,11 @@ export class Uploader {
         this.startedAt = Date.now();
 
         try {
+            // Hash in parallel with the upload; the final chunk waits for it.
+            if (this.options.fileChecksum) {
+                this.fileHashPromise = sha256File(this.file);
+            }
+
             await this.initiate();
             this.patch({ status: 'uploading', totalChunks: this.totalChunks, uploadedChunks: this.uploaded.size });
             const terminal = await this.uploadChunks();
@@ -280,6 +290,12 @@ export class Uploader {
                     return;
                 }
 
+                // The last chunk carries the whole-file checksum, so its send
+                // waits for the hash (local reads normally outpace the network).
+                if (position === pending.length - 1 && this.fileHashPromise !== null) {
+                    this.fileChecksum = await this.fileHashPromise;
+                }
+
                 const response = await this.uploadOneChunk(pending[position]);
                 if (response.status === 'completed' || response.status === 'assembling') {
                     terminal = response;
@@ -305,6 +321,11 @@ export class Uploader {
             const form = new FormData();
             form.append('chunk', blob, 'chunk');
             form.append('chunk_index', String(index));
+
+            // The server keeps the first non-empty value and ignores repeats.
+            if (this.fileChecksum !== null) {
+                form.append('file_checksum', this.fileChecksum);
+            }
 
             const controller = new AbortController();
             this.controllers.add(controller);

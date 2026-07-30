@@ -30,11 +30,28 @@ final class MergeStep implements AssemblyStep
         }
 
         try {
+            // Hash while copying so the whole-file checksum needs no second
+            // pass over the assembled bytes.
+            $hash = hash_init('sha256');
+
             for ($index = 0; $index < $state->record->totalChunks; $index++) {
                 $chunkStream = $this->chunks->readStream($state->record->uploadId, $index);
-                stream_copy_to_stream($chunkStream, $temp);
+
+                while (! feof($chunkStream)) {
+                    $buffer = fread($chunkStream, 1024 * 1024);
+
+                    if ($buffer === false || $buffer === '') {
+                        break;
+                    }
+
+                    fwrite($temp, $buffer);
+                    hash_update($hash, $buffer);
+                }
+
                 fclose($chunkStream);
             }
+
+            $state->computedChecksum = hash_final($hash);
 
             rewind($temp);
 

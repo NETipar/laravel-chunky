@@ -81,6 +81,9 @@ return [
     'integrity' => [
         'algorithm' => 'sha256',
         'required' => false,
+        // Reject the final chunk unless the client supplied a whole-file
+        // SHA-256 via the optional `file_checksum` field.
+        'require_full_file' => false,
     ],
 
     'resume' => [

@@ -36,6 +36,7 @@ class UploadChunkRequest extends AbstractChunkyRequest
             'chunk' => ['required', 'file'],
             'chunk_index' => $indexRules,
             'checksum' => ['nullable', 'string'],
+            'file_checksum' => ['nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
         ];
     }
 }

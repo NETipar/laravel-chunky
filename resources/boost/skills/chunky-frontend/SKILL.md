@@ -83,6 +83,13 @@ Image preview: `uploader.previewUrl()` lazily creates a cached object URL for
 Downscaled thumbnail: `await createThumbnail(file, { maxDimension: 256 })`
 returns a Blob (WebP by default), dependency-free.
 
+End-to-end verification: `manager.upload(file, { profile: 'avatar',
+fileChecksum: true })` hashes the whole file (SHA-256, embedded incremental
+hasher — no dependency) in parallel with the upload and sends it as
+`file_checksum` on the final chunk; the server verifies the assembled result
+against it (mismatch → `checksum_mismatch` error, upload `failed`). Off by
+default.
+
 ### 3. Framework wrappers
 
 Vue 3 (`@netipar/chunky-vue3`):

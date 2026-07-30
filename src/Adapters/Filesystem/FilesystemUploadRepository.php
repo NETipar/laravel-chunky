@@ -74,6 +74,19 @@ final class FilesystemUploadRepository implements UploadRepository
         });
     }
 
+    public function setFileChecksum(string $uploadId, string $checksum): void
+    {
+        $this->lock->withLock($this->lockKey($uploadId), function () use ($uploadId, $checksum): void {
+            $record = $this->find($uploadId);
+
+            if ($record === null || $record->fileChecksum !== null) {
+                return;
+            }
+
+            $this->store->write($this->path($uploadId), $record->with(fileChecksum: $checksum)->toArray());
+        });
+    }
+
     public function transition(
         string $uploadId,
         UploadStatus $from,

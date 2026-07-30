@@ -58,6 +58,7 @@ Redis); `array`/`file`/`null` store-ral a csomag bootolni sem hajlandó.
 |---|---|---|
 | `integrity.algorithm` | `sha256` | A chunkok opcionális `checksum`-jának ellenőrző hash-e. |
 | `integrity.required` | `false` | Checksum megkövetelése minden chunkon. Kikapcsolva is ellenőrzi a megadott checksumot. |
+| `integrity.require_full_file` | `false` | A teljes-fájl `file_checksum` (mindig SHA-256) megkövetelése a befejezéshez; nélküle a záró chunk `422 validation_failed`. Kikapcsolva is ellenőrzi a megadott `file_checksum`-ot az összefűzés után. |
 | `resume.fingerprint` | `true` | Fingerprint-alapú folytatás reload után. |
 | `idempotency.ttl` | 300 | Ennyi másodpercig cache-elődik a chunk-válasz a byte-pontos retry-visszajátszáshoz. |
 

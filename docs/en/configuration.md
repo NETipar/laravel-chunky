@@ -58,6 +58,7 @@ package refuses to boot on `array`/`file`/`null`.
 |---|---|---|
 | `integrity.algorithm` | `sha256` | Hash used to verify a chunk's optional `checksum`. |
 | `integrity.required` | `false` | Require a checksum on every chunk. When off, a supplied checksum is still verified. |
+| `integrity.require_full_file` | `false` | Require the whole-file `file_checksum` (always SHA-256) before an upload may complete; without it the completing chunk returns `422 validation_failed`. When off, a supplied `file_checksum` is still verified after assembly. |
 | `resume.fingerprint` | `true` | Enable fingerprint-based resume across reloads. |
 | `idempotency.ttl` | 300 | Seconds a chunk response is cached for byte-exact retry replay. |
 

@@ -179,6 +179,8 @@ manager.installUnloadGuard();
 
 For image uploads, `uploader.previewUrl()` lazily creates a cached object URL you can drop into an `<img>` (null for non-image files); the manager revokes it when the upload is evicted via `manager.remove()`. Need a real downscaled thumbnail instead? `await createThumbnail(file, { maxDimension: 256 })` returns a `Blob` (WebP by default), dependency-free.
 
+Want end-to-end verification? `manager.upload(file, { profile: 'avatar', fileChecksum: true })` hashes the whole file (SHA-256, dependency-free) in parallel with the upload and the server verifies the assembled result against it.
+
 ### Vue 3 — `@netipar/chunky-vue3`
 
 ```ts

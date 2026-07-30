@@ -48,6 +48,12 @@ export interface UploadOptions {
     fingerprint?: string | null;
     /** When set, the upload initiates against the batch member endpoint. */
     batchId?: string;
+    /**
+     * Compute the whole file's SHA-256 in parallel with the upload and send it
+     * as `file_checksum` so the server verifies the assembled result
+     * end-to-end. Off by default.
+     */
+    fileChecksum?: boolean;
 }
 
 export interface BatchOptions {

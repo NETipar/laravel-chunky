@@ -24,6 +24,7 @@ use NETipar\Chunky\Domain\UploadStatus;
  * @property string|null $batch_id
  * @property string|null $user_id
  * @property string|null $fingerprint
+ * @property string|null $file_checksum
  * @property Carbon|null $expires_at
  * @property Carbon|null $claimed_at
  * @property array<string, mixed>|null $result_payload

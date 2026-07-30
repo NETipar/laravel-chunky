@@ -17,6 +17,9 @@ final class AssemblyState
 
     public ?string $finalPath = null;
 
+    /** SHA-256 hex of the merged bytes, computed while streaming in MergeStep. */
+    public ?string $computedChecksum = null;
+
     /** @var array<string, mixed>|null */
     public ?array $payload = null;
 

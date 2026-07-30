@@ -40,7 +40,12 @@ final class UploadChunkController
         }
 
         try {
-            $outcome = $uploads->uploadChunk($uploadId, $chunkIndex, $chunk);
+            $outcome = $uploads->uploadChunk(
+                $uploadId,
+                $chunkIndex,
+                $chunk,
+                Coerce::toNullableString($request->input('file_checksum')),
+            );
         } catch (LockTimeoutException) {
             return new JsonResponse([
                 'error' => ['code' => ErrorCode::LockTimeout->value, 'message' => ErrorCode::LockTimeout->message()],

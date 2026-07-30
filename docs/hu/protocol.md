@@ -3,10 +3,9 @@
 > 🇬🇧 English version: [docs/en/protocol.md](../en/protocol.md)
 
 > **Normatív dokumentum.** Ez a v1.0 HTTP protokoll teljes leírása. A backend
-> protokoll-tesztjei (T3.8) és a frontend transport-kódja (T4.2) erre a
-> dokumentumra assertelnek. Forrás: [v1-implementation-plan.md](../v1-implementation-plan.md)
-> 3. szakasz. Az OpenAPI-változat: [openapi.yaml](../openapi.yaml) — a kettőnek
-> mezőről mezőre egyeznie kell.
+> protokoll-tesztjei és a frontend transport-kódja erre a dokumentumra
+> assertelnek. Az OpenAPI-változat: [openapi.yaml](../openapi.yaml) — a
+> kettőnek mezőről mezőre egyeznie kell.
 
 ## Általános szabályok
 

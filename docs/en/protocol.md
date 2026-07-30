@@ -3,11 +3,9 @@
 > 🇭🇺 Magyar változat: [docs/hu/protocol.md](../hu/protocol.md)
 
 > **Normative document.** This is the complete description of the v1.0 HTTP
-> protocol. The backend protocol tests (T3.8) and the frontend transport code
-> (T4.2) assert against this document. Source:
-> [v1-implementation-plan.md](../v1-implementation-plan.md) section 3. The
-> OpenAPI variant: [openapi.yaml](../openapi.yaml) — the two must match field
-> by field.
+> protocol. The backend protocol tests and the frontend transport code assert
+> against this document. The OpenAPI variant: [openapi.yaml](../openapi.yaml)
+> — the two must match field by field.
 
 ## General rules
 

@@ -9,12 +9,14 @@ use Illuminate\Testing\TestResponse;
 use NETipar\Chunky\Events\FileAssembled;
 use NETipar\Chunky\Events\UploadCompleted;
 use NETipar\Chunky\Events\UploadFailed;
+use NETipar\Chunky\Exceptions\ChunkIndexOutOfRangeException;
 use NETipar\Chunky\Models\ChunkedUpload;
 use NETipar\Chunky\Ports\DirectUploadTransport;
 use NETipar\Chunky\Profiles\CompletedUpload;
 use NETipar\Chunky\Profiles\ProfileRegistry;
 use NETipar\Chunky\Profiles\UploadContext;
 use NETipar\Chunky\Profiles\UploadProfile;
+use NETipar\Chunky\Services\DirectUploadService;
 use NETipar\Chunky\Tests\Doubles\InMemoryDirectTransport;
 
 uses(RefreshDatabase::class);
@@ -257,3 +259,22 @@ it('reports a usable direct transport in doctor', function () {
         ->expectsOutputToContain("direct_s3 transport can presign part URLs on disk 's3'.")
         ->assertExitCode(0);
 });
+
+it('aborts remote uploads when their batch is cancelled', function () {
+    $batchId = (string) $this->postJson('/api/chunky/batch', ['total_files' => 1, 'profile' => 'direct'])
+        ->assertStatus(201)
+        ->json('batch_id');
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'video.mp4', 'file_size' => DIRECT_PART])
+        ->assertStatus(201);
+
+    $this->deleteJson("/api/chunky/batch/{$batchId}")->assertOk();
+
+    expect($this->transport->aborted)->toBe(['remote-1']);
+});
+
+it('rejects a negative part index at the service level', function () {
+    $uploadId = (string) directInitiate($this, DIRECT_PART)->json('upload_id');
+
+    app(DirectUploadService::class)->partUrls($uploadId, [-1]);
+})->throws(ChunkIndexOutOfRangeException::class);

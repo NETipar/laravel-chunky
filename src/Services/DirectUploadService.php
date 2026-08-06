@@ -136,7 +136,7 @@ final class DirectUploadService
         $record = $this->directRecord($uploadId);
 
         foreach ($indexes as $index) {
-            if ($index >= $record->totalChunks) {
+            if ($index < 0 || $index >= $record->totalChunks) {
                 throw ChunkIndexOutOfRangeException::make($index, $record->totalChunks);
             }
         }

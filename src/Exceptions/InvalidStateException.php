@@ -23,6 +23,11 @@ class InvalidStateException extends ChunkyException
         return new self("Cannot transition batch from '{$from->value}' to '{$to->value}'.");
     }
 
+    public static function batchFull(string $batchId, int $totalFiles): self
+    {
+        return new self("Batch '{$batchId}' already has its declared {$totalFiles} member upload(s).");
+    }
+
     public function errorCode(): ErrorCode
     {
         return ErrorCode::InvalidState;

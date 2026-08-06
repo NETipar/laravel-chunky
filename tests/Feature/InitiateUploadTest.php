@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Events\UploadInitiated;
+use NETipar\Chunky\Jobs\AssembleFileJob;
+use NETipar\Chunky\Ports\ChunkStore;
+use NETipar\Chunky\Ports\UploadRepository;
 
 uses(RefreshDatabase::class);
 
@@ -84,4 +89,61 @@ it('rejects an unknown profile', function () {
     chunkyInitiate($this, 'f.bin', 20, ['profile' => 'does-not-exist'])
         ->assertStatus(422)
         ->assertJsonPath('error.code', 'profile_not_found');
+});
+
+/**
+ * Simulates a finishing chunk whose response was lost mid-flight: the bytes and
+ * the tracker mark exist, but assembly never started.
+ */
+function stallUploadAtFullCompletion(object $test, string $fingerprint): string
+{
+    $first = chunkyInitiate($test, 'f.bin', 20, ['fingerprint' => $fingerprint])->assertStatus(201);
+    $uploadId = (string) $first->json('upload_id');
+
+    chunkyChunk($test, $uploadId, 0, '01234567')->assertOk();
+    chunkyChunk($test, $uploadId, 1, '89abcdef')->assertOk();
+
+    app(ChunkStore::class)->put($uploadId, 2, UploadedFile::fake()->createWithContent('chunk', 'ghij'));
+    app(UploadRepository::class)->markChunk($uploadId, 2);
+
+    return $uploadId;
+}
+
+it('recovers a stalled, fully uploaded resume by running sync assembly', function () {
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-sync');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-sync'])
+        ->assertStatus(200)
+        ->assertJson(['upload_id' => $uploadId, 'resumed' => true, 'uploaded_chunks' => [0, 1, 2]]);
+
+    $this->getJson("/api/chunky/upload/{$uploadId}")
+        ->assertOk()
+        ->assertJsonPath('status', 'completed');
+});
+
+it('dispatches the assembly job for a stalled resume in queue mode', function () {
+    config(['chunky.assembly.mode' => 'queue']);
+    Queue::fake();
+
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-queue');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-queue'])
+        ->assertStatus(200)
+        ->assertJson(['resumed' => true]);
+
+    Queue::assertPushed(AssembleFileJob::class, fn (AssembleFileJob $job): bool => $job->uploadId === $uploadId);
+});
+
+it('does not start assembly on a stalled resume when the required file checksum is missing', function () {
+    config(['chunky.integrity.require_full_file' => true]);
+
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-checksum');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-checksum'])
+        ->assertStatus(200)
+        ->assertJson(['resumed' => true]);
+
+    $this->getJson("/api/chunky/upload/{$uploadId}")
+        ->assertOk()
+        ->assertJsonPath('status', 'uploading');
 });

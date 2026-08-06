@@ -27,6 +27,7 @@ use NETipar\Chunky\Exceptions\UnauthorizedUploadException;
 use NETipar\Chunky\Exceptions\UploadExpiredException;
 use NETipar\Chunky\Exceptions\UploadNotFoundException;
 use NETipar\Chunky\Jobs\AssembleFileJob;
+use NETipar\Chunky\Ports\BatchRepository;
 use NETipar\Chunky\Ports\ChunkStore;
 use NETipar\Chunky\Ports\Clock;
 use NETipar\Chunky\Ports\UploadRepository;
@@ -35,11 +36,13 @@ use NETipar\Chunky\Profiles\UploadContext;
 use NETipar\Chunky\Profiles\UploadProfile;
 use NETipar\Chunky\Support\ChunkCalculator;
 use NETipar\Chunky\Support\Coerce;
+use Throwable;
 
 final class UploadService
 {
     public function __construct(
         private readonly UploadRepository $uploads,
+        private readonly BatchRepository $batches,
         private readonly ChunkStore $chunks,
         private readonly ProfileRegistry $profiles,
         private readonly ChunkyConfig $config,
@@ -75,6 +78,10 @@ final class UploadService
             if ($existing !== null && ! $existing->status->isTerminal()) {
                 return $this->resumeResult($existing);
             }
+        }
+
+        if ($input->batchId !== null) {
+            $this->assertBatchHasCapacity($input->batchId);
         }
 
         $transport = $profile?->transport() ?? 'server';
@@ -133,9 +140,30 @@ final class UploadService
         );
     }
 
+    /**
+     * A new member may only be created while the batch is below its declared
+     * total_files; otherwise the counters could overflow and the batch could
+     * finalize while an undeclared member is still uploading. Resumes are
+     * unaffected — they return before this guard runs.
+     */
+    private function assertBatchHasCapacity(string $batchId): void
+    {
+        $batch = $this->batches->find($batchId);
+
+        if ($batch === null) {
+            return;
+        }
+
+        if (count($this->uploads->findByBatch($batchId)) >= $batch->totalFiles) {
+            throw InvalidStateException::batchFull($batchId, $batch->totalFiles);
+        }
+    }
+
     private function resumeResult(UploadRecord $existing): InitiateResult
     {
         if (! $existing->isDirect()) {
+            $this->recoverStalledAssembly($existing);
+
             return new InitiateResult(
                 $existing->uploadId,
                 $existing->chunkSize,
@@ -160,6 +188,38 @@ final class UploadService
             $existing->batchId,
             $this->direct->transportPayload($existing, $missing, $uploadedParts),
         );
+    }
+
+    /**
+     * A resumed upload can arrive with every chunk already stored but assembly
+     * never started (the finishing chunk request was lost mid-flight). The
+     * client has nothing left to send and will only poll — so assembly must be
+     * kicked off here, or the upload deadlocks until it expires.
+     */
+    private function recoverStalledAssembly(UploadRecord $record): void
+    {
+        if ($record->status !== UploadStatus::Uploading || ! $record->isComplete()) {
+            return;
+        }
+
+        // Without the mandatory whole-file checksum assembly must not start;
+        // the client can still supply it by re-sending any chunk.
+        if ($this->config->integrityRequireFullFile && $record->fileChecksum === null) {
+            return;
+        }
+
+        if ($this->assemblyMode($record->fileSize) !== 'sync') {
+            AssembleFileJob::dispatch($record->uploadId);
+
+            return;
+        }
+
+        try {
+            $this->assembler->run($record->uploadId);
+        } catch (Throwable) {
+            // The upload settled as failed; the client observes the terminal
+            // state through the status endpoint of the resume flow.
+        }
     }
 
     public function uploadChunk(string $uploadId, int $chunkIndex, UploadedFile $chunk, ?string $fileChecksum = null): ChunkUploadOutcome

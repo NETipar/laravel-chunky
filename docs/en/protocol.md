@@ -323,9 +323,11 @@ and response schema match initiate; the response also carries `batch_id`.
 
 ### Errors
 
-`404 batch_not_found` · `422 validation_failed` (including an oversized
-`file_size`) · `403 unauthorized` · `409 invalid_state` (the batch is already
-terminal).
+`404 batch_not_found` (also for a non-owner, mirroring batch status/cancel) ·
+`422 validation_failed` (including an oversized `file_size`) ·
+`403 unauthorized` · `409 invalid_state` (the batch is already terminal, or it
+already has its declared `total_files` member uploads — fingerprint resume of
+an existing member still answers `200 OK`).
 
 ---
 
@@ -484,6 +486,13 @@ already uploaded chunks.
   non-terminal upload with the same fingerprint **from the same user**
   (`UploadRepository::findByFingerprint($fp, $userId)`). On a hit: `200`,
   `resumed: true`, the existing `upload_id` and `uploaded_chunks`.
+- If the resumed upload already has **every** chunk (the finishing chunk
+  request was lost mid-flight), the server starts assembly itself at
+  resume-initiate (sync mode: inline; queue mode: job dispatch) — the client
+  has nothing left to send and simply polls the status endpoint. With
+  `integrity.require_full_file = true` and no stored `file_checksum` this
+  self-start is skipped; the client re-sends any one chunk with
+  `file_checksum` to finish.
 - The client keeps a `fingerprint → upload_id` map in `localStorage`; on a
   terminal response or a `404`/`410` it removes the entry.
 - With `resume.fingerprint` disabled, every initiate creates a new upload

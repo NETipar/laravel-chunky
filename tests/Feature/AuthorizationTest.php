@@ -76,3 +76,25 @@ it('keeps anonymous uploads accessible without auth', function () {
 
     $this->getJson("/api/chunky/upload/{$uploadId}")->assertOk();
 });
+
+it('answers a non-owner initiating a batch member with 404', function () {
+    $this->actingAs(makeUser(8));
+    $batchId = (string) $this->postJson('/api/chunky/batch', ['total_files' => 2])
+        ->assertStatus(201)
+        ->json('batch_id');
+
+    $this->actingAs(makeUser(9));
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'a.bin', 'file_size' => 20])
+        ->assertStatus(404)
+        ->assertJsonPath('error.code', 'batch_not_found');
+});
+
+it('lets the owner initiate a member on their own batch', function () {
+    $this->actingAs(makeUser(10));
+    $batchId = (string) $this->postJson('/api/chunky/batch', ['total_files' => 2])
+        ->assertStatus(201)
+        ->json('batch_id');
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'a.bin', 'file_size' => 20])
+        ->assertStatus(201);
+});

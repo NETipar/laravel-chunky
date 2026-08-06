@@ -6,6 +6,7 @@ namespace NETipar\Chunky\Services;
 
 use DateInterval;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Str;
 use NETipar\Chunky\Config\ChunkyConfig;
@@ -37,6 +38,7 @@ final class BatchService
         private readonly Dispatcher $events,
         private readonly ChunkyConfig $config,
         private readonly Clock $clock,
+        private readonly Container $container,
     ) {}
 
     /**
@@ -166,6 +168,13 @@ final class BatchService
         }
 
         $this->chunks->purge($upload->uploadId);
+
+        // Resolved lazily: DirectUploadService depends on BatchService, so a
+        // constructor dependency here would be circular.
+        if ($upload->isDirect()) {
+            $this->container->make(DirectUploadService::class)->abortRemote($upload);
+        }
+
         $this->events->dispatch(new UploadCancelled($this->uploads->find($upload->uploadId) ?? $upload));
     }
 }

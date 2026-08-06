@@ -320,8 +320,11 @@ azonos az initiate-tel; a válasz `batch_id`-t is tartalmaz.
 
 ### Hibák
 
-`404 batch_not_found` · `422 validation_failed` (beleértve a túl nagy
-`file_size`-t) · `403 unauthorized` · `409 invalid_state` (a batch már terminális).
+`404 batch_not_found` (nem tulajdonosnak is, a batch státusz/cancel mintájára) ·
+`422 validation_failed` (beleértve a túl nagy `file_size`-t) ·
+`403 unauthorized` · `409 invalid_state` (a batch már terminális, vagy már
+megvan a deklarált `total_files` számú tag-uploadja — meglévő tag fingerprint
+resume-ja továbbra is `200 OK`-t ad).
 
 ---
 
@@ -480,6 +483,13 @@ Cél: reload/újrakiválasztás után a feltöltés a már feltöltött chunkok
   nem terminális uploadot ugyanezzel a fingerprinttel, **ugyanattól a
   felhasználótól** (`UploadRepository::findByFingerprint($fp, $userId)`).
   Találatnál `200`, `resumed: true`, a meglévő `upload_id` és `uploaded_chunks`.
+- Ha a folytatott uploadnak már **minden** chunkja megvan (a záró chunk-kérés
+  útközben elveszett), az assemblyt a szerver maga indítja el a
+  resume-initiate-nél (sync mód: inline; queue mód: job dispatch) — a
+  kliensnek nincs mit küldenie, csak a státusz végpontot pollozza.
+  `integrity.require_full_file = true` mellett tárolt `file_checksum` nélkül
+  ez az önindítás kimarad; a kliens bármelyik chunkot újraküldheti
+  `file_checksum`-mal a befejezéshez.
 - A kliens `localStorage`-ben tart egy `fingerprint → upload_id` térképet;
   terminális válasznál vagy `404`/`410`-nél a bejegyzést törli.
 - Kikapcsolt `resume.fingerprint` esetén minden initiate új uploadot hoz létre

@@ -101,3 +101,35 @@ it('cancels a batch and its non-terminal members', function () {
     $this->getJson("/api/chunky/batch/{$batchId}")->assertOk()->assertJson(['status' => 'cancelled']);
     $this->getJson("/api/chunky/upload/{$uploadId}")->assertOk()->assertJson(['status' => 'cancelled']);
 });
+
+it('rejects more members than the declared total_files with 409', function () {
+    $batchId = createBatch($this, 1);
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'a.bin', 'file_size' => 20])
+        ->assertStatus(201);
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'b.bin', 'file_size' => 20])
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'invalid_state');
+});
+
+it('still resumes an existing member of a full batch by fingerprint', function () {
+    $batchId = createBatch($this, 1);
+
+    $first = $this->postJson("/api/chunky/batch/{$batchId}/upload", [
+        'file_name' => 'a.bin',
+        'file_size' => 20,
+        'fingerprint' => 'fp-batch-member',
+    ])->assertStatus(201);
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", [
+        'file_name' => 'a.bin',
+        'file_size' => 20,
+        'fingerprint' => 'fp-batch-member',
+    ])
+        ->assertStatus(200)
+        ->assertJson([
+            'upload_id' => (string) $first->json('upload_id'),
+            'resumed' => true,
+        ]);
+});

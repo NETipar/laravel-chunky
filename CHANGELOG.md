@@ -15,6 +15,13 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 ### Changed
 - Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
 
+### Fixed
+- Initiating a batch member now requires batch ownership: a non-owner gets `404 batch_not_found` (anti-enumeration), mirroring the batch status/cancel endpoints.
+- A batch can no longer accept more member uploads than its declared `total_files` — the overflow member is rejected with `409 invalid_state`, so the completion counters cannot overrun and the batch cannot finalize while an undeclared member is still uploading. Fingerprint resume of an existing member is unaffected.
+- A fully uploaded, stalled resume (the finishing chunk response was lost mid-flight) no longer deadlocks: resume-initiate starts assembly itself — inline in sync mode, via job dispatch in queue mode. Skipped when `integrity.require_full_file` is on and no checksum was stored.
+- Cancelling a batch now aborts the remote S3 multipart upload of its `direct_s3` members, matching single-upload cancel and `chunky:cleanup` — no more orphaned multipart uploads.
+- `DirectUploadService::partUrls()` rejects negative part indexes at the service level (previously only the HTTP layer validated the lower bound).
+
 ## v1.0.0-beta.1 - 2026-07-12
 
 **A ground-up rewrite with a stable public API.** See [UPGRADE.md](UPGRADE.md) for the full `0.x → 1.0` migration.

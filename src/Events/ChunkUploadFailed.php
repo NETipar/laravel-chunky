@@ -4,27 +4,35 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-use Throwable;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
 
-class ChunkUploadFailed extends AbstractChunkyEvent
+final class ChunkUploadFailed implements ChunkyEvent, ShouldBroadcast
 {
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
+
     public function __construct(
         public readonly string $uploadId,
         public readonly int $chunkIndex,
-        public readonly Throwable $exception,
+        public readonly string $reason,
     ) {}
 
-    protected function broadcastEventKey(): string
+    /**
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
     {
-        return 'ChunkUploadFailed';
+        return [new PrivateChannel('chunky.upload.'.$this->uploadId)];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastAs(): string
     {
-        return ["uploads.{$this->uploadId}"];
+        return 'chunk.upload_failed';
     }
 
     /**
@@ -32,10 +40,10 @@ class ChunkUploadFailed extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        return [
-            'uploadId' => $this->uploadId,
-            'chunkIndex' => $this->chunkIndex,
-            'message' => $this->exception->getMessage(),
-        ];
+        return $this->versionedPayload([
+            'upload_id' => $this->uploadId,
+            'chunk_index' => $this->chunkIndex,
+            'reason' => $this->reason,
+        ]);
     }
 }

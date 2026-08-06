@@ -2,71 +2,48 @@
 
 declare(strict_types=1);
 
-use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use NETipar\Chunky\Contracts\ChunkHandler;
-use NETipar\Chunky\Contracts\UploadTracker;
-use NETipar\Chunky\Data\UploadMetadata;
 use NETipar\Chunky\Models\ChunkedUpload;
 
 uses(RefreshDatabase::class);
 
-beforeEach(function () {
-    Storage::fake('local');
-});
+beforeEach(fn () => Storage::fake('local'));
 
-function seedExpiredUpload(string $uploadId, ?Carbon $expiresAt = null): void
+function seedExpiredUpload(object $test, string $fileName = 'old.bin'): string
 {
-    $tracker = app(UploadTracker::class);
-    $handler = app(ChunkHandler::class);
+    $uploadId = (string) chunkyInitiate($test, $fileName, 20)->assertStatus(201)->json('upload_id');
+    chunkyChunk($test, $uploadId, 0, '01234567')->assertOk();
+    ChunkedUpload::query()->where('upload_id', $uploadId)->update(['expires_at' => now()->subDay()]);
 
-    $handler->store($uploadId, 0, UploadedFile::fake()->createWithContent('chunk_0', 'x'));
-
-    $tracker->initiate($uploadId, new UploadMetadata(
-        uploadId: $uploadId,
-        fileName: 'old.bin',
-        fileSize: 1,
-        mimeType: null,
-        chunkSize: 1024,
-        totalChunks: 1,
-        disk: 'local',
-        context: null,
-    ));
-
-    if ($expiresAt) {
-        ChunkedUpload::where('upload_id', $uploadId)->update(['expires_at' => $expiresAt]);
-    }
+    return $uploadId;
 }
 
 it('removes expired uploads and their chunks', function () {
-    seedExpiredUpload('exp-1', now()->subHour());
-    seedExpiredUpload('keep-1');
+    $expired = seedExpiredUpload($this);
+    $fresh = (string) chunkyInitiate($this, 'keep.bin', 20)->assertStatus(201)->json('upload_id');
 
     $this->artisan('chunky:cleanup')->assertExitCode(0);
 
-    expect(ChunkedUpload::where('upload_id', 'exp-1')->exists())->toBeFalse();
-    expect(ChunkedUpload::where('upload_id', 'keep-1')->exists())->toBeTrue();
-    Storage::disk('local')->assertMissing('chunky/temp/exp-1');
-    Storage::disk('local')->assertExists('chunky/temp/keep-1/chunk_0');
+    expect(ChunkedUpload::query()->where('upload_id', $expired)->exists())->toBeFalse();
+    expect(ChunkedUpload::query()->where('upload_id', $fresh)->exists())->toBeTrue();
+    Storage::disk('local')->assertMissing("chunky/chunks/{$expired}");
 });
 
-it('lists removable uploads in dry-run mode without deleting', function () {
-    seedExpiredUpload('exp-2', now()->subDay());
+it('lists removable uploads in dry-run without deleting', function () {
+    $expired = seedExpiredUpload($this);
 
     $this->artisan('chunky:cleanup --dry-run')
-        ->expectsOutputToContain('Would remove upload: exp-2')
+        ->expectsOutputToContain("Would remove upload: {$expired}")
         ->assertExitCode(0);
 
-    expect(ChunkedUpload::where('upload_id', 'exp-2')->exists())->toBeTrue();
-    Storage::disk('local')->assertExists('chunky/temp/exp-2/chunk_0');
+    expect(ChunkedUpload::query()->where('upload_id', $expired)->exists())->toBeTrue();
 });
 
-it('reports nothing to remove when no uploads have expired', function () {
-    seedExpiredUpload('keep-2');
+it('reports nothing to remove when none are expired', function () {
+    chunkyInitiate($this, 'keep.bin', 20)->assertStatus(201);
 
     $this->artisan('chunky:cleanup')
-        ->expectsOutputToContain('No expired uploads or batches found.')
+        ->expectsOutputToContain('No expired uploads found.')
         ->assertExitCode(0);
 });

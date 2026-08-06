@@ -9,6 +9,7 @@ Thumbs.db
 
 # PHP
 /vendor
+/build
 composer.lock
 .phpunit.result.cache
 .phpunit.cache
@@ -22,6 +23,10 @@ coverage.xml
 node_modules
 .pnpm-store
 *.tsbuildinfo
+
+# Build output (published to npm, not committed)
+packages/*/dist
+packages/*/types
 
 # Logs
 *.log

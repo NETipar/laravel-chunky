@@ -2,141 +2,86 @@
 
 declare(strict_types=1);
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Events\ChunkUploaded;
-use NETipar\Chunky\Events\UploadInitiated;
 
-beforeEach(function () {
-    Storage::fake('local');
-});
+uses(RefreshDatabase::class);
 
-function initiateUpload($test, int $fileSize = 2 * 1024 * 1024): string
+beforeEach(fn () => Storage::fake('local'));
+
+function initiateForChunk(object $test): string
 {
-    Event::fake([UploadInitiated::class]);
-
-    $response = $test->postJson('/api/chunky/upload', [
-        'file_name' => 'test-file.bin',
-        'file_size' => $fileSize,
-        'mime_type' => 'application/octet-stream',
-    ]);
-
-    Event::clearResolvedInstances();
-
-    return $response->json('upload_id');
+    return (string) chunkyInitiate($test, 'f.bin', 20)->assertStatus(201)->json('upload_id');
 }
 
-it('uploads a chunk successfully', function () {
-    $uploadId = initiateUpload($this);
-
+it('accepts an intermediate chunk and reports uploading', function () {
     Event::fake([ChunkUploaded::class]);
+    $uploadId = initiateForChunk($this);
 
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-    $checksum = hash('sha256', $chunk->getContent());
-
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
-        'chunk_index' => 0,
-        'checksum' => $checksum,
-    ]);
-
-    $response->assertOk()
-        ->assertJsonStructure(['chunk_index', 'is_complete', 'uploaded_count', 'total_chunks', 'progress'])
+    chunkyChunk($this, $uploadId, 0, '01234567')
+        ->assertOk()
         ->assertJson([
+            'status' => 'uploading',
             'chunk_index' => 0,
-            'is_complete' => false,
             'uploaded_count' => 1,
+            'total_chunks' => 3,
         ]);
 
     Event::assertDispatched(ChunkUploaded::class);
 });
 
 it('validates required chunk fields', function () {
-    $uploadId = initiateUpload($this);
+    $uploadId = initiateForChunk($this);
 
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", []);
-
-    $response->assertStatus(422)
+    $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [])
+        ->assertStatus(422)
         ->assertJsonValidationErrors(['chunk', 'chunk_index']);
 });
 
-it('rejects chunk with invalid checksum', function () {
-    $uploadId = initiateUpload($this);
+it('rejects a chunk index beyond the total with 422', function () {
+    $uploadId = initiateForChunk($this);
 
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
-        'chunk_index' => 0,
-        'checksum' => 'invalid-checksum-value',
-    ]);
-
-    $response->assertStatus(500);
+    chunkyChunk($this, $uploadId, 99, 'xx')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['chunk_index']);
 });
 
-it('allows chunk without checksum when integrity verification is enabled', function () {
-    $uploadId = initiateUpload($this);
+it('rejects a chunk with a mismatched checksum (422 checksum_mismatch)', function () {
+    $uploadId = initiateForChunk($this);
 
-    Event::fake([ChunkUploaded::class]);
-
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
-        'chunk_index' => 0,
-    ]);
-
-    $response->assertOk();
+    chunkyChunk($this, $uploadId, 0, '01234567', ['checksum' => str_repeat('a', 64)])
+        ->assertStatus(422)
+        ->assertJsonPath('error.code', 'checksum_mismatch');
 });
 
-it('rejects a chunk_index above total_chunks', function () {
-    $uploadId = initiateUpload($this, fileSize: 2 * 1024 * 1024);
+it('accepts a chunk with a matching checksum', function () {
+    $uploadId = initiateForChunk($this);
+    $bytes = '01234567';
 
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => UploadedFile::fake()->create('chunk', 1024),
-        'chunk_index' => 9999,
-    ]);
-
-    $response->assertStatus(422)->assertJsonValidationErrors(['chunk_index']);
+    chunkyChunk($this, $uploadId, 0, $bytes, ['checksum' => hash('sha256', $bytes)])->assertOk();
 });
 
-it('rejects late chunks against a cancelled upload with HTTP 409', function () {
-    $uploadId = initiateUpload($this);
+it('allows a chunk without a checksum by default', function () {
+    $uploadId = initiateForChunk($this);
 
-    // Cancel the upload first.
-    $this->deleteJson("/api/chunky/upload/{$uploadId}")->assertStatus(204);
-
-    // A late chunk POST must not be accepted.
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
-        'chunk_index' => 0,
-    ]);
-
-    $response->assertStatus(409);
-
-    expect($response->json('message'))->toContain('no longer accepting chunks');
+    chunkyChunk($this, $uploadId, 0, '01234567')->assertOk();
 });
 
-it('skips checksum verification when disabled', function () {
-    config(['chunky.chunks.verify_integrity' => false]);
+it('rejects a late chunk against a cancelled upload with 409', function () {
+    $uploadId = initiateForChunk($this);
+    $this->deleteJson("/api/chunky/upload/{$uploadId}")->assertOk();
 
-    $uploadId = initiateUpload($this);
+    chunkyChunk($this, $uploadId, 0, '01234567')
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'invalid_state');
+});
 
-    Event::fake([ChunkUploaded::class]);
-
-    $chunk = UploadedFile::fake()->create('chunk', 1024);
-
-    // The checksum format validator (sha256 = 64 hex chars) runs even
-    // when verify_integrity is off, but a hex string still passes —
-    // verify_integrity gates the *content* check, not the format check.
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
+it('returns 404 for a chunk against an unknown upload', function () {
+    $this->post('/api/chunky/upload/missing/chunks', [
+        'chunk' => UploadedFile::fake()->createWithContent('chunk', 'x'),
         'chunk_index' => 0,
-        'checksum' => str_repeat('a', 64),
-    ]);
-
-    $response->assertOk();
+    ])->assertStatus(404)->assertJsonPath('error.code', 'upload_not_found');
 });

@@ -12,11 +12,10 @@
 
 ## Testing
 
-- [ ] Added or updated PHP tests (`composer test`)
+- [ ] Added or updated PHP tests (`composer test:unit`)
 - [ ] Added or updated frontend tests (`pnpm test`) — if the change
       touches `packages/*/src/`
-- [ ] PHPStan passes (`composer analyse`)
-- [ ] Pint passes (`composer format`)
+- [ ] Full PHP gate passes (`composer test` = analyse + lint:check + type coverage + Pest)
 - [ ] TypeScript typecheck passes (`pnpm typecheck`)
 
 ## Checklist

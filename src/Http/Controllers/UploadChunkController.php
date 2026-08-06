@@ -6,92 +6,97 @@ namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Routing\Controller;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
-use NETipar\Chunky\ChunkyManager;
-use NETipar\Chunky\Exceptions\ChunkyException;
-use NETipar\Chunky\Exceptions\UploadExpiredException;
+use NETipar\Chunky\Config\ChunkyConfig;
+use NETipar\Chunky\Domain\ChunkUploadOutcome;
+use NETipar\Chunky\Domain\UploadStatus;
+use NETipar\Chunky\Http\ErrorCode;
 use NETipar\Chunky\Http\Requests\UploadChunkRequest;
-use NETipar\Chunky\Jobs\AssembleFileJob;
-use NETipar\Chunky\Support\CacheKeys;
-use Symfony\Component\HttpFoundation\Response;
+use NETipar\Chunky\Services\UploadService;
+use NETipar\Chunky\Support\Coerce;
 
-class UploadChunkController extends Controller
+final class UploadChunkController
 {
-    public function __invoke(UploadChunkRequest $request, string $uploadId, ChunkyManager $manager): JsonResponse
-    {
-        $chunkIndex = (int) $request->validated('chunk_index');
+    public function __invoke(
+        UploadChunkRequest $request,
+        string $uploadId,
+        UploadService $uploads,
+        ChunkyConfig $config,
+    ): JsonResponse {
+        $chunkIndex = Coerce::toInt($request->input('chunk_index'));
 
-        // Idempotency: a chunk POST that times out on the network may be
-        // retried by the client even though the server actually accepted
-        // the original. Without protection the second request fires
-        // ChunkUploaded twice and (on the final chunk) dispatches a
-        // duplicate AssembleFileJob. The Idempotency-Key header is
-        // optional; when present we cache the response for the configured
-        // TTL and replay it byte-for-byte on retry.
-        $idempotencyKey = $this->resolveIdempotencyKey($request, $uploadId, $chunkIndex);
+        /** @var UploadedFile $chunk */
+        $chunk = $request->file('chunk');
 
-        if ($idempotencyKey && ($cached = Cache::get($idempotencyKey))) {
-            return response()->json($cached);
+        $idempotencyKey = $this->idempotencyKey($request->header('Idempotency-Key'), $request->input('checksum'), $uploadId, $chunkIndex);
+
+        if ($idempotencyKey !== null) {
+            $cached = Cache::get($idempotencyKey);
+
+            if (is_array($cached)) {
+                return new JsonResponse($cached);
+            }
         }
 
         try {
-            $result = $manager->uploadChunk(
-                uploadId: $uploadId,
-                chunkIndex: $chunkIndex,
-                chunk: $request->file('chunk'),
+            $outcome = $uploads->uploadChunk(
+                $uploadId,
+                $chunkIndex,
+                $chunk,
+                Coerce::toNullableString($request->input('file_checksum')),
             );
-        } catch (UploadExpiredException $e) {
-            return response()->json(['message' => $e->getMessage()], Response::HTTP_GONE);
-        } catch (LockTimeoutException $e) {
-            // 503 Service Unavailable: too much contention on this upload's
-            // lock. Safe to retry — the idempotency-key dedupes if the
-            // earlier attempt eventually went through.
-            return response()->json(
-                ['message' => __('chunky::chunky.http.busy')],
-                Response::HTTP_SERVICE_UNAVAILABLE,
-            );
-        } catch (ChunkyException $e) {
-            // 409 Conflict: the upload is no longer in a state where it can
-            // accept chunks (cancelled / completed / failed / assembling).
-            return response()->json(['message' => $e->getMessage()], Response::HTTP_CONFLICT);
+        } catch (LockTimeoutException) {
+            return new JsonResponse([
+                'error' => ['code' => ErrorCode::LockTimeout->value, 'message' => ErrorCode::LockTimeout->message()],
+            ], ErrorCode::LockTimeout->status());
         }
 
-        if ($result->isComplete) {
-            AssembleFileJob::dispatch($uploadId);
+        $payload = $this->payload($outcome);
+
+        if ($idempotencyKey !== null) {
+            Cache::put($idempotencyKey, $payload, $config->idempotencyTtl);
         }
 
-        $payload = [
-            'chunk_index' => $chunkIndex,
-            'is_complete' => $result->isComplete,
-            'uploaded_count' => count($result->metadata->uploadedChunks),
-            'total_chunks' => $result->metadata->totalChunks,
-            'progress' => $result->metadata->progress(),
-        ];
-
-        if ($idempotencyKey) {
-            $ttl = (int) config('chunky.idempotency.ttl_seconds', 300);
-            Cache::put($idempotencyKey, $payload, $ttl);
-        }
-
-        return response()->json($payload);
+        return new JsonResponse($payload);
     }
 
-    private function resolveIdempotencyKey(UploadChunkRequest $request, string $uploadId, int $chunkIndex): ?string
+    /**
+     * @return array<string, mixed>
+     */
+    private function payload(ChunkUploadOutcome $outcome): array
     {
-        $clientKey = $request->header('Idempotency-Key');
+        return match ($outcome->status) {
+            UploadStatus::Completed => [
+                'status' => 'completed',
+                'progress' => 100.0,
+                'file' => $outcome->result?->file?->toArray(),
+                'payload' => $outcome->result?->payload,
+            ],
+            UploadStatus::Assembling => [
+                'status' => 'assembling',
+                'progress' => 100.0,
+            ],
+            default => [
+                'status' => 'uploading',
+                'chunk_index' => $outcome->chunkIndex,
+                'uploaded_count' => $outcome->uploadedCount,
+                'total_chunks' => $outcome->totalChunks,
+                'progress' => $outcome->progress,
+            ],
+        };
+    }
 
-        if ($clientKey) {
-            return CacheKeys::idempotency($uploadId, $chunkIndex, sha1((string) $clientKey));
+    private function idempotencyKey(?string $header, mixed $checksum, string $uploadId, int $chunkIndex): ?string
+    {
+        if ($header !== null && $header !== '') {
+            return 'chunky:idem:'.hash('sha256', $uploadId.':'.$chunkIndex.':'.$header);
         }
 
-        // Fall back to a server-derived key when the client didn't supply
-        // one but a checksum is available — covers the common case where
-        // a network retry replays the same chunk bytes.
-        $checksum = $request->input('checksum');
+        $checksumString = Coerce::toNullableString($checksum);
 
-        if ($checksum) {
-            return CacheKeys::idempotency($uploadId, $chunkIndex, "cs:{$checksum}");
+        if ($checksumString !== null) {
+            return 'chunky:idem:'.hash('sha256', $uploadId.':'.$chunkIndex.':cs:'.$checksumString);
         }
 
         return null;

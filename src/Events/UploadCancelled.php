@@ -4,31 +4,34 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class UploadCancelled extends AbstractChunkyEvent
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Domain\UploadRecord;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
+
+final class UploadCancelled implements ChunkyEvent, ShouldBroadcast
 {
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
+
     public function __construct(
-        public readonly string $uploadId,
-        public readonly ?string $batchId = null,
-        public readonly ?string $userId = null,
+        public readonly UploadRecord $upload,
     ) {}
 
-    protected function broadcastEventKey(): string
+    /**
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
     {
-        return 'UploadCancelled';
+        return [new PrivateChannel('chunky.upload.'.$this->upload->uploadId)];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastAs(): string
     {
-        $suffixes = ["uploads.{$this->uploadId}"];
-
-        if ($this->userId) {
-            $suffixes[] = "user.{$this->userId}";
-        }
-
-        return $suffixes;
+        return 'upload.cancelled';
     }
 
     /**
@@ -36,9 +39,6 @@ class UploadCancelled extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        return [
-            'uploadId' => $this->uploadId,
-            'batchId' => $this->batchId,
-        ];
+        return $this->versionedPayload($this->upload->toPublicArray());
     }
 }

@@ -1,52 +1,18 @@
-export { ChunkUploader } from './ChunkUploader';
-export { BatchUploader } from './BatchUploader';
-export {
-    listenForUser,
-    listenForUploadComplete,
-    listenForUploadEvents,
-    listenForBatchComplete,
-} from './echo';
-export { watchBatchCompletion } from './CompletionWatcher';
-export { setDefaults, mergeDefaults, getDefaults, resetDefaults, createDefaults } from './config';
-export { UploadHttpError } from './types';
-export type { DefaultsScope } from './config';
+export { Uploader } from './Uploader';
+export { Batch, type BatchState, type BatchResult } from './Batch';
+export { UploadManager, manager } from './UploadManager';
+export { CompletionWatcher } from './CompletionWatcher';
+export { configure, type ChunkyConfig, type StorageLike } from './config';
+export { computeFingerprint } from './fingerprint';
+export { createThumbnail, type ThumbnailOptions } from './thumbnail';
+export { ChunkyError } from './types';
 export type {
-    CompletionSource,
-    CompletionStatus,
-    BatchStatusResponse,
-    BatchCompletionResult,
-    CompletionWatcherOptions,
-} from './CompletionWatcher';
-export type {
-    ChunkUploadOptions,
-    ChunkUploaderState,
-    ChunkUploaderEventMap,
+    UploadState,
+    UploadStatus,
     UploadResult,
-    UploadError,
-    ChunkInfo,
-    ProgressEvent,
-    InitiateResponse,
-    ChunkUploadResponse,
-    StatusResponse,
+    UploadOptions,
+    BatchOptions,
+    UploadEvents,
+    CompletedFile,
     Unsubscribe,
-    BatchUploadOptions,
-    BatchInitiateResponse,
-    BatchCancelEvent,
-    BatchProgressEvent,
-    FileProgressEvent,
-    BatchResult,
-    BatchUploaderState,
-    BatchUploaderEventMap,
-    BatchPersistence,
-    JsonPrimitive,
-    JsonValue,
-    JsonObject,
 } from './types';
-export type {
-    EchoInstance,
-    EchoChannel,
-    UploadCompletedData,
-    UploadFailedData,
-    BatchCompletedData,
-    BatchPartiallyCompletedData,
-} from './echo';

@@ -4,32 +4,37 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class ChunkUploaded extends AbstractChunkyEvent
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
+use NETipar\Chunky\Support\ChunkCalculator;
+
+final class ChunkUploaded implements ChunkyEvent, ShouldBroadcast
 {
-    public readonly float $progress;
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
 
     public function __construct(
         public readonly string $uploadId,
         public readonly int $chunkIndex,
+        public readonly int $uploadedCount,
         public readonly int $totalChunks,
-    ) {
-        $this->progress = round(($chunkIndex + 1) / $totalChunks * 100, 2);
-    }
-
-    protected function broadcastEventKey(): string
-    {
-        return 'ChunkUploaded';
-    }
+    ) {}
 
     /**
-     * @return array<int, string>
+     * @return array<int, Channel>
      */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastOn(): array
     {
-        // Per-chunk progress is expensive on a busy upload — broadcast
-        // only when explicitly enabled via chunky.broadcasting.events.
-        // Off by default in the shipped config.
-        return ["uploads.{$this->uploadId}"];
+        return [new PrivateChannel('chunky.upload.'.$this->uploadId)];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'chunk.uploaded';
     }
 
     /**
@@ -37,11 +42,12 @@ class ChunkUploaded extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        return [
-            'uploadId' => $this->uploadId,
-            'chunkIndex' => $this->chunkIndex,
-            'totalChunks' => $this->totalChunks,
-            'progress' => $this->progress,
-        ];
+        return $this->versionedPayload([
+            'upload_id' => $this->uploadId,
+            'chunk_index' => $this->chunkIndex,
+            'uploaded_count' => $this->uploadedCount,
+            'total_chunks' => $this->totalChunks,
+            'progress' => ChunkCalculator::progress($this->uploadedCount, $this->totalChunks),
+        ]);
     }
 }

@@ -6,28 +6,22 @@ namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
 use NETipar\Chunky\Authorization\Authorizer;
-use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Http\Controllers\Concerns\ResolvesOwnedBatch;
+use NETipar\Chunky\Services\BatchService;
 
-class BatchStatusController extends Controller
+final class BatchStatusController
 {
+    use ResolvesOwnedBatch;
+
     public function __invoke(
         Request $request,
         string $batchId,
-        ChunkyManager $manager,
+        BatchService $batches,
         Authorizer $authorizer,
     ): JsonResponse {
-        $batch = $manager->getBatchStatus($batchId);
+        $this->ownedBatchOr404($batches, $authorizer, $request->user(), $batchId);
 
-        if (! $batch) {
-            return response()->json(['message' => __('chunky::chunky.http.batch_not_found')], 404);
-        }
-
-        if (! $authorizer->canAccessBatch($request->user(), $batch)) {
-            return response()->json(['message' => __('chunky::chunky.http.batch_not_found')], 404);
-        }
-
-        return response()->json($batch->toArray());
+        return new JsonResponse($batches->status($batchId)->toArray());
     }
 }

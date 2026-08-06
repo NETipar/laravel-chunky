@@ -1,0 +1,16 @@
+<?php
+
+// Minimal type stubs for the optional livewire/livewire dependency so PHPStan
+// can analyse the package without it installed. Only the surface we touch.
+
+namespace Livewire;
+
+abstract class Component
+{
+    public function render(): mixed {}
+}
+
+class Livewire
+{
+    public static function component(string $name, string $class): void {}
+}

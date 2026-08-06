@@ -1,108 +1,71 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope } from 'vue';
-import { useUpload } from './useUpload';
-
-const ORIGINAL_FETCH = globalThis.fetch;
-
-beforeEach(() => {
-    vi.spyOn(document, 'cookie', 'get').mockReturnValue('');
-});
-
-afterEach(() => {
-    globalThis.fetch = ORIGINAL_FETCH;
-    vi.restoreAllMocks();
-});
-
-function makeFile(name: string, size = 1024): File {
-    return new File([new Uint8Array(size)], name, { type: 'application/octet-stream' });
-}
+import { mount } from '@vue/test-utils';
+import { UploadManager } from '@netipar/chunky-core';
+import { defineComponent } from 'vue';
+import { describe, expect, it, vi } from 'vitest';
+import { ChunkyManagerKey } from './manager';
+import { useUpload, type UseUpload } from './useUpload';
 
 function jsonResponse(body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function fetchSequence(responses: Response[]): typeof fetch {
-    let i = 0;
-    const impl = vi.fn(async () => responses[Math.min(i++, responses.length - 1)].clone());
-    return impl as unknown as typeof fetch;
+/** Initiates normally, then hangs the chunk POST (aborting on signal) so an
+ *  upload stays "uploading" while we exercise mount/unmount. */
+function hangingServer(): typeof fetch {
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+
+        if (url.endsWith('/upload') && method === 'POST') {
+            return jsonResponse({ upload_id: 'u1', chunk_size: 100, total_chunks: 1, resumed: false, uploaded_chunks: [] }, 201);
+        }
+
+        if (/\/chunks$/.test(url)) {
+            return new Promise<Response>((_, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            });
+        }
+
+        return jsonResponse({ status: 'assembling', progress: 100 });
+    }) as typeof fetch;
 }
 
-describe('useUpload polymorphic API', () => {
-    it('accepts a single File as input', async () => {
-        globalThis.fetch = fetchSequence([
-            jsonResponse({ batch_id: 'b-1' }),
-            jsonResponse({ upload_id: 'u-1', chunk_size: 1024, total_chunks: 1 }),
-            jsonResponse({
-                chunk_index: 0,
-                is_complete: true,
-                uploaded_count: 1,
-                total_chunks: 1,
-                progress: 100,
-            }),
-        ]);
+function testManager(): UploadManager {
+    return new UploadManager({ fetch: hangingServer(), storage: null, sleep: () => Promise.resolve() });
+}
 
-        const scope = effectScope();
-        const u = scope.run(() => useUpload())!;
+let captured: UseUpload;
+const Harness = defineComponent({
+    setup() {
+        captured = useUpload();
 
-        const result = await u.upload(makeFile('single.bin'));
-        expect(result.totalFiles).toBe(1);
-        expect(result.completedFiles).toBe(1);
+        return () => null;
+    },
+});
 
-        scope.stop();
+describe('useUpload', () => {
+    it('keeps the upload running after the component unmounts (unmount = unsubscribe)', async () => {
+        const manager = testManager();
+        const wrapper = mount(Harness, { global: { provide: { [ChunkyManagerKey]: manager } } });
+
+        const uploader = captured.start(new File(['abc'], 'f.bin'));
+        await vi.waitFor(() => expect(uploader.getState().status).toBe('uploading'));
+
+        wrapper.unmount();
+
+        expect(manager.uploads()).toContain(uploader);
+        expect(uploader.getState().status).not.toBe('cancelled');
+
+        await uploader.cancel();
     });
 
-    it('accepts an array of Files as input', async () => {
-        globalThis.fetch = fetchSequence([
-            jsonResponse({ batch_id: 'b-2' }),
-            jsonResponse({ upload_id: 'u-1', chunk_size: 1024, total_chunks: 1 }),
-            jsonResponse({
-                chunk_index: 0,
-                is_complete: true,
-                uploaded_count: 1,
-                total_chunks: 1,
-                progress: 100,
-            }),
-            jsonResponse({ upload_id: 'u-2', chunk_size: 1024, total_chunks: 1 }),
-            jsonResponse({
-                chunk_index: 0,
-                is_complete: true,
-                uploaded_count: 1,
-                total_chunks: 1,
-                progress: 100,
-            }),
-        ]);
+    it('reflects upload state in a reactive ref', async () => {
+        const manager = testManager();
+        mount(Harness, { global: { provide: { [ChunkyManagerKey]: manager } } });
 
-        const scope = effectScope();
-        const u = scope.run(() => useUpload({ maxConcurrentFiles: 1 }))!;
+        const uploader = captured.start(new File(['abc'], 'f.bin'));
+        await vi.waitFor(() => expect(captured.state.value?.status).toBe('uploading'));
 
-        const result = await u.upload([makeFile('a.bin'), makeFile('b.bin')]);
-        expect(result.totalFiles).toBe(2);
-
-        scope.stop();
-    });
-
-    it('enqueue() wraps a single File in an array', async () => {
-        globalThis.fetch = fetchSequence([
-            jsonResponse({ batch_id: 'b-3' }),
-            jsonResponse({ upload_id: 'u-1', chunk_size: 1024, total_chunks: 1 }),
-            jsonResponse({
-                chunk_index: 0,
-                is_complete: true,
-                uploaded_count: 1,
-                total_chunks: 1,
-                progress: 100,
-            }),
-        ]);
-
-        const scope = effectScope();
-        const u = scope.run(() => useUpload())!;
-
-        const result = await u.enqueue(makeFile('single.bin'));
-        expect(result.totalFiles).toBe(1);
-
-        scope.stop();
+        await uploader.cancel();
     });
 });

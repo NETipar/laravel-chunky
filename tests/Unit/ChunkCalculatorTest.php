@@ -4,26 +4,17 @@ declare(strict_types=1);
 
 use NETipar\Chunky\Support\ChunkCalculator;
 
-it('calculates total chunks correctly', function () {
+it('computes total chunks with ceiling division', function () {
     expect(ChunkCalculator::totalChunks(10 * 1024 * 1024, 1024 * 1024))->toBe(10);
     expect(ChunkCalculator::totalChunks(10 * 1024 * 1024 + 1, 1024 * 1024))->toBe(11);
     expect(ChunkCalculator::totalChunks(1024 * 1024, 1024 * 1024))->toBe(1);
 });
 
-it('returns chunk size from config or override', function () {
-    config(['chunky.chunks.size' => 2 * 1024 * 1024]);
-
-    expect(ChunkCalculator::chunkSize())->toBe(2 * 1024 * 1024);
-    expect(ChunkCalculator::chunkSize(5 * 1024 * 1024))->toBe(5 * 1024 * 1024);
+it('returns zero total chunks for a non-positive chunk size', function () {
+    expect(ChunkCalculator::totalChunks(1000, 0))->toBe(0);
 });
 
-it('casts a string chunk size from env-backed config to int', function () {
-    config(['chunky.chunks.size' => '2097152']);
-
-    expect(ChunkCalculator::chunkSize())->toBe(2097152);
-});
-
-it('calculates progress percentage', function () {
+it('computes progress to two decimals', function () {
     expect(ChunkCalculator::progress(0, 10))->toBe(0.0);
     expect(ChunkCalculator::progress(5, 10))->toBe(50.0);
     expect(ChunkCalculator::progress(10, 10))->toBe(100.0);

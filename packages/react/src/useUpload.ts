@@ -1,27 +1,40 @@
-import type { BatchUploadOptions, BatchResult, JsonObject } from '@netipar/chunky-core';
-import { useBatchUpload, type BatchUploadReturn } from './useBatchUpload';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import type { UploadOptions, UploadState, Uploader } from '@netipar/chunky-core';
+import { useManager } from './context';
 
-/**
- * Polymorphic upload hook. Accepts either a single `File` or `File[]`
- * — internally uses `useBatchUpload` because every upload is a batch
- * of N files. The signature matches the v1.0 canonical API.
- *
- * Prefer this over `useBatchUpload` / `useChunkUpload` for new code.
- * The two specific hooks remain for back-compat.
- */
-export interface UploadReturn extends Omit<BatchUploadReturn, 'upload' | 'enqueue'> {
-    upload: (input: File | File[], metadata?: JsonObject) => Promise<BatchResult>;
-    enqueue: (input: File | File[], metadata?: JsonObject) => Promise<BatchResult>;
+export interface UseUpload {
+    start(file: File, options?: UploadOptions): Uploader;
+    state: UploadState | null;
+    uploader: Uploader | null;
+    /** Object URL preview for image files; null otherwise. */
+    previewUrl: string | null;
 }
 
-export function useUpload(options: BatchUploadOptions = {}): UploadReturn {
-    const inner = useBatchUpload(options);
+export function useUpload(): UseUpload {
+    const manager = useManager();
+    const [uploader, setUploader] = useState<Uploader | null>(null);
 
-    const toArray = (input: File | File[]): File[] => Array.isArray(input) ? input : [input];
+    // stateChange is non-sticky, so subscribing never fires synchronously —
+    // exactly what useSyncExternalStore's subscribe requires. Unmount only
+    // unsubscribes; the upload keeps running in the manager.
+    const subscribe = useCallback(
+        (onChange: () => void) => (uploader ? uploader.on('stateChange', () => onChange()) : () => {}),
+        [uploader],
+    );
+    const getSnapshot = useCallback(() => (uploader ? uploader.getState() : null), [uploader]);
 
-    return {
-        ...inner,
-        upload: (input, metadata) => inner.upload(toArray(input), metadata),
-        enqueue: (input, metadata) => inner.enqueue(toArray(input), metadata),
-    };
+    const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+    const start = useCallback((file: File, options?: UploadOptions): Uploader => {
+        const started = manager.upload(file, options);
+        setUploader(started);
+
+        return started;
+    }, [manager]);
+
+    // Keyed on the uploader reference; the object URL itself is cached inside
+    // the Uploader.
+    const previewUrl = useMemo(() => (uploader ? uploader.previewUrl() : null), [uploader]);
+
+    return { start, state, uploader, previewUrl };
 }

@@ -4,58 +4,32 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Http\Requests;
 
-use Illuminate\Validation\ValidationException;
-use NETipar\Chunky\Authorization\AuthorizesChunkyRequests;
-use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Profiles\ProfileRegistry;
+use NETipar\Chunky\Services\BatchService;
+use NETipar\Chunky\Support\Coerce;
 
-class InitiateBatchUploadRequest extends AbstractInitiateUploadRequest
+/**
+ * Validates a batch member upload against the BATCH's profile, not the request's
+ * — closing the context-bypass hole from 0.x.
+ */
+class InitiateBatchUploadRequest extends AbstractChunkyRequest
 {
-    use AuthorizesChunkyRequests;
-
     public function authorize(): bool
     {
-        return $this->userOwnsBatch();
+        return true;
     }
 
     /**
-     * @return array<string, array<int, mixed>>
+     * @return array<string, mixed>
      */
     public function rules(): array
     {
-        // For batch uploads, the validation rules MUST be the ones declared
-        // by the batch's context — otherwise a caller could send a different
-        // `context` value in the request and slip past the rules of the
-        // actual save callback that will run (validation bypass).
-        return $this->applyContextRules(
-            $this->baseUploadRules(),
-            $this->resolveBatchContext(),
-        );
-    }
+        $batchId = Coerce::toString($this->route('batchId'));
+        $batch = app(BatchService::class)->find($batchId);
+        $profile = $batch !== null
+            ? app(ProfileRegistry::class)->resolve($batch->profile)
+            : null;
 
-    private function resolveBatchContext(): ?string
-    {
-        /** @var string|null $batchId */
-        $batchId = $this->route('batchId');
-
-        if (! $batchId) {
-            return null;
-        }
-
-        $batch = app(ChunkyManager::class)->getBatchStatus($batchId);
-
-        if (! $batch) {
-            return null;
-        }
-
-        // A finalised batch refuses additional uploads at the manager layer
-        // (see assertBatchAcceptsUploads). Surface that as a validation
-        // error here so the caller gets a clean 422 instead of a 500.
-        if ($batch->status->isTerminal()) {
-            throw ValidationException::withMessages([
-                'batch' => ["Batch {$batchId} is no longer accepting uploads (status: {$batch->status->value})."],
-            ]);
-        }
-
-        return $batch->context;
+        return $this->initiateRules($profile);
     }
 }

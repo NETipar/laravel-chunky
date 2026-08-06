@@ -1,25 +1,28 @@
 {
     "name": "@netipar/chunky-react",
-    "version": "0.22.6",
-    "description": "React hook for Laravel Chunky chunk uploads",
+    "version": "1.0.0-beta.1",
+    "description": "React hooks for Laravel Chunky chunk uploads",
     "type": "module",
-    "main": "dist/index.js",
-    "types": "types/index.d.ts",
+    "main": "dist/index.cjs",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
     "exports": {
         ".": {
-            "types": "./types/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.cjs",
-            "default": "./dist/index.js"
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
         }
     },
     "files": [
-        "dist",
-        "types",
-        "src"
+        "dist"
     ],
     "scripts": {
-        "build": "tsc --noEmit -p tsconfig.json && node build.js && tsc -p tsconfig.build.json"
+        "build": "tsc --noEmit -p tsconfig.json && tsup"
     },
     "keywords": [
         "chunky",
@@ -34,8 +37,11 @@
     "homepage": "https://github.com/NETipar/laravel-chunky",
     "repository": {
         "type": "git",
-        "url": "https://github.com/NETipar/laravel-chunky.git",
+        "url": "git+https://github.com/NETipar/laravel-chunky.git",
         "directory": "packages/react"
+    },
+    "engines": {
+        "node": ">=18"
     },
     "publishConfig": {
         "access": "public"
@@ -47,8 +53,8 @@
         "react": "^19.2"
     },
     "devDependencies": {
-        "react": "^19.2",
-        "@types/react": "^18.0 || ^19.0"
+        "@types/react": "^18.0 || ^19.0",
+        "react": "^19.2"
     },
     "sideEffects": false
 }

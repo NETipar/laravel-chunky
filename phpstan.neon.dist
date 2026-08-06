@@ -1,0 +1,20 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - config
+        - database
+        - routes
+    tmpDir: build/phpstan
+    treatPhpDocTypesAsCertain: false
+    # The package config directory — env() calls there are evaluated when the
+    # host app builds its config cache, which is the supported package pattern.
+    configDirectories:
+        - config
+    stubFiles:
+        - stubs/livewire.stub
+    excludePaths:
+        - src/Console/stubs/*
+        # Livewire is an optional dependency (composer "suggest"); the Livewire
+        # component is only loaded when livewire/livewire is installed at runtime.
+        - src/Livewire/*

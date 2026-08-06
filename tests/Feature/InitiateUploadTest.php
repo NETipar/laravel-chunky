@@ -2,148 +2,148 @@
 
 declare(strict_types=1);
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
-use NETipar\Chunky\ChunkyManager;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use NETipar\Chunky\Events\UploadInitiated;
+use NETipar\Chunky\Jobs\AssembleFileJob;
+use NETipar\Chunky\Ports\ChunkStore;
+use NETipar\Chunky\Ports\UploadRepository;
 
-it('initiates an upload via the API', function () {
+uses(RefreshDatabase::class);
+
+beforeEach(fn () => Storage::fake('local'));
+
+it('initiates an upload', function () {
     Event::fake([UploadInitiated::class]);
 
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'large-file.pdf',
-        'file_size' => 5 * 1024 * 1024,
-        'mime_type' => 'application/pdf',
-    ]);
-
-    $response->assertStatus(201)
-        ->assertJsonStructure(['upload_id', 'chunk_size', 'total_chunks'])
-        ->assertJson([
-            'chunk_size' => 1024 * 1024,
-            'total_chunks' => 5,
-        ]);
+    chunkyInitiate($this, 'video.mp4', 20, ['mime_type' => 'video/mp4'])
+        ->assertStatus(201)
+        ->assertJsonStructure(['upload_id', 'chunk_size', 'total_chunks', 'resumed', 'uploaded_chunks'])
+        ->assertJson(['chunk_size' => 8, 'total_chunks' => 3, 'resumed' => false, 'uploaded_chunks' => []]);
 
     Event::assertDispatched(UploadInitiated::class);
 });
 
-it('validates required fields', function () {
-    $response = $this->postJson('/api/chunky/upload', []);
-
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['file_name', 'file_size']);
+it('validates required fields with the error envelope', function () {
+    $this->postJson('/api/chunky/upload', [])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file_name', 'file_size'])
+        ->assertJsonPath('error.code', 'validation_failed');
 });
 
-it('validates file size must be positive', function () {
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.txt',
-        'file_size' => 0,
-    ]);
-
-    $response->assertStatus(422)
+it('requires a positive file size', function () {
+    chunkyInitiate($this, 'f.bin', 0)
+        ->assertStatus(422)
         ->assertJsonValidationErrors(['file_size']);
 });
 
-it('validates max file size when configured', function () {
-    config(['chunky.limits.max_file_size' => 1024 * 1024]); // 1MB
+it('rejects a file over the max size with 422 (not 413)', function () {
+    config(['chunky.limits.max_file_size' => 10]);
 
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.txt',
-        'file_size' => 2 * 1024 * 1024,
-    ]);
-
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['file_size']);
+    chunkyInitiate($this, 'f.bin', 20)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file_size'])
+        ->assertJsonPath('error.code', 'validation_failed');
 });
 
-it('validates allowed mime types when configured', function () {
-    config(['chunky.limits.allowed_mimes' => ['image/jpeg', 'image/png']]);
+it('caps the metadata key count', function () {
+    config(['chunky.limits.metadata_max_keys' => 3]);
 
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.pdf',
-        'file_size' => 1000,
-        'mime_type' => 'application/pdf',
-    ]);
-
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['mime_type']);
+    chunkyInitiate($this, 'f.bin', 20, ['metadata' => ['a' => 1, 'b' => 2, 'c' => 3, 'd' => 4]])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['metadata']);
 });
 
-it('accepts metadata', function () {
-    Event::fake([UploadInitiated::class]);
-
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.pdf',
-        'file_size' => 1000,
-        'metadata' => ['folder' => 'documents'],
-    ]);
-
-    $response->assertStatus(201);
-});
-
-it('accepts context parameter', function () {
-    Event::fake([UploadInitiated::class]);
-
-    $manager = app(ChunkyManager::class);
-    $manager->context('profile_avatar');
-
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'avatar.jpg',
-        'file_size' => 50000,
-        'mime_type' => 'image/jpeg',
-        'context' => 'profile_avatar',
-    ]);
-
-    $response->assertStatus(201);
-});
-
-it('rejects unregistered context', function () {
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.txt',
-        'file_size' => 1000,
-        'context' => 'nonexistent_context',
-    ]);
-
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['context']);
-});
-
-it('rejects path-traversal sequences in file_name', function () {
-    $cases = ['../../etc/passwd', 'evil/../bad.txt', '..', '.', "with\0null.txt", 'C:\\Windows\\evil'];
-
-    foreach ($cases as $name) {
-        $response = $this->postJson('/api/chunky/upload', [
-            'file_name' => $name,
-            'file_size' => 1000,
-        ]);
-
-        $response->assertStatus(422)->assertJsonValidationErrors(['file_name']);
+it('rejects path-traversal file names', function () {
+    foreach (['../../etc/passwd', 'evil/../bad.txt', '..', '.', "with\0null.txt", 'C:\\Windows\\evil'] as $name) {
+        chunkyInitiate($this, $name, 20)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['file_name']);
     }
 });
 
-it('accepts unicode and normal punctuation in file_name', function () {
-    Event::fake([UploadInitiated::class]);
-
+it('accepts unicode and punctuation in file names', function () {
     foreach (['árvíztűrő.pdf', 'name with spaces.txt', 'a (1).png', 'résumé.docx'] as $name) {
-        $response = $this->postJson('/api/chunky/upload', [
-            'file_name' => $name,
-            'file_size' => 1000,
-        ]);
-
-        $response->assertStatus(201);
+        chunkyInitiate($this, $name, 20)->assertStatus(201);
     }
 });
 
-it('merges context validation rules', function () {
-    $manager = app(ChunkyManager::class);
-    $manager->context('strict', rules: fn () => [
-        'file_size' => ['max:1000'],
-    ]);
+it('resumes an existing upload by fingerprint', function () {
+    $first = chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-1'])->assertStatus(201);
+    $uploadId = (string) $first->json('upload_id');
+    chunkyChunk($this, $uploadId, 0, '01234567')->assertOk();
 
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'test.txt',
-        'file_size' => 2000,
-        'context' => 'strict',
-    ]);
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-1'])
+        ->assertStatus(200)
+        ->assertJson([
+            'upload_id' => $uploadId,
+            'resumed' => true,
+            'uploaded_chunks' => [0],
+        ]);
+});
 
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['file_size']);
+it('rejects an unknown profile', function () {
+    chunkyInitiate($this, 'f.bin', 20, ['profile' => 'does-not-exist'])
+        ->assertStatus(422)
+        ->assertJsonPath('error.code', 'profile_not_found');
+});
+
+/**
+ * Simulates a finishing chunk whose response was lost mid-flight: the bytes and
+ * the tracker mark exist, but assembly never started.
+ */
+function stallUploadAtFullCompletion(object $test, string $fingerprint): string
+{
+    $first = chunkyInitiate($test, 'f.bin', 20, ['fingerprint' => $fingerprint])->assertStatus(201);
+    $uploadId = (string) $first->json('upload_id');
+
+    chunkyChunk($test, $uploadId, 0, '01234567')->assertOk();
+    chunkyChunk($test, $uploadId, 1, '89abcdef')->assertOk();
+
+    app(ChunkStore::class)->put($uploadId, 2, UploadedFile::fake()->createWithContent('chunk', 'ghij'));
+    app(UploadRepository::class)->markChunk($uploadId, 2);
+
+    return $uploadId;
+}
+
+it('recovers a stalled, fully uploaded resume by running sync assembly', function () {
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-sync');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-sync'])
+        ->assertStatus(200)
+        ->assertJson(['upload_id' => $uploadId, 'resumed' => true, 'uploaded_chunks' => [0, 1, 2]]);
+
+    $this->getJson("/api/chunky/upload/{$uploadId}")
+        ->assertOk()
+        ->assertJsonPath('status', 'completed');
+});
+
+it('dispatches the assembly job for a stalled resume in queue mode', function () {
+    config(['chunky.assembly.mode' => 'queue']);
+    Queue::fake();
+
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-queue');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-queue'])
+        ->assertStatus(200)
+        ->assertJson(['resumed' => true]);
+
+    Queue::assertPushed(AssembleFileJob::class, fn (AssembleFileJob $job): bool => $job->uploadId === $uploadId);
+});
+
+it('does not start assembly on a stalled resume when the required file checksum is missing', function () {
+    config(['chunky.integrity.require_full_file' => true]);
+
+    $uploadId = stallUploadAtFullCompletion($this, 'fp-stalled-checksum');
+
+    chunkyInitiate($this, 'f.bin', 20, ['fingerprint' => 'fp-stalled-checksum'])
+        ->assertStatus(200)
+        ->assertJson(['resumed' => true]);
+
+    $this->getJson("/api/chunky/upload/{$uploadId}")
+        ->assertOk()
+        ->assertJsonPath('status', 'uploading');
 });

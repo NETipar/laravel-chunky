@@ -5,20 +5,28 @@ declare(strict_types=1);
 namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Routing\Controller;
-use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Http\Controllers\Concerns\BuildsUploadInput;
 use NETipar\Chunky\Http\Requests\InitiateBatchRequest;
+use NETipar\Chunky\Services\BatchService;
+use NETipar\Chunky\Support\Coerce;
+use Symfony\Component\HttpFoundation\Response;
 
-class InitiateBatchController extends Controller
+final class InitiateBatchController
 {
-    public function __invoke(InitiateBatchRequest $request, ChunkyManager $manager): JsonResponse
+    use BuildsUploadInput;
+
+    public function __invoke(InitiateBatchRequest $request, BatchService $batches): JsonResponse
     {
-        $batch = $manager->initiateBatch(
-            totalFiles: (int) $request->validated('total_files'),
-            context: $request->validated('context'),
-            metadata: $request->validated('metadata') ?? [],
+        $batch = $batches->initiate(
+            totalFiles: Coerce::toInt($request->input('total_files')),
+            profile: $this->nullableString($request, 'profile'),
+            metadata: $this->metadataFrom($request),
+            user: $request->user(),
         );
 
-        return response()->json(['batch_id' => $batch->batchId], 201);
+        return new JsonResponse([
+            'batch_id' => $batch->batchId,
+            'total_files' => $batch->totalFiles,
+        ], Response::HTTP_CREATED);
     }
 }

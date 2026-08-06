@@ -7,17 +7,19 @@
         "build:react": "pnpm --filter @netipar/chunky-react run build",
         "build:alpine": "pnpm --filter @netipar/chunky-alpine run build",
         "publish:all": "pnpm run build && pnpm -r publish --no-git-checks",
-        "test": "vitest run",
+        "test": "pnpm build:core && vitest run",
         "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage",
-        "typecheck": "pnpm -r exec tsc --noEmit"
+        "test:coverage": "pnpm build:core && vitest run --coverage",
+        "typecheck": "pnpm build:core && pnpm -r exec tsc --noEmit"
     },
     "devDependencies": {
         "@testing-library/react": "^16.3.2",
         "@vitest/coverage-v8": "^4.1.5",
+        "@vue/test-utils": "^2.4.6",
         "esbuild": "^0.28",
         "happy-dom": "^20.9.0",
         "react-dom": "^19.2.5",
+        "tsup": "^8.5.0",
         "typescript": "^6.0.3",
         "vitest": "^4.1.5"
     }

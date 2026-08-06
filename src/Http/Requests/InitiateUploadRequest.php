@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Http\Requests;
 
-class InitiateUploadRequest extends AbstractInitiateUploadRequest
+use NETipar\Chunky\Profiles\ProfileRegistry;
+use NETipar\Chunky\Support\Coerce;
+
+class InitiateUploadRequest extends AbstractChunkyRequest
 {
     public function authorize(): bool
     {
@@ -12,13 +15,13 @@ class InitiateUploadRequest extends AbstractInitiateUploadRequest
     }
 
     /**
-     * @return array<string, array<int, mixed>>
+     * @return array<string, mixed>
      */
     public function rules(): array
     {
-        return $this->applyContextRules(
-            $this->baseUploadRules(),
-            $this->input('context'),
-        );
+        $profileName = Coerce::toNullableString($this->input('profile'));
+        $profile = app(ProfileRegistry::class)->resolve($profileName);
+
+        return $this->initiateRules($profile);
     }
 }

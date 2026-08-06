@@ -1,4 +1,3 @@
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="art/banner.svg">
   <img alt="laravel-chunky" src="art/banner.svg">
@@ -7,999 +6,325 @@
 # Chunky for Laravel
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/netipar/laravel-chunky.svg?style=flat-square)](https://packagist.org/packages/netipar/laravel-chunky)
-[![Tests](https://img.shields.io/github/actions/workflow/status/NETipar/laravel-chunky/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/NETipar/laravel-chunky/actions?query=workflow%3ATests+branch%3Amain)
+[![Tests](https://img.shields.io/github/actions/workflow/status/NETipar/laravel-chunky/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/NETipar/laravel-chunky/actions?query=workflow%3ATests)
 [![Total Downloads](https://img.shields.io/packagist/dt/netipar/laravel-chunky.svg?style=flat-square)](https://packagist.org/packages/netipar/laravel-chunky)
 
-Chunk-based file upload package for Laravel with event-driven architecture, resume support, and framework-agnostic frontend clients for **Vue 3**, **React**, **Alpine.js**, and **Livewire**. Upload large files reliably over unstable connections.
+Resumable, chunk-based file uploads for Laravel — upload large files reliably over flaky connections. A small, typed backend built on **ports & adapters**, and a framework-agnostic frontend engine with first-class wrappers for **Vue 3**, **React**, **Alpine.js**, and **Livewire**.
 
-## Table of contents
+Works out of the box with **no queue worker and no broadcasting** — the direct upload response already carries the result. Turn those on later for scale.
 
-- [Quick example](#quick-example)
+> **v1.0 is a ground-up rewrite.** Coming from `0.x`? See [UPGRADE.md](UPGRADE.md).
+
+## Contents
+
+- [Why Chunky](#why-chunky)
 - [Requirements](#requirements)
 - [5-minute quickstart](#5-minute-quickstart)
-- [Production deployment checklist](#production-deployment-checklist)
-- [Installation](#installation) — [Backend](#backend) · [Frontend](#frontend) · [Livewire](#livewire)
-- [Frontend packages](#frontend-packages)
-- [Usage](#usage)
-- [Batch upload (multiple files)](#batch-upload-multiple-files)
-- [Authentication & authorization](#authentication--authorization)
-- [Context setup](#quick-context-setup)
-- [Listening to events](#listening-to-events)
-- [Broadcasting (Laravel Echo)](#broadcasting-laravel-echo)
-- [Using the facade](#using-the-facade)
-- [Configuration](#configuration) → full reference in [`docs/configuration.md`](docs/configuration.md)
-- [Error handling](#error-handling)
+- [How it works](#how-it-works)
+- [Upload profiles](#upload-profiles)
+- [Frontend](#frontend)
+- [Assembly modes (sync / queue / auto)](#assembly-modes)
+- [Direct-to-S3 uploads](#direct-to-s3-uploads)
+- [Batch uploads](#batch-uploads)
+- [Authorization](#authorization)
+- [Events & broadcasting](#events--broadcasting)
+- [Errors](#errors)
+- [Console commands](#console-commands)
+- [Configuration](#configuration)
 
-Additional documentation:
-- [`docs/configuration.md`](docs/configuration.md) — full config reference + deployment recipes
-- [UPGRADE.md](UPGRADE.md) — minor-release migration notes (the package is in `0.x`)
-- [SECURITY.md](SECURITY.md) — supported versions and reporting policy
-- [CHANGELOG.md](CHANGELOG.md) — release history
+## Why Chunky
 
-## Quick Example
-
-```php
-// Backend: Listen for completed uploads
-// EventServiceProvider
-protected $listen = [
-    \NETipar\Chunky\Events\UploadCompleted::class => [
-        \App\Listeners\ProcessUploadedFile::class,
-    ],
-];
-```
-
-```vue
-<!-- Frontend: Vue 3 upload with progress -->
-<script setup>
-import { useChunkUpload } from '@netipar/chunky-vue3';
-
-const { upload, progress, isUploading, pause, resume } = useChunkUpload();
-
-function onFileChange(event) {
-    upload(event.target.files[0]);
-}
-</script>
-
-<template>
-    <input type="file" @change="onFileChange" />
-    <progress v-if="isUploading" :value="progress" max="100" />
-    <button v-if="isUploading" @click="pause">Pause</button>
-</template>
-```
+- **Resumable.** Chunks are tracked server-side; a reload resumes the same upload via a file fingerprint instead of re-sending bytes.
+- **Navigation-proof.** On the frontend, uploads are owned by a module-level manager — switching pages (SPA) doesn't cancel them.
+- **Complete without infra.** In the default `auto` mode small files assemble in-request and the final response contains the file + your payload. No Echo, no worker required.
+- **One state machine, two drivers.** Database or filesystem tracking sit behind the same contract, verified by the same test suite — no driver drift.
+- **Typed end to end.** PHPStan level max on the backend, strict TypeScript on the frontend.
 
 ## Requirements
 
-- PHP 8.2+
-- Laravel 11, 12 or 13
+- PHP **8.3+**, Laravel **12 or 13**
+- A queue worker only if you use `assembly.mode = queue` (or `auto` for files above the threshold)
+- Broadcasting (Echo/Reverb) is entirely optional
 
-## 5-Minute Quickstart
+## 5-minute quickstart
+
+**1. Install the backend.**
 
 ```bash
-# 1. Install backend
 composer require netipar/laravel-chunky
-php artisan vendor:publish --tag=chunky-config
+php artisan chunky:install   # publishes config + migrations
 php artisan migrate
-
-# 2. Install frontend (Vue 3 example)
-npm install @netipar/chunky-vue3
 ```
 
-```vue
-<!-- 3. Drop in the composable -->
-<script setup>
-import { useChunkUpload } from '@netipar/chunky-vue3';
+**2. Register an upload profile** — where files go and what to do when they finish. In a service provider:
 
-const { upload, progress, isUploading, isComplete, error } = useChunkUpload();
+```php
+use NETipar\Chunky\Facades\Chunky;
 
-function onFileChange(event) {
-    const file = event.target.files[0];
-    if (file) upload(file);
+Chunky::simple('avatars', 'avatars', ['max_size' => 10 * 1024 * 1024, 'mimes' => ['image/jpeg', 'image/png']]);
+```
+
+For real logic (e.g. creating a Media record), generate a class:
+
+```bash
+php artisan make:chunky-profile AvatarProfile
+```
+
+```php
+use NETipar\Chunky\Profiles\CompletedUpload;
+use NETipar\Chunky\Profiles\UploadContext;
+use NETipar\Chunky\Profiles\UploadProfile;
+
+class AvatarProfile extends UploadProfile
+{
+    public function rules(): array
+    {
+        return ['file_size' => ['max:10485760'], 'mime_type' => ['in:image/jpeg,image/png']];
+    }
+
+    public function directory(UploadContext $context): string
+    {
+        return "avatars/{$context->userId()}";
+    }
+
+    public function authorize(UploadContext $context): bool
+    {
+        return $context->user !== null;
+    }
+
+    public function completed(CompletedUpload $upload): array
+    {
+        $media = Media::create(['disk' => $upload->disk, 'path' => $upload->path, 'user_id' => $upload->userId]);
+
+        return ['media_id' => $media->id]; // becomes the response `payload`
+    }
 }
-</script>
-
-<template>
-    <input type="file" @change="onFileChange" :disabled="isUploading" />
-    <progress v-if="isUploading" :value="progress" max="100" />
-    <p v-if="isComplete">Done!</p>
-    <p v-if="error">Error: {{ error }}</p>
-</template>
 ```
 
-```bash
-# 4. Test it
-php artisan serve
-# Open the page, upload a 10MB file. The chunks land in
-# storage/app/chunky/temp/{uploadId}/ during the transfer; once
-# complete, the AssembleFileJob writes the final file to
-# storage/app/chunky/uploads/{uploadId}/{fileName}.
+Register it in `config/chunky.php`:
+
+```php
+'profiles' => ['avatar' => \App\Chunky\Profiles\AvatarProfile::class],
 ```
 
-## Production Deployment Checklist
-
-- [ ] **Auth middleware** on `chunky.routes.middleware` (e.g. `['api', 'auth:sanctum']`)
-- [ ] **Queue worker** running for `AssembleFileJob` (don't run on `sync`)
-- [ ] **Cache driver** that supports `Cache::lock()` if using `chunky.lock_driver = 'cache'` (Redis / Memcached / DB / DynamoDB; **not** `array` or `file`)
-- [ ] **`CHUNKY_BROADCASTING=true`** if real-time UI updates are needed (requires Echo + a WebSocket server)
-- [ ] **`chunky.staging_directory`** set to a path with enough free space if accepting uploads larger than `/tmp` (cloud-disk targets buffer the full file locally before upload)
-- [ ] **`chunky.metadata.max_keys`** and **`chunky.max_files_per_batch`** tuned for your DOS profile
-- [ ] **`chunky.metrics.*`** wired to Datadog / Prometheus / your observability stack
-- [ ] **`chunky:cleanup`** scheduled daily (auto-scheduled if `auto_cleanup = true`)
-- [ ] **Custom `Authorizer`** bound if the default ownership check (auth user_id == upload user_id) doesn't fit your access model
-- [ ] **`routes/channels.php`** auto-registered (default) or hand-written if you set `chunky.broadcasting.register_channels = false`
-
-## Installation
-
-### Backend
+**3. Upload from the frontend.**
 
 ```bash
-composer require netipar/laravel-chunky
-```
-
-Publish the config file:
-
-```bash
-php artisan vendor:publish --tag=chunky-config
-```
-
-Run the migrations (for database tracker):
-
-```bash
-php artisan migrate
-```
-
-### Frontend
-
-Install the package for your framework:
-
-```bash
-# Vue 3
-npm install @netipar/chunky-vue3
-
-# React
-npm install @netipar/chunky-react
-
-# Alpine.js (standalone, without Livewire)
-npm install @netipar/chunky-alpine
-
-# Core only (framework-agnostic)
 npm install @netipar/chunky-core
 ```
 
-> The `@netipar/chunky-core` package is automatically installed as a dependency of all framework packages.
+```ts
+import { manager, configure } from '@netipar/chunky-core';
 
-### Livewire
-
-No npm package needed. The Livewire component uses Alpine.js under the hood and is included in the Composer package. Just add the component to your Blade template:
-
-```blade
-<livewire:chunky-upload />
-```
-
-## Frontend Packages
-
-| Package | Framework | Peer Dependencies |
-|---------|-----------|-------------------|
-| `@netipar/chunky-core` | None (vanilla JS/TS) | - |
-| `@netipar/chunky-vue3` | Vue 3.4+ | `vue` |
-| `@netipar/chunky-react` | React 18+ / 19+ | `react` |
-| `@netipar/chunky-alpine` | Alpine.js 3+ | - |
-
-## Usage
-
-### How It Works
-
-1. **Frontend** initiates an upload with file metadata
-2. **Backend** returns an `upload_id`, `chunk_size`, and `total_chunks`
-3. **Frontend** slices the file and uploads chunks in parallel with SHA-256 checksums
-4. **Backend** stores each chunk, verifies integrity, tracks progress
-5. When all chunks arrive, an `AssembleFileJob` merges them on the queue
-6. **Events** fire at each step -- hook in your own listeners
-
-### CSRF Protection
-
-The frontend client automatically reads the `XSRF-TOKEN` cookie (set by Laravel) and sends it as the `X-XSRF-TOKEN` header. No manual CSRF setup is needed in most Laravel applications.
-
-If you need a custom token header, use `setDefaults()`:
-
-```typescript
-import { setDefaults } from '@netipar/chunky-core';
-
-setDefaults({ headers: { 'X-CSRF-TOKEN': 'your-token' } });
-```
-
-### Config Isolation
-
-For multiple upload scopes on the same page:
-
-```typescript
-import { ChunkUploader, createDefaults } from '@netipar/chunky-core';
-
-const scope = createDefaults({ headers: { 'X-Custom': 'value' } });
-const uploader = new ChunkUploader({ context: 'docs' }, scope);
-```
-
-### API Endpoints
-
-The package registers seven routes (configurable prefix/middleware):
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `POST` | `/api/chunky/upload` | Initiate upload |
-| `POST` | `/api/chunky/upload/{uploadId}/chunks` | Upload a chunk |
-| `GET` | `/api/chunky/upload/{uploadId}` | Get upload status |
-| `DELETE` | `/api/chunky/upload/{uploadId}` | Cancel upload |
-| `POST` | `/api/chunky/batch` | Initiate batch |
-| `POST` | `/api/chunky/batch/{batchId}/upload` | Add file to batch |
-| `GET` | `/api/chunky/batch/{batchId}` | Get batch status |
-
-#### HTTP status codes
-
-| Code | When |
-|------|------|
-| `201 Created` | Upload or batch initiated |
-| `200 OK` | Chunk accepted, status fetched |
-| `204 No Content` | Cancel succeeded |
-| `404 Not Found` | Upload/batch doesn't exist — or the caller isn't its owner (intentional, prevents probe attacks) |
-| `409 Conflict` | Late chunk against a cancelled / completed / failed / assembling upload |
-| `410 Gone` | Upload has expired |
-| `422 Unprocessable Entity` | Validation error (missing field, invalid file_name, batch in terminal state, etc.) |
-| `503 Service Unavailable` | Upload temporarily contended on the lock; client may safely retry (idempotent) |
-
-### Vue 3
-
-```vue
-<script setup lang="ts">
-import { useChunkUpload } from '@netipar/chunky-vue3';
-
-const {
-    progress, isUploading, isPaused, isComplete, error,
-    uploadId, uploadedChunks, totalChunks, currentFile,
-    upload, pause, resume, cancel, retry,
-    onProgress, onChunkUploaded, onComplete, onError,
-} = useChunkUpload({
-    maxConcurrent: 3,
-    autoRetry: true,
-    maxRetries: 3,
-    withCredentials: true,
+configure({
+    baseUrl: '/api/chunky',
+    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')!.getAttribute('content')! },
 });
 
-function onFileChange(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files?.[0]) {
-        upload(input.files[0]);
-    }
-}
-</script>
+const uploader = manager.upload(file, { profile: 'avatar' });
 
-<template>
-    <input type="file" @change="onFileChange" :disabled="isUploading" />
-    <progress v-if="isUploading" :value="progress" max="100" />
-</template>
-```
-
-### React
-
-```tsx
-import { useChunkUpload } from '@netipar/chunky-react';
-
-function FileUpload() {
-    const {
-        progress, isUploading, isPaused, isComplete, error,
-        upload, pause, resume, cancel, retry,
-    } = useChunkUpload({ maxConcurrent: 3 });
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) upload(file);
-    };
-
-    return (
-        <div>
-            <input type="file" onChange={handleChange} disabled={isUploading} />
-            {isUploading && <progress value={progress} max={100} />}
-            {isUploading && (
-                <button onClick={isPaused ? resume : pause}>
-                    {isPaused ? 'Resume' : 'Pause'}
-                </button>
-            )}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-        </div>
-    );
-}
-```
-
-### Alpine.js
-
-```html
-<script>
-import { registerChunkUpload } from '@netipar/chunky-alpine';
-import Alpine from 'alpinejs';
-
-registerChunkUpload(Alpine);
-Alpine.start();
-</script>
-
-<div x-data="chunkUpload({ maxConcurrent: 3 })">
-    <input type="file" x-on:change="handleFileInput($event)" :disabled="isUploading" />
-
-    <template x-if="isUploading">
-        <div>
-            <progress :value="progress" max="100"></progress>
-            <span x-text="Math.round(progress) + '%'"></span>
-            <button x-on:click="isPaused ? resume() : pause()" x-text="isPaused ? 'Resume' : 'Pause'"></button>
-            <button x-on:click="cancel()">Cancel</button>
-        </div>
-    </template>
-
-    <template x-if="error">
-        <div>
-            <span x-text="error"></span>
-            <button x-on:click="retry()">Retry</button>
-        </div>
-    </template>
-</div>
-```
-
-### Livewire
-
-```blade
-{{-- Basic usage --}}
-<livewire:chunky-upload />
-
-{{-- With context for validation --}}
-<livewire:chunky-upload context="profile_avatar" />
-
-{{-- With custom slot content --}}
-<livewire:chunky-upload>
-    <div class="my-custom-upload-ui">
-        <input type="file" x-on:change="handleFileInput($event)" />
-        <div x-show="isUploading">
-            <progress :value="progress" max="100"></progress>
-        </div>
-    </div>
-</livewire:chunky-upload>
-```
-
-Listen for the upload completion in your Livewire parent component:
-
-```php
-#[On('chunky-upload-completed')]
-public function handleUpload(array $data): void
-{
-    // Default payload: $data['uploadId'], $data['fileName'], $data['fileSize']
-    //
-    // Set `chunky.broadcasting.expose_internal_paths = true` in
-    // config/chunky.php to additionally receive $data['finalPath'] and
-    // $data['disk']. By default they're stripped to avoid leaking
-    // server-internal paths to the browser.
-}
-```
-
-### Core (Framework-agnostic)
-
-```typescript
-import { ChunkUploader } from '@netipar/chunky-core';
-
-const uploader = new ChunkUploader({
-    maxConcurrent: 3,
-    autoRetry: true,
-    maxRetries: 3,
-    context: 'documents',
+uploader.subscribe((state) => {
+    console.log(state.status, state.progress, state.etaSeconds);
 });
 
-uploader.on('progress', (event) => {
-    console.log(`${event.percentage}%`);
-});
+const result = await uploader.upload(); // resolves once assembled
+console.log(result.file?.url, result.payload?.media_id);
+```
 
-uploader.on('complete', (result) => {
-    console.log('Done:', result.uploadId);
-});
+That's it — no worker, no broadcasting. Files up to 256 MB assemble in the request and the result comes straight back.
 
-uploader.on('error', (error) => {
-    console.error('Failed:', error.message);
-});
+## How it works
 
-await uploader.upload(file, { folder: 'reports' });
+```
+initiate ──▶ upload chunks (concurrent, retried) ──▶ assemble ──▶ completed
+   POST /upload          POST /upload/{id}/chunks         (sync or queued)
+```
 
-// Controls
+1. **Initiate** returns an `upload_id`, `chunk_size`, and `total_chunks`. If a matching fingerprint is found, it resumes an existing upload instead.
+2. The client uploads chunks concurrently, retrying transient failures.
+3. On the final chunk the server **assembles** the file (streaming, never loading it all into memory), runs your profile's `completed()` hook, and — in sync mode — returns the result inline.
+
+The full wire protocol is documented in [`docs/en/protocol.md`](docs/en/protocol.md) ([magyarul](docs/hu/protocol.md)) and [`docs/openapi.yaml`](docs/openapi.yaml).
+
+## Upload profiles
+
+A profile is the single place that decides validation, destination, authorization, and the post-assembly hook. Two ways to define one:
+
+- **`Chunky::simple($name, $directory, $options)`** — a fixed directory + optional `max_size` / `mimes`.
+- **A class extending `UploadProfile`** — override `rules()`, `disk()`, `directory()`, `authorize()`, `fileName()`, `completed()`, `maxFileSize()`.
+
+The batch member endpoint validates against the **batch's** profile, so a client can't smuggle in a more permissive one.
+
+## Frontend
+
+All wrappers are thin adapters over `@netipar/chunky-core`. The golden rule: **a component unmounting only unsubscribes — it never cancels the upload.** The upload lives in the manager and survives navigation.
+
+### Core (any framework)
+
+```ts
+import { manager, configure, Uploader } from '@netipar/chunky-core';
+
+const uploader = manager.upload(file, { profile: 'avatar' });
+uploader.on('completed', (result) => { /* ... */ });
+uploader.on('failed', (error) => console.error(error.code, error.message));
+
 uploader.pause();
 uploader.resume();
-uploader.cancel();
-uploader.retry();
+await uploader.cancel();
 
-// Cleanup when done
-uploader.destroy();
+// Warn on real page unload while uploads are active (SPA nav is unaffected):
+manager.installUnloadGuard();
 ```
 
-## Batch Upload (Multiple Files)
+`uploader.getState()` returns an immutable snapshot: `{ status, progress, uploadedChunks, totalChunks, bytesPerSecond, etaSeconds, file, result, error }`.
 
-Upload multiple files as a batch and get a single event when all files are done.
+For image uploads, `uploader.previewUrl()` lazily creates a cached object URL you can drop into an `<img>` (null for non-image files); the manager revokes it when the upload is evicted via `manager.remove()`. Need a real downscaled thumbnail instead? `await createThumbnail(file, { maxDimension: 256 })` returns a `Blob` (WebP by default), dependency-free.
 
-### Vue 3
+Want end-to-end verification? `manager.upload(file, { profile: 'avatar', fileChecksum: true })` hashes the whole file (SHA-256, dependency-free) in parallel with the upload and the server verifies the assembled result against it.
+
+### Vue 3 — `@netipar/chunky-vue3`
+
+```ts
+import { createChunky } from '@netipar/chunky-vue3';
+
+app.use(createChunky({ baseUrl: '/api/chunky', headers: { 'X-CSRF-TOKEN': token } }));
+```
 
 ```vue
 <script setup lang="ts">
-import { useBatchUpload } from '@netipar/chunky-vue3';
+import { useUpload } from '@netipar/chunky-vue3';
 
-const {
-    progress, isUploading, isComplete, completedFiles, totalFiles,
-    failedFiles, currentFileName, error,
-    upload, cancel, pause, resume,
-    onFileComplete, onComplete, onFileError,
-} = useBatchUpload({ maxConcurrentFiles: 2, context: 'documents' });
-
-function onFilesChange(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files?.length) {
-        upload(Array.from(input.files));
-    }
-}
+const { start, state, previewUrl } = useUpload();
+const onPick = (e: Event) => start((e.target as HTMLInputElement).files![0], { profile: 'avatar' });
 </script>
 
 <template>
-    <input type="file" multiple @change="onFilesChange" :disabled="isUploading" />
-    <div v-if="isUploading">
-        <progress :value="progress" max="100" />
-        <span>{{ completedFiles }}/{{ totalFiles }} files</span>
-        <span v-if="currentFileName">Uploading: {{ currentFileName }}</span>
-    </div>
-    <p v-if="isComplete">All files uploaded!</p>
+  <input type="file" @change="onPick" />
+  <img v-if="previewUrl" :src="previewUrl" alt="" />
+  <progress v-if="state" :value="state.progress" max="100" />
 </template>
 ```
 
-### React
+`useUploads()` gives a reactive list of all active uploads (for a global tray); `UploadTray` and `ChunkDropzone` are headless components you can style.
+
+### React — `@netipar/chunky-react`
 
 ```tsx
-import { useBatchUpload } from '@netipar/chunky-react';
+import { ChunkyProvider, useUpload } from '@netipar/chunky-react';
 
-function MultiFileUpload() {
-    const {
-        progress, isUploading, isComplete, completedFiles, totalFiles,
-        upload, cancel,
-    } = useBatchUpload({ maxConcurrentFiles: 2 });
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (files?.length) upload(Array.from(files));
-    };
-
+function Uploader() {
+    const { start, state } = useUpload();
     return (
-        <div>
-            <input type="file" multiple onChange={handleChange} disabled={isUploading} />
-            {isUploading && <progress value={progress} max={100} />}
-            {isUploading && <span>{completedFiles}/{totalFiles} files</span>}
-            {isComplete && <p>All files uploaded!</p>}
-        </div>
+        <>
+            <input type="file" onChange={(e) => start(e.target.files![0], { profile: 'avatar' })} />
+            {state && <progress value={state.progress} max={100} />}
+        </>
     );
 }
+
+// <ChunkyProvider config={{ baseUrl: '/api/chunky', headers: { 'X-CSRF-TOKEN': token } }}>…</ChunkyProvider>
 ```
 
-### Alpine.js
+### Alpine.js — `@netipar/chunky-alpine`
+
+```ts
+import { registerChunky } from '@netipar/chunky-alpine';
+Alpine.plugin((Alpine) => registerChunky(Alpine, { baseUrl: '/api/chunky' }));
+```
 
 ```html
-<div x-data="batchUpload({ maxConcurrentFiles: 2 })">
-    <input type="file" multiple x-on:change="handleFileInput($event)" :disabled="isUploading" />
-
-    <template x-if="isUploading">
-        <div>
-            <progress :value="progress" max="100"></progress>
-            <span x-text="completedFiles + '/' + totalFiles + ' files'"></span>
-        </div>
-    </template>
+<div x-data="chunkyUpload({ profile: 'avatar' })">
+    <input type="file" @change="onFileChange($event)" />
+    <template x-if="state"><progress :value="state.progress" max="100"></progress></template>
 </div>
 ```
 
-### Core (Framework-agnostic)
+### Livewire
 
-```typescript
-import { BatchUploader } from '@netipar/chunky-core';
+`composer require livewire/livewire`, register the Alpine component as above, then drop in the widget:
 
-const batch = new BatchUploader({ maxConcurrentFiles: 2, context: 'documents' });
-
-batch.on('fileComplete', (result) => console.log('File done:', result.fileName));
-batch.on('complete', (result) => console.log(`Batch done: ${result.completedFiles}/${result.totalFiles}`));
-
-await batch.upload(files);
-batch.destroy();
+```blade
+<livewire:chunky-upload profile="avatar" />
 ```
 
-### How Batch Works
+## Assembly modes
 
-1. Frontend calls `POST /api/chunky/batch` with `total_files` count
-2. Backend creates a batch record and returns `batch_id`
-3. For each file, frontend calls `POST /api/chunky/batch/{batchId}/upload` to initiate
-4. Chunks are uploaded normally via `POST /api/chunky/upload/{uploadId}/chunks`
-5. When each file's assembly completes, the batch counter increments atomically
-6. When all files are done, `BatchCompleted` (or `BatchPartiallyCompleted`) event fires
+`config('chunky.assembly.mode')` — `auto` (default), `sync`, or `queue`.
 
-Every upload creates a batch — even a single file becomes a batch of 1. This ensures consistent behavior: every upload gets a `batchId` and fires `BatchCompleted`. `useBatchUpload` is the single entry point for all uploads.
+| Mode | Final chunk response | Needs a worker? |
+|---|---|---|
+| `sync` | `{"status":"completed", "file":…, "payload":…}` | No |
+| `queue` | `{"status":"assembling"}` — client polls status | Yes |
+| `auto` | `sync` under `assembly.sync_threshold` (256 MB), else `queue` | Only for large files |
 
-**Failure policy**: Lenient -- if a file fails, other files continue. The batch ends with `PartiallyCompleted` status.
+The frontend `await uploader.upload()` resolves with the final result in **all** modes — it polls automatically when assembly is queued.
 
-### Sequential Batches with `enqueue()`
+## Direct-to-S3 uploads
 
-`upload()` throws if a batch is already in progress on the same `BatchUploader` instance. For UIs that accept files faster than they can upload (multi-paste, drag-while-uploading), use `enqueue()` instead:
-
-```typescript
-import { BatchUploader } from '@netipar/chunky-core';
-
-const uploader = new BatchUploader({ maxConcurrentFiles: 2 });
-
-// First call: behaves like upload()
-await uploader.enqueue([file1]);
-
-// While the first batch is still running, queue more:
-const second = uploader.enqueue([file2, file3]);
-const third = uploader.enqueue([file4]);
-
-// Each enqueue() returns its own promise. The queued batches run
-// strictly serially (one at a time), so you get a consistent
-// progress signal across all of them.
-await Promise.all([second, third]);
-```
-
-If you `cancel()` or `destroy()` the uploader before a queued batch starts, its promise rejects with a clear error message. The Vue 3 / React / Alpine wrappers all expose `enqueue` as a sibling of `upload`.
-
-## Authentication & Authorization
-
-### Authentication
-
-By default, upload endpoints use only the `api` middleware. To protect them with authentication, update `routes.middleware` in `config/chunky.php`:
+For the biggest scale win, a profile can opt into the `direct_s3` transport — chunks go straight to S3 as multipart parts via presigned URLs, and Laravel only orchestrates (initiate, URL issuing, complete, abort). PHP never touches the bytes and there is no merge step: assembly *is* the S3 `CompleteMultipartUpload`.
 
 ```php
-'routes' => [
-    'prefix' => 'api/chunky',
-    'middleware' => ['api', 'auth:sanctum'],
-],
-```
-
-This applies to all routes (initiate, upload chunk, cancel, status, batch). No custom request or controller override is needed.
-
-### Authorization (per-upload, per-batch)
-
-When auth is active, the package automatically enforces ownership: an authenticated caller can only access uploads / batches they created (the `user_id` captured at initiation time). Non-owners see a `404` (not `403`) so upload IDs can't be probed.
-
-The check is delegated to a swappable `Authorizer` interface:
-
-```php
-namespace NETipar\Chunky\Authorization;
-
-interface Authorizer
+class VideoProfile extends UploadProfile
 {
-    public function canAccessUpload(?Authenticatable $user, UploadMetadata $upload): bool;
-    public function canAccessBatch(?Authenticatable $user, BatchMetadata $batch): bool;
-}
-```
-
-The default `DefaultAuthorizer` does plain ownership: `auth()->id() === upload->userId`, with anonymous uploads (no `user_id`) accessible to everyone (backward compat).
-
-#### Custom Authorizer (admin overrides, team access, …)
-
-Bind your own implementation in `AppServiceProvider::register()`:
-
-```php
-use NETipar\Chunky\Authorization\Authorizer;
-use NETipar\Chunky\Authorization\DefaultAuthorizer;
-
-$this->app->singleton(Authorizer::class, function ($app) {
-    return new class extends DefaultAuthorizer
+    public function transport(): string
     {
-        public function canAccessUpload(?Authenticatable $user, UploadMetadata $upload): bool
-        {
-            // Admins access everything
-            if ($user?->is_admin) {
-                return true;
-            }
-
-            // Teammates share access
-            if ($upload->userId !== null) {
-                $owner = User::find($upload->userId);
-                if ($owner && $user?->team_id === $owner->team_id) {
-                    return true;
-                }
-            }
-
-            return parent::canAccessUpload($user, $upload);
-        }
-    };
-});
-```
-
-The same `Authorizer` is used by the broadcast channel auth callbacks (`routes/channels.php`, auto-registered when `broadcasting.enabled = true`) — HTTP and WebSocket access stay in sync.
-
-### `user_id` is portable
-
-The `chunked_uploads.user_id` and `chunky_batches.user_id` columns are `string` type since v0.14, so any user-id shape works out of the box: auto-increment integers, UUIDs, ULIDs, or arbitrary strings. The package never does arithmetic on `user_id`, only string equality comparisons.
-
-## Quick Context Setup
-
-For the most common case -- validate and move the file to a directory:
-
-```php
-use NETipar\Chunky\Facades\Chunky;
-
-Chunky::simple('documents', 'uploads/documents', [
-    'max_size' => 50 * 1024 * 1024, // 50MB
-    'mimes' => ['application/pdf', 'image/jpeg', 'image/png'],
-]);
-```
-
-This registers a context that validates the file and moves it from the temp directory to `uploads/documents/{fileName}` after assembly. No event listener needed.
-
-## Context-based Validation & Save Callbacks
-
-Contexts define per-upload validation rules and save handlers. You can use class-based contexts (recommended) or inline closures.
-
-### Class-based Contexts (Recommended)
-
-Create a context class:
-
-```php
-namespace App\Chunky;
-
-use NETipar\Chunky\ChunkyContext;
-use NETipar\Chunky\Data\UploadMetadata;
-
-class ProfileAvatarContext extends ChunkyContext
-{
-    public function name(): string
-    {
-        return 'profile_avatar';
+        return 'direct_s3';
     }
 
-    public function rules(): array
-    {
-        return [
-            'file_size' => ['max:5242880'], // 5MB
-            'mime_type' => ['in:image/jpeg,image/png,image/webp'],
-        ];
-    }
-
-    public function save(UploadMetadata $metadata): void
-    {
-        auth()->user()
-            ->addMediaFromDisk($metadata->finalPath, $metadata->disk)
-            ->toMediaCollection('avatar');
-    }
+    // directory(), completed(), … as usual
 }
 ```
 
-Register via config (`config/chunky.php`):
+Set `chunky.transports.direct_s3.disk` to your s3 disk, require `aws/aws-sdk-php`, and add `ExposeHeaders: ETag` to the bucket CORS ([recipe](docs/en/configuration.md)). The frontend clients pick the transport up automatically from the initiate response — the caller API (`upload`/`pause`/`resume`/`cancel`/`subscribe`) is unchanged. Works with S3-compatible targets (MinIO; Cloudflare R2 best effort). Wire details in [`docs/en/protocol.md`](docs/en/protocol.md).
 
-```php
-'contexts' => [
-    App\Chunky\ProfileAvatarContext::class,
-    App\Chunky\DocumentContext::class,
-],
+## Batch uploads
+
+```ts
+const batch = manager.batch([file1, file2, file3], { profile: 'gallery', concurrency: 3 });
+batch.subscribe((s) => console.log(`${s.completed}/${s.total}`));
+const result = await batch.upload(); // { status: 'completed' | 'partially_completed' | 'cancelled', results }
 ```
 
-Or register manually in your `AppServiceProvider`:
+Cancelling a batch cancels every non-terminal member on **any** tracker driver.
 
-```php
-use NETipar\Chunky\Facades\Chunky;
+## Authorization
 
-public function boot(): void
-{
-    Chunky::register(ProfileAvatarContext::class);
-}
+Uploads are owned by the authenticating user. Non-owners are answered with **404** on status/cancel (so upload ids can't be enumerated) and **403** on chunk POST. Anonymous uploads stay open for backward compatibility. Swap the `Authorizer` in `config/chunky.php` to customize.
+
+## Events & broadcasting
+
+Eleven events fire through the lifecycle (`UploadInitiated`, `ChunkUploaded`, `UploadCompleted`, `BatchCompleted`, …). Listen to them like any Laravel event.
+
+Broadcasting is **off by default** (`broadcasting.enabled`). When enabled, payloads are sanitized (`disk`, `final_path`, `user_id` never leave the server) and versioned (`{"v":1,…}`). High-frequency events (`ChunkUploaded`, …) are excluded by default so turning it on only pushes the useful completion events.
+
+## Errors
+
+Every non-2xx response is a machine-readable envelope:
+
+```json
+{ "error": { "code": "upload_expired", "message": "The upload has expired." } }
 ```
 
-### Inline Closures
+The frontend surfaces this as a typed `ChunkyError` with a stable `.code` (`validation_failed`, `unauthorized`, `upload_not_found`, `invalid_state`, `checksum_mismatch`, `lock_timeout`, …). Retry decisions use the code, never the message. Full table in [`docs/en/protocol.md`](docs/en/protocol.md).
 
-For simple cases, you can register contexts inline:
+## Console commands
 
-```php
-use NETipar\Chunky\Facades\Chunky;
-
-public function boot(): void
-{
-    Chunky::context(
-        'documents',
-        rules: fn () => [
-            'file_size' => ['max:104857600'], // 100MB
-            'mime_type' => ['in:application/pdf,application/zip'],
-        ],
-    );
-}
-```
-
-### Using Contexts from Frontend
-
-```typescript
-// Vue 3
-const { upload } = useChunkUpload({ context: 'profile_avatar' });
-
-// React
-const { upload } = useChunkUpload({ context: 'profile_avatar' });
-
-// Alpine.js
-// <div x-data="chunkUpload({ context: 'profile_avatar' })">
-```
-
-## Listening to Events
-
-Register listeners in your `EventServiceProvider`:
-
-```php
-use NETipar\Chunky\Events\UploadCompleted;
-use NETipar\Chunky\Events\ChunkUploaded;
-use NETipar\Chunky\Events\FileAssembled;
-
-protected $listen = [
-    UploadCompleted::class => [
-        \App\Listeners\ProcessUploadedFile::class,
-        \App\Listeners\NotifyUserAboutUpload::class,
-    ],
-    ChunkUploaded::class => [
-        \App\Listeners\TrackUploadProgress::class,
-    ],
-];
-```
-
-Example listener:
-
-```php
-namespace App\Listeners;
-
-use NETipar\Chunky\Events\UploadCompleted;
-use Illuminate\Support\Facades\Storage;
-
-class ProcessUploadedFile
-{
-    public function handle(UploadCompleted $event): void
-    {
-        // Full UploadMetadata DTO available via $event->upload
-        $upload = $event->upload;
-
-        Storage::disk($upload->disk)->move(
-            $upload->finalPath,
-            "documents/{$upload->uploadId}.zip",
-        );
-
-        // Shorthand properties also available for convenience:
-        // $event->uploadId, $event->finalPath, $event->disk, $event->metadata
-    }
-}
-```
-
-### Available Events
-
-| Event | Payload | When | Broadcasts? |
-|-------|---------|------|-------------|
-| `UploadInitiated` | uploadId, fileName, fileSize, totalChunks | Upload initialized | — |
-| `ChunkUploaded` | uploadId, chunkIndex, totalChunks, progress% | After each successful chunk | — |
-| `ChunkUploadFailed` | uploadId, chunkIndex, exception | On chunk error | — |
-| `FileAssembled` | uploadId, finalPath, disk, fileName, fileSize | After file assembly | — |
-| `UploadCompleted` | upload (UploadMetadata) | Full upload complete | ✅ |
-| `UploadFailed` | upload (UploadMetadata), reason | Save callback failed or assembly job exhausted retries | ✅ |
-| `BatchInitiated` | batchId, totalFiles | Batch created | — |
-| `BatchCompleted` | batchId, totalFiles | All batch files completed | ✅ |
-| `BatchPartiallyCompleted` | batchId, completedFiles, failedFiles, totalFiles | Batch done with failures | ✅ |
-
-## Broadcasting (Laravel Echo)
-
-Get real-time notifications when uploads or batches complete. Broadcasting is **disabled by default** -- enable it in your `.env`:
-
-```
-CHUNKY_BROADCASTING=true
-```
-
-Four events are broadcastable: `UploadCompleted`, `UploadFailed`, `BatchCompleted`, and `BatchPartiallyCompleted`. They use private channels — when `chunky.broadcasting.register_channels = true` (default), the package auto-registers `Broadcast::channel()` callbacks that delegate to the bound `Authorizer`, so the same ownership rules apply on HTTP and WebSocket.
-
-If you set `register_channels = false`, register them manually in your `routes/channels.php`:
-
-```php
-use Illuminate\Support\Facades\Broadcast;
-
-Broadcast::channel('chunky.uploads.{uploadId}', function ($user, $uploadId) {
-    // Verify the user owns this upload
-    return true;
-});
-
-Broadcast::channel('chunky.batches.{batchId}', function ($user, $batchId) {
-    return true;
-});
-```
-
-### Vue 3
-
-```vue
-<script setup>
-import { useChunkUpload, useUploadEcho } from '@netipar/chunky-vue3';
-
-const echo = inject('echo');
-const { upload, uploadId } = useChunkUpload();
-
-useUploadEcho(echo, uploadId, (data) => {
-    console.log('Upload ready:', data.fileName);
-});
-</script>
-```
-
-### React
-
-```tsx
-import { useChunkUpload, useUploadEcho } from '@netipar/chunky-react';
-
-function FileUpload({ echo }) {
-    const { upload, uploadId } = useChunkUpload();
-
-    useUploadEcho(echo, uploadId, (data) => {
-        console.log('Upload ready:', data.fileName);
-    });
-
-    // ...
-}
-```
-
-### Batch Echo
-
-```typescript
-// Vue 3
-import { useBatchUpload, useBatchEcho } from '@netipar/chunky-vue3';
-
-const { upload, batchId } = useBatchUpload();
-
-useBatchEcho(echo, batchId, {
-    onComplete: (data) => console.log(`All ${data.totalFiles} files ready`),
-    onPartiallyCompleted: (data) => console.log(`${data.failedFiles} files failed`),
-});
-```
-
-### Core (Framework-agnostic)
-
-```typescript
-import { listenForUploadComplete, listenForBatchComplete } from '@netipar/chunky-core';
-
-const unsubscribe = listenForUploadComplete(echo, uploadId, (data) => {
-    console.log('Ready:', data.fileName);
-});
-
-// Cleanup when done
-unsubscribe();
-```
-
-### User Channel
-
-Instead of subscribing per-upload or per-batch, listen on the **user channel** to receive all upload events — even after page reload:
-
-```php
-// routes/channels.php
-Broadcast::channel('chunky.user.{userId}', function ($user, $userId) {
-    return (int) $user->id === (int) $userId;
-});
-```
-
-```vue
-<!-- Vue 3 -->
-<script setup>
-import { useUserEcho } from '@netipar/chunky-vue3';
-
-const echo = inject('echo');
-const userId = ref(auth.user.id);
-
-useUserEcho(echo, userId, {
-    onUploadComplete: (data) => console.log('File ready:', data.fileName),
-    onBatchComplete: (data) => console.log(`All ${data.totalFiles} files done`),
-    onBatchPartiallyCompleted: (data) => console.log(`${data.failedFiles} failed`),
-});
-</script>
-```
-
-```tsx
-// React
-import { useUserEcho } from '@netipar/chunky-react';
-
-useUserEcho(echo, auth.user.id, {
-    onUploadComplete: (data) => console.log('File ready:', data.fileName),
-});
-```
-
-The user channel requires authenticated routes (`auth:sanctum` middleware) and `user_id` is automatically captured from `auth()->id()` during upload initiation.
-
-## Using the Facade
-
-```php
-use NETipar\Chunky\Facades\Chunky;
-
-// Register contexts
-Chunky::register(ProfileAvatarContext::class);
-Chunky::context('documents', rules: fn () => [...], save: fn ($metadata) => ...);
-
-// Programmatic initiation (returns InitiateResult DTO)
-$result = Chunky::initiate('large-file.zip', 524288000, 'application/zip');
-// $result->uploadId, $result->chunkSize, $result->totalChunks
-
-// Query upload status (returns UploadMetadata DTO)
-$status = Chunky::status($uploadId);
-// $status->progress(), $status->fileName, $status->status, etc.
-
-// Batch upload (returns BatchMetadata DTO)
-$batch = Chunky::initiateBatch(totalFiles: 5, context: 'documents');
-// $batch->batchId, $batch->totalFiles, $batch->status
-
-// Add file to batch (returns InitiateResult DTO with batchId)
-$file = Chunky::initiateInBatch($batch->batchId, 'photo.jpg', 5242880);
-// $file->uploadId, $file->batchId
-
-// Query batch status (returns BatchMetadata DTO)
-$batch = Chunky::getBatchStatus($batchId);
-// $batch->completedFiles, $batch->failedFiles, $batch->isFinished()
-```
+| Command | What it does |
+|---|---|
+| `chunky:install` | Publish config + migrations |
+| `chunky:doctor` | Live health checks: disks, queue worker probe (`--wait=5`), broadcast driver, locking, tracker — exits non-zero on errors (CI/deploy gate) |
+| `chunky:cleanup` | Remove expired, unfinished uploads and their chunks (schedule it) |
+| `make:chunky-profile` | Generate an `UploadProfile` class |
 
 ## Configuration
 
-The full configuration reference lives in [`docs/configuration.md`](docs/configuration.md) — every key, default, and the common deployment recipes (large videos, S3, authenticated routes, per-chunk progress broadcast). The TL;DR `.env`:
+`config/chunky.php` is validated at boot into a typed `ChunkyConfig` — a bad value fails fast with the offending key. Full reference and deployment recipes in [`docs/en/configuration.md`](docs/en/configuration.md) ([magyarul](docs/hu/configuration.md)).
 
-```
-CHUNKY_TRACKER=database          # database | filesystem
-CHUNKY_DISK=local                # any Laravel filesystem disk
-CHUNKY_CHUNK_SIZE=1048576        # 1MB
-CHUNKY_BROADCASTING=false        # opt-in WebSocket broadcasting
-CHUNKY_LOCK_DRIVER=flock         # flock | cache (cache for cloud disks)
-CHUNKY_STAGING_DIRECTORY=        # null = sys_get_temp_dir()
-CHUNKY_CACHE_PREFIX=chunky:v1:   # versioned cache-key prefix
-```
+---
 
-Publish the config to customise:
+- [UPGRADE.md](UPGRADE.md) — migrating from `0.x`
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [SECURITY.md](.github/SECURITY.md) — supported versions and reporting
+- [CONTRIBUTING.md](.github/CONTRIBUTING.md) — development setup
 
-```bash
-php artisan vendor:publish --tag=chunky-config
-```
-
-The config is grouped into 10 sections (since v0.18): `storage`, `chunks`, `lifecycle`, `limits`, `metadata`, `locking`, `idempotency`, `cache`, `authorization`, `broadcasting`. Older flat keys were renamed — see [UPGRADE.md](UPGRADE.md) for the full migration table.
-
-## Tracking Drivers
-
-### Database (default)
-
-Uses the `chunked_uploads` table. Best for production -- queryable, reliable, supports status tracking.
-
-```
-CHUNKY_TRACKER=database
-```
-
-### Filesystem
-
-Uses JSON metadata files on disk. Zero database dependency -- useful for simple setups.
-
-```
-CHUNKY_TRACKER=filesystem
-```
-
-## Error Handling
-
-```php
-use NETipar\Chunky\Exceptions\ChunkyException;
-use NETipar\Chunky\Exceptions\ChunkIntegrityException;
-use NETipar\Chunky\Exceptions\UploadExpiredException;
-
-try {
-    $manager->uploadChunk($uploadId, $chunkIndex, $file);
-} catch (ChunkIntegrityException $e) {
-    // SHA-256 checksum mismatch
-} catch (UploadExpiredException $e) {
-    // Upload has expired (past 24h default)
-} catch (ChunkyException $e) {
-    // Base exception (catches all above)
-}
-```
-
-## Examples
-
-- [English examples](examples/en/)
-- [Magyar peldak](examples/hu/)
-
-## Testing
-
-```bash
-composer test
-```
-
-## Credits
-
-- [NETipar](https://netipar.hu)
-
-## License
-
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+Licensed under the [MIT license](LICENSE.md).

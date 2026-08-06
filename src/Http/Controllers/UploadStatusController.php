@@ -4,35 +4,26 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Http\Controllers;
 
+use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
 use NETipar\Chunky\Authorization\Authorizer;
-use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Http\Controllers\Concerns\ResolvesOwnedUpload;
+use NETipar\Chunky\Services\UploadService;
 
-class UploadStatusController extends Controller
+final class UploadStatusController
 {
+    use ResolvesOwnedUpload;
+
     public function __invoke(
         Request $request,
         string $uploadId,
-        ChunkyManager $manager,
+        UploadService $uploads,
         Authorizer $authorizer,
+        FilesystemFactory $filesystem,
     ): JsonResponse {
-        $status = $manager->status($uploadId);
+        $upload = $this->ownedUploadOr404($uploads, $authorizer, $request->user(), $uploadId);
 
-        if (! $status) {
-            return response()->json(['message' => __('chunky::chunky.http.upload_not_found')], 404);
-        }
-
-        // Use $request->user() (DI) instead of the auth() facade so the
-        // controller is mockable from a unit test without booting the
-        // auth manager.
-        if (! $authorizer->canAccessUpload($request->user(), $status)) {
-            // Match the not-found response so non-owners can't probe which
-            // upload IDs exist.
-            return response()->json(['message' => __('chunky::chunky.http.upload_not_found')], 404);
-        }
-
-        return response()->json($status->toPublicArray());
+        return new JsonResponse($this->statusPayload($upload, $filesystem));
     }
 }

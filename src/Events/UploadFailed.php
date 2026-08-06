@@ -4,43 +4,35 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-use NETipar\Chunky\Data\UploadMetadata;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Domain\UploadRecord;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
 
-class UploadFailed extends AbstractChunkyEvent
+final class UploadFailed implements ChunkyEvent, ShouldBroadcast
 {
-    public readonly string $uploadId;
-
-    public readonly string $disk;
-
-    /** @var array<string, mixed>|null */
-    public readonly ?array $metadata;
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
 
     public function __construct(
-        public readonly UploadMetadata $upload,
+        public readonly UploadRecord $upload,
         public readonly string $reason,
-    ) {
-        $this->uploadId = $upload->uploadId;
-        $this->disk = $upload->disk;
-        $this->metadata = $upload->metadata ?: null;
-    }
-
-    protected function broadcastEventKey(): string
-    {
-        return 'UploadFailed';
-    }
+    ) {}
 
     /**
-     * @return array<int, string>
+     * @return array<int, Channel>
      */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastOn(): array
     {
-        $suffixes = ["uploads.{$this->uploadId}"];
+        return [new PrivateChannel('chunky.upload.'.$this->upload->uploadId)];
+    }
 
-        if ($this->upload->userId) {
-            $suffixes[] = "user.{$this->upload->userId}";
-        }
-
-        return $suffixes;
+    public function broadcastAs(): string
+    {
+        return 'upload.failed';
     }
 
     /**
@@ -48,18 +40,6 @@ class UploadFailed extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        $payload = [
-            'uploadId' => $this->uploadId,
-            'fileName' => $this->upload->fileName,
-            'fileSize' => $this->upload->fileSize,
-            'context' => $this->upload->context,
-            'reason' => $this->reason,
-        ];
-
-        if (config('chunky.broadcasting.expose_internal_paths', false)) {
-            $payload['disk'] = $this->disk;
-        }
-
-        return $payload;
+        return $this->versionedPayload($this->upload->toPublicArray() + ['reason' => $this->reason]);
     }
 }

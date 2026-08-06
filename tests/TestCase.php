@@ -9,6 +9,9 @@ use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {
+    /**
+     * @return array<int, class-string>
+     */
     protected function getPackageProviders($app): array
     {
         return [
@@ -23,9 +26,9 @@ class TestCase extends Orchestra
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('chunky.tracker', 'database');
         $app['config']->set('chunky.disk', 'local');
-        $app['config']->set('chunky.chunks.size', 1024 * 1024);
-        $app['config']->set('chunky.chunks.verify_integrity', true);
+        $app['config']->set('chunky.chunks.disk', 'local');
+        // Small chunks so tests can drive multi-chunk uploads with tiny payloads.
+        $app['config']->set('chunky.chunks.size', 8);
     }
 }

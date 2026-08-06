@@ -4,33 +4,36 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class BatchPartiallyCompleted extends AbstractChunkyEvent
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
+
+final class BatchPartiallyCompleted implements ChunkyEvent, ShouldBroadcast
 {
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
+
     public function __construct(
         public readonly string $batchId,
         public readonly int $completedFiles,
         public readonly int $failedFiles,
         public readonly int $totalFiles,
-        public readonly ?string $userId = null,
     ) {}
 
-    protected function broadcastEventKey(): string
+    /**
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
     {
-        return 'BatchPartiallyCompleted';
+        return [new PrivateChannel('chunky.batch.'.$this->batchId)];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastAs(): string
     {
-        $suffixes = ["batches.{$this->batchId}"];
-
-        if ($this->userId) {
-            $suffixes[] = "user.{$this->userId}";
-        }
-
-        return $suffixes;
+        return 'batch.partially_completed';
     }
 
     /**
@@ -38,11 +41,11 @@ class BatchPartiallyCompleted extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        return [
-            'batchId' => $this->batchId,
-            'completedFiles' => $this->completedFiles,
-            'failedFiles' => $this->failedFiles,
-            'totalFiles' => $this->totalFiles,
-        ];
+        return $this->versionedPayload([
+            'batch_id' => $this->batchId,
+            'completed_files' => $this->completedFiles,
+            'failed_files' => $this->failedFiles,
+            'total_files' => $this->totalFiles,
+        ]);
     }
 }

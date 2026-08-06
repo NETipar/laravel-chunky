@@ -6,34 +6,51 @@ namespace NETipar\Chunky\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use NETipar\Chunky\Config\ChunkyConfig;
 use NETipar\Chunky\Exceptions\ChunkIntegrityException;
+use NETipar\Chunky\Support\Coerce;
 use Symfony\Component\HttpFoundation\Response;
 
-class VerifyChunkIntegrity
+/**
+ * Verifies the optional per-chunk checksum. When integrity.required is on, the
+ * checksum is mandatory; otherwise it is verified only when supplied.
+ */
+final class VerifyChunkIntegrity
 {
+    public function __construct(
+        private readonly ChunkyConfig $config,
+    ) {}
+
+    /**
+     * @param  Closure(Request): Response  $next
+     */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! config('chunky.chunks.verify_integrity', true)) {
+        $uploadId = Coerce::toString($request->route('uploadId'));
+        $chunkIndex = Coerce::toInt($request->input('chunk_index'));
+        $checksum = Coerce::toNullableString($request->input('checksum'));
+
+        if ($checksum === null) {
+            if ($this->config->integrityRequired) {
+                throw ChunkIntegrityException::checksumMismatch($uploadId, $chunkIndex);
+            }
+
             return $next($request);
         }
 
-        $checksum = $request->input('checksum');
-        $chunk = $request->file('chunk');
+        $file = $request->file('chunk');
 
-        if (! $checksum || ! $chunk) {
+        if (! $file instanceof UploadedFile) {
+            // No file to verify against; validation will reject the missing chunk.
             return $next($request);
         }
 
-        $path = $chunk->getRealPath();
-        $actualChecksum = $path !== false && is_file($path)
-            ? hash_file('sha256', $path)
-            : hash('sha256', $chunk->getContent());
+        $path = $file->getRealPath();
+        $actual = $path === false ? false : hash_file($this->config->integrityAlgorithm, $path);
 
-        if (! hash_equals($checksum, $actualChecksum)) {
-            throw ChunkIntegrityException::checksumMismatch(
-                $request->route('uploadId', ''),
-                (int) $request->input('chunk_index', 0),
-            );
+        if ($actual === false || ! hash_equals(strtolower($checksum), strtolower($actual))) {
+            throw ChunkIntegrityException::checksumMismatch($uploadId, $chunkIndex);
         }
 
         return $next($request);

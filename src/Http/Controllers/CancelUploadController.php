@@ -6,34 +6,25 @@ namespace NETipar\Chunky\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
 use NETipar\Chunky\Authorization\Authorizer;
-use NETipar\Chunky\ChunkyManager;
+use NETipar\Chunky\Http\Controllers\Concerns\ResolvesOwnedUpload;
+use NETipar\Chunky\Services\UploadService;
 
-class CancelUploadController extends Controller
+final class CancelUploadController
 {
+    use ResolvesOwnedUpload;
+
     public function __invoke(
         Request $request,
         string $uploadId,
-        ChunkyManager $manager,
+        UploadService $uploads,
         Authorizer $authorizer,
     ): JsonResponse {
-        $upload = $manager->status($uploadId);
+        // 404 for non-owner (anti-enumeration) before attempting the cancel.
+        $this->ownedUploadOr404($uploads, $authorizer, $request->user(), $uploadId);
 
-        if (! $upload) {
-            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
-        }
+        $uploads->cancel($uploadId);
 
-        if (! $authorizer->canCancelUpload($request->user(), $upload)) {
-            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
-        }
-
-        $cancelled = $manager->cancel($uploadId);
-
-        if (! $cancelled) {
-            return response()->json(['message' => __('chunky::chunky.http.upload_finalized')], 404);
-        }
-
-        return response()->json(null, 204);
+        return new JsonResponse(['status' => 'cancelled']);
     }
 }

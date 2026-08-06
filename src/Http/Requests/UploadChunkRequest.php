@@ -4,58 +4,39 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
-use NETipar\Chunky\Authorization\AuthorizesChunkyRequests;
-use NETipar\Chunky\Contracts\UploadTracker;
+use NETipar\Chunky\Authorization\Authorizer;
+use NETipar\Chunky\Services\UploadService;
+use NETipar\Chunky\Support\Coerce;
 
-class UploadChunkRequest extends FormRequest
+class UploadChunkRequest extends AbstractChunkyRequest
 {
-    use AuthorizesChunkyRequests;
-
     public function authorize(): bool
     {
-        return $this->userOwnsUpload();
+        $upload = app(UploadService::class)->find(Coerce::toString($this->route('uploadId')));
+
+        // Unknown upload: let the controller/service answer 404; a non-owner of
+        // an existing upload is rejected with 403.
+        return $upload === null || app(Authorizer::class)->owns($this->user(), $upload);
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, mixed>
      */
     public function rules(): array
     {
-        $maxIndex = $this->resolveMaxChunkIndex();
+        $upload = app(UploadService::class)->find(Coerce::toString($this->route('uploadId')));
 
-        $chunkIndexRules = ['required', 'integer', 'min:0'];
+        $indexRules = ['required', 'integer', 'min:0'];
 
-        if ($maxIndex !== null) {
-            $chunkIndexRules[] = "max:{$maxIndex}";
+        if ($upload !== null) {
+            $indexRules[] = 'max:'.($upload->totalChunks - 1);
         }
 
         return [
             'chunk' => ['required', 'file'],
-            'chunk_index' => $chunkIndexRules,
-            // Tighten the format: SHA-256 → exactly 64 lowercase hex
-            // characters. Without the regex any string was accepted,
-            // which would let a hostile caller stuff arbitrary content
-            // (including non-ASCII / SQL-shaped) into the cache key
-            // (`Cache::get('chunky:idem:upid:0:cs:DROP TABLES')`).
-            'checksum' => ['nullable', 'string', 'regex:/^[a-f0-9]{64}$/i'],
+            'chunk_index' => $indexRules,
+            'checksum' => ['nullable', 'string'],
+            'file_checksum' => ['nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
         ];
-    }
-
-    private function resolveMaxChunkIndex(): ?int
-    {
-        $uploadId = $this->route('uploadId');
-
-        if (! $uploadId) {
-            return null;
-        }
-
-        $metadata = app(UploadTracker::class)->getMetadata((string) $uploadId);
-
-        if (! $metadata) {
-            return null;
-        }
-
-        return max(0, $metadata->totalChunks - 1);
     }
 }

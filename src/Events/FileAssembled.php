@@ -4,27 +4,34 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-class FileAssembled extends AbstractChunkyEvent
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Domain\UploadRecord;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
+
+final class FileAssembled implements ChunkyEvent, ShouldBroadcast
 {
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
+
     public function __construct(
-        public readonly string $uploadId,
-        public readonly string $finalPath,
-        public readonly string $disk,
-        public readonly string $fileName,
-        public readonly int $fileSize,
+        public readonly UploadRecord $upload,
     ) {}
 
-    protected function broadcastEventKey(): string
+    /**
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
     {
-        return 'FileAssembled';
+        return [new PrivateChannel('chunky.upload.'.$this->upload->uploadId)];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastAs(): string
     {
-        return ["uploads.{$this->uploadId}"];
+        return 'file.assembled';
     }
 
     /**
@@ -32,17 +39,6 @@ class FileAssembled extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        $payload = [
-            'uploadId' => $this->uploadId,
-            'fileName' => $this->fileName,
-            'fileSize' => $this->fileSize,
-        ];
-
-        if (config('chunky.broadcasting.expose_internal_paths', false)) {
-            $payload['finalPath'] = $this->finalPath;
-            $payload['disk'] = $this->disk;
-        }
-
-        return $payload;
+        return $this->versionedPayload($this->upload->toPublicArray());
     }
 }

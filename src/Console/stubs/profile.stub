@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use NETipar\Chunky\Profiles\CompletedUpload;
+use NETipar\Chunky\Profiles\UploadContext;
+use NETipar\Chunky\Profiles\UploadProfile;
+
+class {{ class }} extends UploadProfile
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            // 'file_size' => ['max:10485760'],
+            // 'mime_type' => ['in:image/jpeg,image/png'],
+        ];
+    }
+
+    public function directory(UploadContext $context): string
+    {
+        return 'uploads';
+    }
+
+    public function authorize(UploadContext $context): bool
+    {
+        return $context->user !== null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function completed(CompletedUpload $upload): ?array
+    {
+        // Persist the file reference, return data for the response payload.
+        return null;
+    }
+}

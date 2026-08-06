@@ -2,51 +2,35 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Event;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
-use NETipar\Chunky\Events\UploadInitiated;
 
-beforeEach(function () {
-    Storage::fake('local');
-});
+uses(RefreshDatabase::class);
 
-it('returns upload status', function () {
-    Event::fake([UploadInitiated::class]);
+beforeEach(fn () => Storage::fake('local'));
 
-    $response = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'report.pdf',
-        'file_size' => 3 * 1024 * 1024,
-        'mime_type' => 'application/pdf',
-    ]);
+it('returns a sanitized pending status', function () {
+    $uploadId = (string) chunkyInitiate($this, 'report.pdf', 20, ['mime_type' => 'application/pdf'])
+        ->assertStatus(201)->json('upload_id');
 
-    $uploadId = $response->json('upload_id');
-
-    $statusResponse = $this->getJson("/api/chunky/upload/{$uploadId}");
-
-    $statusResponse->assertOk()
-        ->assertJsonStructure([
-            'upload_id', 'file_name', 'file_size', 'mime_type',
-            'chunk_size', 'total_chunks', 'status', 'uploaded_chunks',
-        ])
+    $response = $this->getJson("/api/chunky/upload/{$uploadId}")
+        ->assertOk()
+        ->assertJsonStructure(['upload_id', 'status', 'progress', 'uploaded_chunks', 'total_chunks', 'file_name', 'file_size'])
         ->assertJson([
             'upload_id' => $uploadId,
-            'file_name' => 'report.pdf',
-            'file_size' => 3 * 1024 * 1024,
             'status' => 'pending',
+            'file_name' => 'report.pdf',
             'uploaded_chunks' => [],
         ]);
 
-    // Internal fields must never leak through the public status endpoint.
-    $statusResponse->assertJsonMissing(['disk' => true]);
-    expect($statusResponse->json())
+    expect($response->json())
         ->not->toHaveKey('disk')
         ->not->toHaveKey('final_path')
         ->not->toHaveKey('user_id');
 });
 
-it('returns 404 for non-existent upload', function () {
-    $response = $this->getJson('/api/chunky/upload/non-existent-id');
-
-    $response->assertStatus(404)
-        ->assertJson(['message' => 'Upload not found.']);
+it('returns 404 for an unknown upload', function () {
+    $this->getJson('/api/chunky/upload/missing')
+        ->assertStatus(404)
+        ->assertJsonPath('error.code', 'upload_not_found');
 });

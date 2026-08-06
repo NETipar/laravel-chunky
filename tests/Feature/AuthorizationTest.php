@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User;
-use Illuminate\Http\UploadedFile;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
-use NETipar\Chunky\ChunkyManager;
+use Illuminate\Support\Facades\Storage;
+
+uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    Storage::fake('local');
+
     if (! Schema::hasTable('users')) {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
@@ -32,105 +36,65 @@ function makeUser(int $id): User
     return $user;
 }
 
-it('blocks non-owners from reading another user upload status', function () {
-    $alice = makeUser(1);
-    $bob = makeUser(2);
+it('answers a non-owner reading another upload with 404', function () {
+    $this->actingAs(makeUser(1));
+    $uploadId = (string) chunkyInitiate($this, 'private.pdf', 20)->assertStatus(201)->json('upload_id');
 
-    $this->actingAs($alice);
-
-    $initiate = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'private.pdf',
-        'file_size' => 1024,
-    ]);
-
-    $initiate->assertStatus(201);
-    $uploadId = $initiate->json('upload_id');
-
-    // Bob attempts to read Alice's upload — should look like 404 to him so
-    // we don't leak which upload IDs exist to non-owners.
-    $this->actingAs($bob);
-
+    $this->actingAs(makeUser(2));
     $this->getJson("/api/chunky/upload/{$uploadId}")
-        ->assertStatus(404);
+        ->assertStatus(404)
+        ->assertJsonPath('error.code', 'upload_not_found');
 });
 
-it('blocks non-owners from cancelling another user upload', function () {
-    $alice = makeUser(3);
-    $bob = makeUser(4);
+it('answers a non-owner cancelling another upload with 404', function () {
+    $this->actingAs(makeUser(3));
+    $uploadId = (string) chunkyInitiate($this, 'private.pdf', 20)->assertStatus(201)->json('upload_id');
 
-    $this->actingAs($alice);
-
-    $initiate = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'private.pdf',
-        'file_size' => 1024,
-    ]);
-
-    $uploadId = $initiate->json('upload_id');
-
-    $this->actingAs($bob);
-
-    $this->deleteJson("/api/chunky/upload/{$uploadId}")
-        ->assertStatus(404);
-
-    // Verify the upload is still active for the owner.
-    $this->actingAs($alice);
-
-    expect(app(ChunkyManager::class)->status($uploadId))->not->toBeNull();
+    $this->actingAs(makeUser(4));
+    $this->deleteJson("/api/chunky/upload/{$uploadId}")->assertStatus(404);
 });
 
-it('blocks non-owners from POSTing chunks to another user upload', function () {
-    $alice = makeUser(5);
-    $bob = makeUser(6);
+it('rejects a non-owner posting chunks with 403', function () {
+    $this->actingAs(makeUser(5));
+    $uploadId = (string) chunkyInitiate($this, 'private.bin', 20)->assertStatus(201)->json('upload_id');
 
-    $this->actingAs($alice);
-
-    $initiate = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'private.bin',
-        'file_size' => 1024,
-    ]);
-
-    $uploadId = $initiate->json('upload_id');
-
-    $this->actingAs($bob);
-
-    $chunk = UploadedFile::fake()->create('chunk', 1);
-
-    $response = $this->postJson("/api/chunky/upload/{$uploadId}/chunks", [
-        'chunk' => $chunk,
-        'chunk_index' => 0,
-    ]);
-
-    // FormRequest::authorize() returning false yields 403.
-    $response->assertStatus(403);
+    $this->actingAs(makeUser(6));
+    chunkyChunk($this, $uploadId, 0, '01234567')
+        ->assertStatus(403)
+        ->assertJsonPath('error.code', 'unauthorized');
 });
 
-it('lets the owner access their own upload normally', function () {
-    $alice = makeUser(7);
+it('lets the owner access their own upload', function () {
+    $this->actingAs(makeUser(7));
+    $uploadId = (string) chunkyInitiate($this, 'mine.pdf', 20)->assertStatus(201)->json('upload_id');
 
-    $this->actingAs($alice);
-
-    $initiate = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'mine.pdf',
-        'file_size' => 1024,
-    ]);
-
-    $uploadId = $initiate->json('upload_id');
-
-    $this->getJson("/api/chunky/upload/{$uploadId}")
-        ->assertStatus(200)
-        ->assertJson(['upload_id' => $uploadId]);
+    $this->getJson("/api/chunky/upload/{$uploadId}")->assertOk();
 });
 
-it('keeps anonymous uploads accessible without auth (backward compat)', function () {
-    // No actingAs — anonymous request, no user_id stored on the upload.
-    $initiate = $this->postJson('/api/chunky/upload', [
-        'file_name' => 'anon.pdf',
-        'file_size' => 1024,
-    ]);
+it('keeps anonymous uploads accessible without auth', function () {
+    $uploadId = (string) chunkyInitiate($this, 'anon.pdf', 20)->assertStatus(201)->json('upload_id');
 
-    $uploadId = $initiate->json('upload_id');
+    $this->getJson("/api/chunky/upload/{$uploadId}")->assertOk();
+});
 
-    // Status is readable without auth, matching the v0.11 behaviour.
-    $this->getJson("/api/chunky/upload/{$uploadId}")
-        ->assertStatus(200);
+it('answers a non-owner initiating a batch member with 404', function () {
+    $this->actingAs(makeUser(8));
+    $batchId = (string) $this->postJson('/api/chunky/batch', ['total_files' => 2])
+        ->assertStatus(201)
+        ->json('batch_id');
+
+    $this->actingAs(makeUser(9));
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'a.bin', 'file_size' => 20])
+        ->assertStatus(404)
+        ->assertJsonPath('error.code', 'batch_not_found');
+});
+
+it('lets the owner initiate a member on their own batch', function () {
+    $this->actingAs(makeUser(10));
+    $batchId = (string) $this->postJson('/api/chunky/batch', ['total_files' => 2])
+        ->assertStatus(201)
+        ->json('batch_id');
+
+    $this->postJson("/api/chunky/batch/{$batchId}/upload", ['file_name' => 'a.bin', 'file_size' => 20])
+        ->assertStatus(201);
 });

@@ -4,45 +4,34 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Events;
 
-use NETipar\Chunky\Data\UploadMetadata;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use NETipar\Chunky\Contracts\ChunkyEvent;
+use NETipar\Chunky\Domain\UploadRecord;
+use NETipar\Chunky\Events\Concerns\BroadcastsChunkyEvent;
 
-class UploadCompleted extends AbstractChunkyEvent
+final class UploadCompleted implements ChunkyEvent, ShouldBroadcast
 {
-    public readonly string $uploadId;
-
-    public readonly string $finalPath;
-
-    public readonly string $disk;
-
-    /** @var array<string, mixed>|null */
-    public readonly ?array $metadata;
+    use BroadcastsChunkyEvent;
+    use Dispatchable;
 
     public function __construct(
-        public readonly UploadMetadata $upload,
-    ) {
-        $this->uploadId = $upload->uploadId;
-        $this->finalPath = $upload->finalPath ?? '';
-        $this->disk = $upload->disk;
-        $this->metadata = $upload->metadata ?: null;
-    }
-
-    protected function broadcastEventKey(): string
-    {
-        return 'UploadCompleted';
-    }
+        public readonly UploadRecord $upload,
+    ) {}
 
     /**
-     * @return array<int, string>
+     * @return array<int, Channel>
      */
-    protected function broadcastChannelSuffixes(): array
+    public function broadcastOn(): array
     {
-        $suffixes = ["uploads.{$this->uploadId}"];
+        return [new PrivateChannel('chunky.upload.'.$this->upload->uploadId)];
+    }
 
-        if ($this->upload->userId) {
-            $suffixes[] = "user.{$this->upload->userId}";
-        }
-
-        return $suffixes;
+    public function broadcastAs(): string
+    {
+        return 'upload.completed';
     }
 
     /**
@@ -50,23 +39,6 @@ class UploadCompleted extends AbstractChunkyEvent
      */
     public function broadcastWith(): array
     {
-        // Internal-by-default: disk and finalPath are server-side details
-        // (a path inside config('chunky.disk')'s root). Most consumers
-        // only need the upload id and human-readable file metadata. Set
-        // chunky.broadcasting.expose_internal_paths = true to opt in.
-        $payload = [
-            'uploadId' => $this->uploadId,
-            'fileName' => $this->upload->fileName,
-            'fileSize' => $this->upload->fileSize,
-            'context' => $this->upload->context,
-            'status' => $this->upload->status->value,
-        ];
-
-        if (config('chunky.broadcasting.expose_internal_paths', false)) {
-            $payload['finalPath'] = $this->finalPath;
-            $payload['disk'] = $this->disk;
-        }
-
-        return $payload;
+        return $this->versionedPayload($this->upload->toPublicArray());
     }
 }

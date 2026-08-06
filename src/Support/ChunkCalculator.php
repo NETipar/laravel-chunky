@@ -4,24 +4,23 @@ declare(strict_types=1);
 
 namespace NETipar\Chunky\Support;
 
-class ChunkCalculator
+final class ChunkCalculator
 {
     public static function totalChunks(int $fileSize, int $chunkSize): int
     {
-        return (int) ceil($fileSize / $chunkSize);
-    }
-
-    public static function chunkSize(?int $override = null): int
-    {
-        return $override ?? (int) config('chunky.chunks.size', 1024 * 1024);
-    }
-
-    public static function progress(int $uploadedCount, int $totalChunks): float
-    {
-        if ($totalChunks <= 0) {
+        if ($chunkSize <= 0) {
             return 0;
         }
 
-        return round($uploadedCount / $totalChunks * 100, 2);
+        return (int) ceil($fileSize / $chunkSize);
+    }
+
+    public static function progress(int $uploadedChunks, int $totalChunks): float
+    {
+        if ($totalChunks <= 0) {
+            return 0.0;
+        }
+
+        return round($uploadedChunks / $totalChunks * 100, 2);
     }
 }

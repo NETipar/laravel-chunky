@@ -54,7 +54,16 @@ jobs:
           composer run prepare
 
       - name: PHPStan
+        if: runner.os != 'Windows'
         run: composer analyse
+
+      # Larastan boots Laravel in every PHPStan process, and each boot rewrites the
+      # Testbench skeleton's bootstrap/cache/services.php. On Windows the concurrent
+      # rename() onto that file fails with "Access is denied (code: 5)", so this lane
+      # analyses single-process. See .github/phpstan-windows.neon.
+      - name: PHPStan (Windows)
+        if: runner.os == 'Windows'
+        run: vendor/bin/phpstan analyse --memory-limit=2G --configuration=.github/phpstan-windows.neon
 
       - name: Linter
         run: composer lint:check

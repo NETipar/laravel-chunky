@@ -4,27 +4,9 @@ All notable changes to `netipar/laravel-chunky` will be documented in this file.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See [UPGRADE.md](UPGRADE.md) for migration notes.
 
-## Unreleased
+## v1.0.0 - 2026-08-06
 
-### Added
-- **Direct-to-S3 multipart uploads** (`direct_s3` transport, opt-in per profile via `UploadProfile::transport()`). Chunks travel straight to S3 as presigned multipart parts — PHP never touches the bytes and there is no merge step, assembly is the S3 `CompleteMultipartUpload`. Additive protocol: the initiate response gains a `transport` object (first batch of presigned URLs + `expires_at`, and `uploaded_parts` ETags on resume), plus two new endpoints — `POST /upload/{id}/part-urls` (URL refills, max 100/request) and `POST /upload/{id}/complete` (runs complete + size integrity + the profile hook, returns the sync-style result). Cancel and `chunky:cleanup` abort the remote upload; `chunky:doctor` verifies presigning; the chunk endpoint answers `409` for direct uploads; the status endpoint stays ListParts-free (the remote part list refreshes only at resume). New `transports.direct_s3.disk` / `url_ttl` config keys, a `DirectUploadTransport` port with an AWS SDK adapter (`aws/aws-sdk-php` suggested, S3-compatible targets via disk `endpoint`), and S3 constraints enforced at initiate (part ≥ 5 MB, ≤ 10000 parts). The frontend picks the transport up automatically from the initiate response — the caller API is unchanged.
-- `chunky:doctor` now runs live health checks instead of only printing config: a queue-worker probe job (`--wait=5` seconds), a broadcast-driver test event (when broadcasting is enabled), a lock acquire/release probe, and a tracker check (database tables exist / filesystem JSON store writable). Any error-level finding makes the command exit non-zero, so it can gate CI and deploy pipelines.
-- **Image preview hook** on the frontend, framework-independent and dependency-free. `Uploader.previewUrl()` lazily creates a cached object URL for `image/*` files (null for non-images and under SSR); the manager revokes it when the upload is evicted via `manager.remove()`, while terminal states keep it alive for completed-screens. A new `createThumbnail(file, { maxDimension, type, quality })` core util produces a downscaled thumbnail Blob (WebP by default) via `createImageBitmap` + `OffscreenCanvas` with an `HTMLCanvasElement` fallback. Wrappers expose it everywhere: `useUpload()` returns `previewUrl` in vue3 and react, the Alpine component gets a `previewUrl` getter, and the vue3 `UploadTray`/`ChunkDropzone` components accept an opt-in `preview` prop that adds preview URLs to their slot scope.
-- **Whole-file checksum verification** end-to-end. The chunk request accepts a new optional `file_checksum` field (the full file's SHA-256, always SHA-256 regardless of `integrity.algorithm`); the server hashes the merged bytes while streaming assembly (no second read) and verifies the result against it — a mismatch fails the upload with `422 checksum_mismatch` on the sync path (queued assemblies transition to `failed`), and the chunks are retained until cleanup for diagnosis. New `integrity.require_full_file` config key (default `false`) rejects completion without a checksum. On the frontend, `UploadOptions.fileChecksum: true` (opt-in) hashes the file in parallel with the upload using an embedded, dependency-free incremental SHA-256 and sends it with the final chunk.
-
-### Changed
-- Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
-
-### Fixed
-- Initiating a batch member now requires batch ownership: a non-owner gets `404 batch_not_found` (anti-enumeration), mirroring the batch status/cancel endpoints.
-- A batch can no longer accept more member uploads than its declared `total_files` — the overflow member is rejected with `409 invalid_state`, so the completion counters cannot overrun and the batch cannot finalize while an undeclared member is still uploading. Fingerprint resume of an existing member is unaffected.
-- A fully uploaded, stalled resume (the finishing chunk response was lost mid-flight) no longer deadlocks: resume-initiate starts assembly itself — inline in sync mode, via job dispatch in queue mode. Skipped when `integrity.require_full_file` is on and no checksum was stored.
-- Cancelling a batch now aborts the remote S3 multipart upload of its `direct_s3` members, matching single-upload cancel and `chunky:cleanup` — no more orphaned multipart uploads.
-- `DirectUploadService::partUrls()` rejects negative part indexes at the service level (previously only the HTTP layer validated the lower bound).
-
-## v1.0.0-beta.1 - 2026-07-12
-
-**A ground-up rewrite with a stable public API.** See [UPGRADE.md](UPGRADE.md) for the full `0.x → 1.0` migration.
+**A ground-up rewrite with a stable public API.** See [UPGRADE.md](UPGRADE.md) for the full `0.x → 1.0` migration. The `1.0.0-beta.1` line was never published to Packagist or npm, so everything below ships in one release — for existing installs the jump is `0.22.6 → 1.0.0`.
 
 ### Added
 - **Upload profiles** (`UploadProfile` classes + `make:chunky-profile`) replace the context-registry callbacks — validation, destination, authorization, and a `completed()` hook in one testable class. `Chunky::simple()` still works.
@@ -33,6 +15,10 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 - **Fingerprint resume** across reloads, speed/ETA in the upload state, and a `chunky:doctor` diagnostic command.
 - Machine-readable error envelope (`{"error":{"code","message"}}`) surfaced as a typed `ChunkyError` on the frontend.
 - `docs/protocol.md` + `docs/openapi.yaml` document the wire protocol.
+- **Direct-to-S3 multipart uploads** (`direct_s3` transport, opt-in per profile via `UploadProfile::transport()`). Chunks travel straight to S3 as presigned multipart parts — PHP never touches the bytes and there is no merge step, assembly is the S3 `CompleteMultipartUpload`. Additive protocol: the initiate response gains a `transport` object (first batch of presigned URLs + `expires_at`, and `uploaded_parts` ETags on resume), plus two new endpoints — `POST /upload/{id}/part-urls` (URL refills, max 100/request) and `POST /upload/{id}/complete` (runs complete + size integrity + the profile hook, returns the sync-style result). Cancel and `chunky:cleanup` abort the remote upload; `chunky:doctor` verifies presigning; the chunk endpoint answers `409` for direct uploads; the status endpoint stays ListParts-free (the remote part list refreshes only at resume). New `transports.direct_s3.disk` / `url_ttl` config keys, a `DirectUploadTransport` port with an AWS SDK adapter (`aws/aws-sdk-php` suggested, S3-compatible targets via disk `endpoint`), and S3 constraints enforced at initiate (part ≥ 5 MB, ≤ 10000 parts). The frontend picks the transport up automatically from the initiate response — the caller API is unchanged.
+- `chunky:doctor` now runs live health checks instead of only printing config: a queue-worker probe job (`--wait=5` seconds), a broadcast-driver test event (when broadcasting is enabled), a lock acquire/release probe, and a tracker check (database tables exist / filesystem JSON store writable). Any error-level finding makes the command exit non-zero, so it can gate CI and deploy pipelines.
+- **Image preview hook** on the frontend, framework-independent and dependency-free. `Uploader.previewUrl()` lazily creates a cached object URL for `image/*` files (null for non-images and under SSR); the manager revokes it when the upload is evicted via `manager.remove()`, while terminal states keep it alive for completed-screens. A new `createThumbnail(file, { maxDimension, type, quality })` core util produces a downscaled thumbnail Blob (WebP by default) via `createImageBitmap` + `OffscreenCanvas` with an `HTMLCanvasElement` fallback. Wrappers expose it everywhere: `useUpload()` returns `previewUrl` in vue3 and react, the Alpine component gets a `previewUrl` getter, and the vue3 `UploadTray`/`ChunkDropzone` components accept an opt-in `preview` prop that adds preview URLs to their slot scope.
+- **Whole-file checksum verification** end-to-end. The chunk request accepts a new optional `file_checksum` field (the full file's SHA-256, always SHA-256 regardless of `integrity.algorithm`); the server hashes the merged bytes while streaming assembly (no second read) and verifies the result against it — a mismatch fails the upload with `422 checksum_mismatch` on the sync path (queued assemblies transition to `failed`), and the chunks are retained until cleanup for diagnosis. New `integrity.require_full_file` config key (default `false`) rejects completion without a checksum. On the frontend, `UploadOptions.fileChecksum: true` (opt-in) hashes the file in parallel with the upload using an embedded, dependency-free incremental SHA-256 and sends it with the final chunk.
 
 ### Changed
 - Requirements: **PHP 8.3+, Laravel 12/13** (drops PHP 8.2 and Laravel 11).
@@ -40,9 +26,20 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 - Config validated at boot into a typed `ChunkyConfig`; many keys renamed (see UPGRADE.md).
 - Non-owner status/cancel now returns `404` (anti-enumeration); oversized `file_size` and bad checksums return typed `422`s.
 - Frontend rebuilt: `Uploader`/`Batch` replace `ChunkUploader`/`BatchUploader`; the shared sticky-replay `EventEmitter` is now actually used; packages ship ESM+CJS with bundled type declarations (tsup).
+- Consumer docs are now bilingual: `docs/en/` and `docs/hu/` each carry `protocol.md` and `configuration.md` (the wire protocol was translated to English, the configuration reference to Hungarian). `docs/openapi.yaml` stays language-neutral at the docs root.
 
 ### Removed
 - The Metrics subsystem, the `Expired` upload status, and `broadcasting.expose_internal_paths`.
+
+### Fixed
+
+These landed on the unreleased beta code, so `1.0.0` carries them from day one — nothing here was ever broken in a published version.
+
+- Initiating a batch member now requires batch ownership: a non-owner gets `404 batch_not_found` (anti-enumeration), mirroring the batch status/cancel endpoints.
+- A batch can no longer accept more member uploads than its declared `total_files` — the overflow member is rejected with `409 invalid_state`, so the completion counters cannot overrun and the batch cannot finalize while an undeclared member is still uploading. Fingerprint resume of an existing member is unaffected.
+- A fully uploaded, stalled resume (the finishing chunk response was lost mid-flight) no longer deadlocks: resume-initiate starts assembly itself — inline in sync mode, via job dispatch in queue mode. Skipped when `integrity.require_full_file` is on and no checksum was stored.
+- Cancelling a batch now aborts the remote S3 multipart upload of its `direct_s3` members, matching single-upload cancel and `chunky:cleanup` — no more orphaned multipart uploads.
+- `DirectUploadService::partUrls()` rejects negative part indexes at the service level (previously only the HTTP layer validated the lower bound).
 
 ## v0.22.6 - 2026-06-09
 
